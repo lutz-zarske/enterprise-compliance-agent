@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------------------
+# Standard:            docker compose up --build
+#   -> API im Container, Ollama laeuft auf dem Host (host.docker.internal).
+#
+# Vollstaendiger Stack: docker compose --profile full up --build
+#   -> zusaetzlich ein Ollama-Container; Modell danach einmalig ziehen mit
+#      docker compose exec ollama ollama pull qwen2.5:14b-instruct
+# ---------------------------------------------------------------------------
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: enterprise-compliance-agent:latest
+    container_name: compliance-agent-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      API_KEY: ${API_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///data/agent.db}
+      UPLOAD_DIR: data/uploads
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:14b-instruct}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      MASK_PII_IN_STORAGE: ${MASK_PII_IN_STORAGE:-true}
+    volumes:
+      # Datenbank und Uploads ueberleben Container-Neubauten.
+      - ./data:/srv/app/data
+    extra_hosts:
+      # Erlaubt den Zugriff auf einen Ollama-Dienst des Hosts unter Linux.
+      - "host.docker.internal:host-gateway"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: compliance-agent-ollama
+    profiles: ["full"]
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  ollama-models:
