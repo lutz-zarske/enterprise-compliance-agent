@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 import { HealthResponse } from "../types/api";
@@ -15,9 +15,10 @@ export const Header: React.FC<HeaderProps> = ({
   isLoadingHealth,
   onRefresh,
 }) => {
+  const isConnecting = isLoadingHealth && !health;
   const isOk = health?.status === "ok";
   const isDegraded = health?.status === "degraded";
-  const isUnavailable = !health || health.status === "unavailable";
+  const isUnavailable = !isConnecting && (!health || health.status === "unavailable");
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-[#0b0f19]/85 backdrop-blur-xl">
@@ -57,6 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
                   ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-300"
                   : isDegraded
                   ? "border-amber-500/40 bg-amber-950/30 text-amber-300"
+                  : isConnecting
+                  ? "border-cyan-500/40 bg-cyan-950/30 text-cyan-300"
                   : "border-red-500/40 bg-red-950/30 text-red-300"
               }`}
             >
@@ -67,6 +70,8 @@ export const Header: React.FC<HeaderProps> = ({
                       ? "animate-ping bg-emerald-400"
                       : isDegraded
                       ? "animate-ping bg-amber-400"
+                      : isConnecting
+                      ? "animate-ping bg-cyan-400"
                       : "bg-red-400"
                   }`}
                 />
@@ -76,6 +81,8 @@ export const Header: React.FC<HeaderProps> = ({
                       ? "bg-emerald-500"
                       : isDegraded
                       ? "bg-amber-500"
+                      : isConnecting
+                      ? "bg-cyan-500"
                       : "bg-red-500"
                   }`}
                 />
@@ -83,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               <div className="flex items-center space-x-1.5">
                 <span className="font-semibold uppercase tracking-wider">
-                  {isOk ? "API ONLINE" : isDegraded ? "DEGRADED" : "OFFLINE"}
+                  {isOk ? "API ONLINE" : isDegraded ? "DEGRADED" : isConnecting ? "CONNECTING..." : "OFFLINE"}
                 </span>
                 <span className="text-slate-500">|</span>
                 <span className="text-[11px] text-slate-300">
