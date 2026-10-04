@@ -27,8 +27,11 @@ services:
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       MASK_PII_IN_STORAGE: ${MASK_PII_IN_STORAGE:-true}
     volumes:
-      # Datenbank und Uploads ueberleben Container-Neubauten.
-      - ./data:/srv/app/data
+      # Benanntes Volume statt Bind-Mount: Docker uebernimmt beim ersten Start
+      # Inhalt und Besitzrechte (appuser, UID 10001) aus dem Image. Ein
+      # Bind-Mount von ./data scheitert auf Linux-Hosts an fehlenden
+      # Schreibrechten ("unable to open database file").
+      - app-data:/srv/app/data
     extra_hosts:
       # Erlaubt den Zugriff auf einen Ollama-Dienst des Hosts unter Linux.
       - "host.docker.internal:host-gateway"
@@ -44,4 +47,5 @@ services:
       - ollama-models:/root/.ollama
 
 volumes:
+  app-data:
   ollama-models:

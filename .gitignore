@@ -33,3 +33,6 @@ frontend/node_modules/
 frontend/.next/
 frontend/out/
 
+
+# Lokale Claude-Desktop-Startkonfiguration (maschinenspezifisch)
+.claude/launch.json

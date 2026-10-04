@@ -242,8 +242,19 @@ Beim Profil `full` das Modell einmalig laden:
 docker compose exec ollama ollama pull qwen2.5:14b-instruct
 ```
 
-Das Image läuft als unprivilegierter Benutzer; `./data` ist als Volume
-eingebunden, sodass Datenbank und Uploads Container-Neubauten überleben.
+Das Image läuft als unprivilegierter Benutzer (UID 10001). Datenbank und
+Uploads liegen im benannten Volume `app-data` und überleben Container-Neubauten.
+Ein Bind-Mount von `./data` ist bewusst nicht vorgesehen: Auf Linux-Hosts fehlen
+dem Container-Benutzer dort die Schreibrechte. Wer die Daten dennoch im
+Host-Dateisystem braucht, muss das Verzeichnis vorher mit
+`sudo chown -R 10001:10001 ./data` vorbereiten.
+
+Sicherung der Daten:
+
+```bash
+docker run --rm -v enterprise-compliance-agent_app-data:/data -v "$PWD":/backup \
+  alpine tar czf /backup/app-data.tgz -C /data .
+```
 
 ---
 
