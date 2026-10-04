@@ -353,7 +353,7 @@ REFERENCE_ANSWERS: dict[str, tuple[str, str, str]] = {
         "Folgen für den Käufer als Betreiber (Art. 26): menschliche Aufsicht, Logs mindestens sechs Monate "
         "aufbewahren, Beschäftigtenvertretung vorab informieren. Vom Anbieter sind Konformitätsbewertung "
         "(Art. 43) und CE-Kennzeichnung (Art. 48) nachzuweisen; im Vertrag fehlt dazu jeder Hinweis. "
-        "Die Hochrisiko-Pflichten nach Anhang III gelten seit der Änderung durch VO (EU) 2026/1744 ab dem 02.12.2027.",
+        "Nach der Änderung durch VO (EU) 2026/1744 gelten die Hochrisiko-Pflichten für Anhang III ab dem 02.12.2027.",
         "Das Dokument ist keine Rechnung, ein Vorsteuerabzug stützt sich erst auf die spätere Rechnung. Diese "
         "muss alle Angaben nach § 14 Abs. 4 UStG enthalten, insbesondere Rechnungsnummer, Ausstellungsdatum, "
         "Steuernummer bzw. USt-IdNr., Leistungszeitraum sowie Nettoentgelt, Steuersatz und Steuerbetrag "

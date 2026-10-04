@@ -13,15 +13,49 @@ dem Versand pseudonymisiert.
 | **Frontend** | Next.js 15 · React 19 · Tailwind CSS 4 · TypeScript (strict) |
 | **Inferenz** | Ollama `qwen2.5:14b-instruct` (Default) · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein LangChain |
 | **Persistenz** | SQLite (Default) · PostgreSQL über `DATABASE_URL` |
-| **Qualität** | 155 Pytest-Tests (ca. 8 s, ohne laufendes LLM) · ESLint · `next build` · CI für Backend, Frontend, Docker |
-| **Betrieb** | Docker Compose (API `:8001`, Frontend `:3001`), Non-Root-Container, Healthchecks |
+| **Qualität** | 171 Pytest-Tests (ca. 9 s, ohne laufendes LLM) · ESLint · `next build` · CI für Backend, Frontend, Docker |
+| **Betrieb** | Ein-Klick-Start für Windows · Docker Compose (API `:8001`, Frontend `:3001`) · Non-Root-Container, Healthchecks |
 
-![Dashboard mit Hochrisiko-Einstufung](docs/screenshots/dashboard-hochrisiko-dark.png)
+![Dashboard: KI-Recruiting-Vertrag, EU AI Act Anhang III Nr. 4, Score auf 59 gedeckelt](docs/screenshots/dashboard-hochrisiko-dark.png)
 
-> **Hinweis zu den Screenshots:** Aufgenommen mit den eingebauten Demo-Dokumenten.
-> Die Modellantworten kamen bei dieser Aufnahme von einem Ollama-Stub mit
-> festen Antworten; Score, Kacheln, Schwärzungen, Ledger und Zertifikat erzeugt
-> das echte Backend.
+| Prüfzertifikat (A4, druckfertig) | Compliance Copilot |
+|---|---|
+| ![Prüfzertifikat mit Hash-Kette und Siegel](docs/screenshots/pruefzertifikat.png) | ![Copilot mit Zeilen- und Normverweisen](docs/screenshots/copilot.png) |
+
+> **Zu den Screenshots:** Alle Prüfergebnisse stammen aus den eingebauten
+> **Musterdaten** und laufen ohne Sprachmodell: Nur die KI-Antwort ist
+> vorberechnet und überall als „Referenz-Audit · ohne KI“ gekennzeichnet;
+> Score, Maskierung, Eskalationsregeln, Hash-Kette und Zertifikat erzeugt das
+> echte Backend. Einzige Ausnahme ist der Live-Stepper weiter unten: Er wurde
+> mit einem Ollama-Stub aufgenommen, der feste Antworten liefert.
+
+## Ein-Klick-Start
+
+**Windows:** `Start_Compliance_Agent.bat` doppelklicken. Das Skript legt beim
+ersten Start die Python-Umgebung an, installiert die Abhängigkeiten, startet
+Backend (`:8001`) und Frontend (`:3001`) in eigenen Fenstern, startet Ollama,
+falls installiert, und öffnet den Browser. Voraussetzung: Python 3.11+ und
+Node.js 20+.
+
+**Docker:** `docker compose up --build` → <http://localhost:3001>
+
+Dann oben rechts **„Musterdaten laden“** klicken. Das Dashboard ist sofort
+vollständig – **auch ohne installiertes Sprachmodell**. Mit laufendem Ollama
+oder hinterlegtem Cloud-Key lässt sich jedes Musterdokument über
+„Live neu prüfen“ echt analysieren.
+
+## Rechtsnormen im Überblick
+
+| Rechtsgrundlage | Was das System prüft bzw. umsetzt | Stand |
+|---|---|---|
+| **EU AI Act** – VO (EU) 2024/1689 | Risikoklassen (Art. 5, Art. 6 Abs. 2 i. V. m. Anhang III, Art. 50), Anhang-III-Eskalation, Hinweis auf Art. 6 Abs. 3, Betreiberpflichten (Art. 26), Logging (Art. 12), menschliche Aufsicht (Art. 14) | Anhang-III-Pflichten ab **02.12.2027**, Anhang I ab 02.08.2028 nach **VO (EU) 2026/1744** (Digital Omnibus, in Kraft seit 27.07.2026) |
+| **§ 14 Abs. 4 UStG** | Pflichtangaben Nr. 1–8 einzeln, Kleinbetragsrechnung (§ 33 UStDV), Vorsteuerrisiko (§ 15 UStG) | gültig |
+| **E-Rechnung** – § 14 Abs. 1 UStG, EN 16931 | Erkennung eingebetteter ZUGFeRD/XRechnung-XML, Hinweis auf Übergangsfristen und Vorrang des XML-Teils | Empfangspflicht seit 01.01.2025; BMF-Schreiben vom 15.10.2024 und 15.10.2025 |
+| **§ 12 / § 14c UStG** | Zulässige Steuersätze, Steuerberechnung, Hinweis auf EuGH C-378/21 (Endverbraucher) | BMF-Schreiben vom 27.02.2024 |
+| **DSGVO** – Art. 4 Nr. 5, 9, 25, 32 | Pseudonymisierung vor Cloud-Aufrufen, Art.-9/10-Erkennung, maskierte Speicherung, drei Schwärzungsstufen | – |
+| **GoBD / § 147 AO** | Unveränderbares, hash-verkettetes Prüfprotokoll | Buchungsbelege 8 Jahre (BEG IV) |
+
+Quellen und Prüfmethode: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
 
 ---
 
@@ -41,6 +75,7 @@ dem Versand pseudonymisiert.
 12. [Grenzen](#grenzen)
 
 
+Rechtsquellen: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
 
 ---
 
@@ -53,13 +88,14 @@ dem Versand pseudonymisiert.
 | **Finanzmathematik** | IBAN-Prüfziffer (ISO 13616, MOD-97-10), zulässiger Steuersatz (inkl. Corona-Sätze 07–12/2020), Netto + USt = Brutto, USt = Netto × Satz |
 | **EU AI Act** | Risikostufe (Art. 5 / Anhang III / Art. 50 / minimal), automatische Eskalation bei belegter Anhang-III-Kategorie, Artikel-Pflichtenliste |
 | **DSGVO** | LLM-Befund + Regex-Zweitmeinung, Art.-9/10-Erkennung, Maskierungszwang vor dem Speichern, drei Schwärzungsstufen für die Textansicht |
-| **Compliance-Score** | Deterministisch 0–100, vier Kacheln, Deckelung bei Hochrisiko, Freigabeempfehlung |
+| **Compliance-Score** | Deterministisch 0–100, vier Kacheln, Deckelung bei Hochrisiko, Freigabeempfehlung, Ein-Satz-Risikoerklärung je Abzug |
+| **Musterdaten** | Drei Referenzdokumente mit vorberechneter KI-Antwort; Score, Maskierung und Ledger aus dem echten Regelwerk – sofort nutzbar ohne Modell |
 | **Prüfprotokoll** | Append-only-Tabelle `audit_trails` mit SHA-256-Hash-Kette, DB-Trigger gegen UPDATE/DELETE, Kettenprüfung per API |
 | **Human Oversight** | Prüfer-Siegel (Art. 14 EU AI Act) als eigener Ledger-Eintrag; erneute Analyse hebt das Siegel auf |
 | **Prüfzertifikat** | A4-HTML (druckfertig, CSP-gehärtet), Markdown-Memo, JSON für ERP-Archivierung |
 | **Multi-Provider** | Ollama / Gemini / Claude / GPT zur Laufzeit umschaltbar; API-Keys Fernet-verschlüsselt gespeichert, nur maskiert ausgeliefert |
 | **Compliance Copilot** | Dokumentbezogene Fragen, geerdet auf nummeriertem Text und Prüfergebnis, mit Zeilen- und Normverweisen |
-| **Betrieb** | JSON-Logs mit `request_id`, PII-Filter im Log, Token-Bucket-Rate-Limit, Batch-Upload, Demo-Daten, KPI-Endpunkt |
+| **Betrieb** | JSON-Logs mit `request_id`, PII-Filter im Log, Token-Bucket-Rate-Limit, Batch-Upload, Musterdaten, KPI-Endpunkt |
 
 ---
 
@@ -138,8 +174,9 @@ npm ci
 npm run dev                          # http://localhost:3001
 ```
 
-Im Dashboard **„Demo-Daten laden“** klicken: Drei Referenzdokumente werden
-angelegt und nacheinander mit Live-Stepper geprüft.
+Im Dashboard **„Musterdaten laden“** klicken: Drei Referenzdokumente werden
+angelegt und sind sofort geprüft (Referenz-Audits, ohne Inferenz). „Live neu
+prüfen“ analysiert sie mit dem aktiven Modell neu.
 
 ### Docker
 
@@ -160,19 +197,23 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 
 | | |
 |---|---|
-| ![Live-Audit](docs/screenshots/live-audit-stepper.png) | **Live-Audit-Stepper** – zeigt die echten Pipeline-Stufen des Backends (`GET /documents/{id}/progress`), keine simulierte Animation. Links die Textansicht mit farbcodierten PII-Markierungen. |
-| ![Steuerfalle](docs/screenshots/steuerfalle-dark.png) | **Fehlerhafte Rechnung (45/100)** – fehlende USt-IdNr. (−20), fehlendes Leistungsdatum (−10), ungültige IBAN (−15), Steuersatz 16 % (−10). Jede Zeile zeigt Norm, Abzug und Herkunft des Nachweises (KI, Regex oder beides). |
-| ![Gültige Rechnung](docs/screenshots/gueltige-rechnung-light.png) | **Light Mode, gültige Rechnung (100/100)** – „Zur Auszahlung freigegeben“, versiegelt. Der E-Rechnungs-Hinweis (reines PDF) erscheint als Info ohne Punktabzug. |
-| ![Copilot](docs/screenshots/copilot.png) | **Compliance Copilot** – Antworten mit Zeilenverweisen `[Z. n]` und Normzitaten. |
-| ![Export](docs/screenshots/export-siegel.png) | **Export-Center & Siegel** – Zertifikat drucken, JSON, Markdown-Memo; Prüfer-Siegel als Ledger-Eintrag. |
+| ![Start ohne Modell](docs/screenshots/start-ohne-modell.png) | **Start ohne Sprachmodell** – das Banner bietet direkt die Inferenz-Einstellungen und den Befehl `ollama serve` an und erklärt, dass die Pseudonymisierung lokal im Backend läuft. |
+| ![Steuerfalle](docs/screenshots/steuerfalle-dark.png) | **Fehlerhafte Rechnung (45/100)** – fehlende USt-IdNr. (−20), fehlendes Leistungsdatum (−10), ungültige IBAN (−15), Steuersatz 16 % (−10). Der Tooltip an der Kachel erklärt jeden Abzug in einem Satz. |
+| ![Gültige Rechnung](docs/screenshots/gueltige-rechnung-light.png) | **Light Mode, gültige Rechnung (100/100)** – „Zur Auszahlung freigegeben“, mit Demo-Siegel versiegelt. Farbcodierte PII-Markierungen im Text. |
+| ![Live-Audit](docs/screenshots/live-audit-stepper.png) | **Live-Audit-Stepper** (Aufnahme mit Ollama-Stub) – zeigt die echten Pipeline-Stufen des Backends (`GET /documents/{id}/progress`), keine simulierte Animation. |
+| ![Export](docs/screenshots/export-siegel.png) | **Export-Center & Siegel** – Zertifikat drucken, JSON, Markdown-Memo; Prüfer-Siegel als Ledger-Eintrag (Art. 14 EU AI Act). |
 | ![Einstellungen](docs/screenshots/einstellungen.png) | **Einstellungen** – Provider, Modell, API-Key (maskiert), Privacy-Gateway-Hinweis, PII-Strenge, Toggles, X-API-Key. |
-| ![Zertifikat](docs/screenshots/pruefzertifikat.png) | **Prüfzertifikat (A4)** – SHA-256, Ledger- und Vorgänger-Hash, Prompt-Hash, § 14-Matrix, Siegel. |
+| ![Mobil](docs/screenshots/mobil.png) | **Mobil (390 px)** – ohne horizontales Scrollen. |
 
 Designprinzipien: semantische Farbtokens (Grün = konform, Bernstein = Prüfung,
 Rose = Verstoß/Hochrisiko, Indigo = Datenschutz), WCAG-AA-Kontraste in beiden
-Themes, keine Hover-Lifts oder pulsierenden Effekte, `prefers-reduced-motion`
-wird respektiert. Ist das Backend nicht erreichbar, erscheint ein Hinweisbanner
-– **es werden nie Ersatzdaten angezeigt.**
+Themes, keine Hover-Lifts, pulsierenden Effekte oder Deko-Icons,
+`prefers-reduced-motion` wird respektiert. Zahlen, Beträge, Hashes und
+Normzitate in JetBrains Mono mit gleich breiten Ziffern. Barrierefreiheit nach
+den Vercel Web Interface Guidelines: Skip-Link, echte Buttons, Tooltips per
+Tastaturfokus erreichbar, Formularfelder mit `name`/`autocomplete`. Ist das
+Backend nicht erreichbar, erscheint ein Hinweisbanner – **es werden nie
+Ersatzdaten angezeigt.**
 
 ---
 
@@ -193,7 +234,7 @@ wird respektiert. Ist das Backend nicht erreichbar, erscheint ein Hinweisbanner
 | `GET` | `/api/audit/trail` · `/api/audit/verify` · `/api/audit/head` | Ledger lesen, Kette prüfen, Kopf-Hash zur Verankerung |
 | `GET`/`POST` | `/api/settings` · `/api/settings/test-connection` | Laufzeit-Einstellungen (Keys maskiert), Verbindungstest |
 | `GET` | `/api/dashboard/kpis` | Portfolio-Kennzahlen |
-| `POST` | `/api/demo/seed` | Drei Referenzdokumente (idempotent) |
+| `POST` | `/api/demo/seed` | Drei Musterdokumente mit Referenz-Audits, ohne Inferenz (idempotent, überschreibt keine Live-Audits) |
 
 ```bash
 API=http://localhost:8001
@@ -241,10 +282,10 @@ LLM-Extraktion und per Regex im Dokumenttext (`evidence_source`).
 
 | Kachel | Regel | Abzug |
 |---|---|---|
-| **Formelle Gültigkeit** (§ 14 Abs. 4 UStG) | Steuernummer/USt-IdNr. fehlt (Nr. 2) | −20 |
+| **Formelle Gültigkeit** (§ 14 Abs. 4 UStG, Regelwerk 2026.1) | Steuernummer/USt-IdNr. fehlt (Nr. 2) | −20 |
 | | jede weitere fehlende Pflichtangabe (Nr. 1, 3–8) | −10 |
 | | Kleinbetragsrechnung ≤ 250 € brutto: Nr. 1 (Empfänger), 2, 4, 6, 7, 8 (Betrag) entbehrlich (§ 33 UStDV) | – |
-| | Reines PDF statt E-Rechnung (EN 16931): Hinweis | 0 |
+| | Reines PDF statt E-Rechnung (EN 16931) bzw. hybrides Format ohne XML-Validierung: Hinweis | 0 |
 | **Mathematische Validität** | IBAN-Prüfziffer ungültig | −15 |
 | | Netto + USt ≠ Brutto | −15 |
 | | USt ≠ Netto × Satz | −10 |
@@ -261,10 +302,16 @@ Bänder: **≥ 85 grün** (verkehrsfähig) · **60–84 gelb** (Nachbesserung) �
 freigegeben“, „Freigabe unter Vorbehalt“, „Freigabe gesperrt — Nachforderung
 nötig“ oder „Freigabe gesperrt — Konformitätsbewertung nach Art. 43 nachweisen“.
 
-Demo-Dokumente bei vollständiger Extraktion: gültige Rechnung **100**,
-Steuerfalle **45**, KI-Recruiting-Vertrag **59** (gedeckelt). Ein schwächeres
-Modell kann einzelne Felder verfehlen; die Regex-Gegenprobe fängt die meisten
-Fälle ab (getestet in `tests/test_scoring.py`).
+Jeder Abzug trägt eine Ein-Satz-Risikoerklärung (`risk_note`, z. B. „Ohne
+Steuernummer oder USt-IdNr. entfällt der Vorsteuerabzug nach § 15 UStG.“) und
+bei Bedarf rechtlichen Kontext (`note`). Beides erscheint als Tooltip im
+Dashboard und im Zertifikat.
+
+Musterdaten: gültige Rechnung **100**, Steuerfalle **45**, KI-Recruiting-Vertrag
+**59** (gedeckelt) – als Referenz-Audit ohne Modell und, bei vollständiger
+Extraktion, auch live. Ein schwächeres Modell kann einzelne Felder verfehlen;
+die Regex-Gegenprobe fängt die meisten Fälle ab (getestet in
+`tests/test_scoring.py` und `tests/test_reference_demo.py`).
 
 ---
 
@@ -358,7 +405,7 @@ Alembic dazu.
 ## Tests
 
 ```bash
-python -m pytest            # 155 Tests, ca. 8 s, kein LLM nötig
+python -m pytest            # 171 Tests, ca. 9 s, kein LLM nötig
 cd frontend && npm run lint && npm run build
 ```
 
@@ -371,7 +418,8 @@ nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault und Validierung laufen real.
 | `test_schemas.py` | 22 | Deutsche Formate, Toleranz gegenüber LLM-Ausgaben |
 | `test_workflow.py` | 22 | Scorecard in der API, Zertifikat (inkl. XSS-Escaping), Siegel, Batch, Seed, KPIs, Pins, Fortschritt, Copilot, Schwärzungsstufen |
 | `test_privacy_and_providers.py` | 26 | Vault, Provider-Payloads, Fehlerabbildung, verschlüsselte Keys, Cloud-Pipeline ohne Klartext-PII |
-| `test_scoring.py` | 18 | Regelwerk, Demo-Scores, Kleinbetrag, Corona-Sätze, Deckelung |
+| `test_scoring.py` | 22 | Regelwerk, Demo-Scores, Kleinbetrag, Corona-Sätze, Deckelung, Risikoerklärungen, XML-Vorrang, § 14c-Hinweis |
+| `test_reference_demo.py` | 12 | Musterdaten ohne Modell (100/45/59), Demo-Siegel, Ledger-Kennzeichnung, kein Überschreiben von Live-Audits, Copilot-Musterantworten |
 | `test_observability.py` | 13 | JSON-Logs, PII-Filter, Request-ID, Token-Bucket, 429 |
 | `test_audit_ledger.py` | 7 | Verkettung, Trigger, Manipulations- und Löschnachweis, Migration |
 | `test_llm.py` · `test_redaction.py` · `test_pdf_reader.py` | 25 | Client, Regex-Scan, PDF-Fehlerklassen |
@@ -409,7 +457,12 @@ Steuerberatung. Maßgeblich bleibt die Freigabe durch die Prüfperson.
 
 * **Kein OCR.** Scans ohne Textlayer werden mit Handlungshinweis abgelehnt.
 * **Keine strukturierte E-Rechnung.** Eingebettetes XML wird erkannt, aber
-  nicht gegen EN 16931/KoSIT validiert – der nächste sinnvolle Ausbauschritt.
+  nicht gegen EN 16931/KoSIT validiert. Bei hybriden Rechnungen prüft das
+  System damit den PDF-Bildteil, nicht den rechtlich maßgeblichen XML-Teil; der
+  Prüfpunkt sagt das selbst. Der nächste sinnvolle Ausbauschritt.
+* **Art. 6 Abs. 3 AI Act.** Die Ausnahme für rein vorbereitende Tätigkeiten
+  wird nicht automatisch geprüft; das System eskaliert konservativ und weist
+  darauf hin.
 * **Synchrone Analyse.** Ein `POST /extract` blockiert für beide LLM-Läufe; für
   hohe Last wäre eine Queue (z. B. Arq, Celery) nötig.
 * **Prüfer-Identität.** Der Name im Siegel ist selbst erklärt. Produktiv
