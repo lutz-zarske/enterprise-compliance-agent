@@ -32,7 +32,7 @@ _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 #: Standardattribute eines LogRecord - alles andere gilt als Zusatzfeld.
 _RESERVED = frozenset(
     vars(logging.LogRecord("", 0, "", 0, "", None, None)).keys()
-    | {"message", "asctime", "request_id"}
+    | {"message", "asctime", "request_id", "color_message"}
 )
 
 #: Schluessel, deren Werte grundsaetzlich nie im Log erscheinen.

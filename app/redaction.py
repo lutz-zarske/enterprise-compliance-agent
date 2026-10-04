@@ -168,7 +168,8 @@ _ANCHORED_PATTERNS: tuple[tuple[PIICategory, re.Pattern[str]], ...] = (
     (
         PIICategory.ID_DOCUMENT_NUMBER,
         re.compile(
-            r"(?:ausweis(?:nummer)?|personalausweis|passnummer|reisepass|id[- ]?nr\.?)"
+            # "USt-IdNr." ist eine Unternehmenskennung, keine Ausweisnummer.
+            r"(?:ausweis(?:nummer)?|personalausweis|passnummer|reisepass|(?<!ust-)(?<!ust)id[- ]?nr\.?)"
             r"[:\s]*([A-Z0-9]{6,12})",
             re.IGNORECASE,
         ),
@@ -227,7 +228,9 @@ def scan_text(text: str) -> list[PIIFinding]:
         )
 
     # --- IBANs (mit Pruefsumme, daher praktisch falsch-positiv-frei) --------
+    iban_spans: list[tuple[int, int]] = []
     for match in _IBAN_PATTERN.finditer(text):
+        iban_spans.append(match.span())
         candidate = match.group(0).replace(" ", "")
         if iban_checksum_valid(candidate):
             add(PIICategory.BANK_ACCOUNT, mask_value(candidate), *match.span(), 0.99)
@@ -237,6 +240,9 @@ def scan_text(text: str) -> list[PIIFinding]:
         add(PIICategory.CONTACT_DATA, mask_email(match.group(0)), *match.span(), 0.95)
 
     for match in _PHONE_PATTERN.finditer(text):
+        start, end = match.span()
+        if any(start < iban_end and iban_start < end for iban_start, iban_end in iban_spans):
+            continue  # Ziffernbloecke einer IBAN sind keine Telefonnummer.
         digits = re.sub(r"\D", "", match.group(0))
         if len(digits) >= 7:
             add(PIICategory.CONTACT_DATA, mask_value(match.group(0).strip()), *match.span(), 0.7)
@@ -319,3 +325,151 @@ def merge_findings(
         merged.values(),
         key=lambda item: (item.category not in SPECIAL_CATEGORIES, -item.confidence),
     )
+
+
+# ---------------------------------------------------------------------------
+# Textansicht mit Maskierungsstufen (strict | standard | audit_only)
+# ---------------------------------------------------------------------------
+
+#: Hoechstlaenge der Textansicht im Inspektor.
+TEXT_VIEW_LIMIT = 20_000
+
+_DATE_PATTERN = re.compile(r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b")
+
+#: Vault-Kategorie -> (Anzeigename, Platzhalter bzw. None = Mitte maskieren).
+_VIEW_CATEGORIES: dict[str, tuple[str, str | None]] = {
+    "EMAIL": ("Kontaktdaten (E-Mail)", None),
+    "PHONE": ("Kontaktdaten (Telefon)", None),
+    "IBAN": ("Bankverbindung (IBAN)", None),
+    "VAT_ID": ("USt-IdNr.", None),
+    "TAX_NUMBER": ("Steuernummer", None),
+    "ID_NUMBER": ("Ausweis-/Kennnummer", None),
+    "DATE_OF_BIRTH": ("Geburtsdatum", None),
+    "ART9": ("Besondere Kategorie (Art. 9/10 DSGVO)", "[ART. 9]"),
+    "PERSON": ("Name einer natuerlichen Person", "[NAME]"),
+    "ORG": ("Firma / Organisation", "[FIRMA]"),
+    "ADDRESS": ("Anschrift", "[ADRESSE]"),
+    "AMOUNT": ("Betrag", "[BETRAG]"),
+    "DATE": ("Datum", "[DATUM]"),
+}
+
+#: Welche Kategorien je Stufe tatsaechlich geschwaerzt werden.
+MASKED_BY_LEVEL: dict[str, frozenset[str]] = {
+    "strict": frozenset(_VIEW_CATEGORIES),
+    "standard": frozenset(
+        {"EMAIL", "PHONE", "IBAN", "VAT_ID", "TAX_NUMBER", "ID_NUMBER", "DATE_OF_BIRTH", "ART9"}
+    ),
+    "audit_only": frozenset(),
+}
+
+#: Abgleich Textansicht <-> Befundliste (fuer die Quelle "both").
+_FINDING_CATEGORY: dict[str, PIICategory] = {
+    "EMAIL": PIICategory.CONTACT_DATA,
+    "PHONE": PIICategory.CONTACT_DATA,
+    "IBAN": PIICategory.BANK_ACCOUNT,
+    "ID_NUMBER": PIICategory.ID_DOCUMENT_NUMBER,
+    "DATE_OF_BIRTH": PIICategory.DATE_OF_BIRTH,
+    "PERSON": PIICategory.NAME,
+    "ADDRESS": PIICategory.ADDRESS,
+}
+
+
+def _collect_view_spans(text: str) -> list[tuple[int, int, str, str]]:
+    """(start, end, kategorie, wert) - ohne Ueberlappungen, nach Position sortiert."""
+    from app.privacy_vault import PrivacyVault  # lokaler Import: vermeidet Zyklus
+
+    raw: list[tuple[int, int, str, str]] = []
+    # Hoechste Prioritaet: verankerte Identifikatoren und Art.-9-Schluesselwoerter.
+    for category, pattern in _ANCHORED_PATTERNS:
+        name = {
+            PIICategory.ID_DOCUMENT_NUMBER: "ID_NUMBER",
+            PIICategory.SOCIAL_SECURITY_NUMBER: "ID_NUMBER",
+            PIICategory.TAX_ID: "ID_NUMBER",
+            PIICategory.DATE_OF_BIRTH: "DATE_OF_BIRTH",
+        }[category]
+        for match in pattern.finditer(text):
+            raw.append((*match.span(1), name, match.group(1)))
+    lowered = text.casefold()
+    for keywords in KEYWORD_RULES.values():
+        for keyword in keywords:
+            for match in re.finditer(rf"\b{re.escape(keyword)}\w*", lowered):
+                raw.append((match.start(), match.end(), "ART9", text[match.start() : match.end()]))
+    for span in PrivacyVault().find_spans(text):
+        raw.append((span.start, span.end, span.category, span.value))
+    for match in _DATE_PATTERN.finditer(text):
+        raw.append((*match.span(), "DATE", match.group(0)))
+
+    chosen: list[tuple[int, int, str, str]] = []
+    for item in raw:
+        if any(item[0] < other[1] and other[0] < item[1] for other in chosen):
+            continue
+        chosen.append(item)
+    return sorted(chosen)
+
+
+def build_text_view(
+    text: str, level: str, findings: Iterable[PIIFinding] = ()
+) -> dict[str, object]:
+    """Erzeugt die Inspektor-Ansicht: geschwaerzter Text plus markierte Fundstellen.
+
+    * ``strict``: alle erkannten Merkmale geschwaerzt (Namen, Firmen, Betraege,
+      Datumsangaben, Adressen, Identifikatoren, Art.-9-Begriffe).
+    * ``standard``: IBAN, Steuernummern/USt-IdNr., E-Mail, Telefon, Kennnummern
+      und Art.-9-Begriffe geschwaerzt; uebrige Treffer nur markiert.
+    * ``audit_only``: nichts geschwaerzt, alle Treffer markiert (interne Revision).
+    """
+    level = level if level in MASKED_BY_LEVEL else "standard"
+    truncated = len(text) > TEXT_VIEW_LIMIT
+    source_text = text[:TEXT_VIEW_LIMIT]
+    masked_categories = MASKED_BY_LEVEL[level]
+
+    llm_keys: set[tuple[str, str]] = set()
+    for finding in findings:
+        if finding.source in (DetectionSource.LLM, DetectionSource.BOTH):
+            llm_keys.add(_dedupe_key(finding))
+
+    out: list[str] = []
+    spans: list[dict[str, object]] = []
+    cursor = 0
+    length = 0
+    for start, end, category, value in _collect_view_spans(source_text):
+        segment = source_text[cursor:start]
+        out.append(segment)
+        length += len(segment)
+        label, placeholder = _VIEW_CATEGORIES[category]
+        masked = category in masked_categories
+        if masked:
+            if placeholder:
+                display = placeholder
+            elif category == "EMAIL":
+                display = mask_email(value)
+            else:
+                display = mask_value(value.replace(" ", "") if category == "IBAN" else value)
+        else:
+            display = value
+
+        source = "rule_based"
+        finding_category = _FINDING_CATEGORY.get(category)
+        if finding_category is not None:
+            probe = PIIFinding(
+                category=finding_category,
+                masked_value=mask_email(value) if category == "EMAIL" else mask_value(value.replace(" ", "")),
+            )
+            if _dedupe_key(probe) in llm_keys:
+                source = "both"
+
+        out.append(display)
+        spans.append(
+            {
+                "start": length,
+                "end": length + len(display),
+                "category": category.lower(),
+                "label": label,
+                "masked": masked,
+                "source": source,
+            }
+        )
+        length += len(display)
+        cursor = end
+    out.append(source_text[cursor:])
+    return {"level": level, "text": "".join(out), "spans": spans, "truncated": truncated}

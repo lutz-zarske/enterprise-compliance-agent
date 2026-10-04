@@ -12,25 +12,40 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+
+import httpx
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+
+from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Path, Query, Request, Response, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.audit_ledger import AuditLedger
 from app.config import APP_TITLE, APP_VERSION, Settings, get_settings
 from app.db import build_repository, utcnow
+from app.inference import InferenceRouter
 from app.llm import LLMError, OllamaClient, OllamaUnavailableError
+from app.providers import (
+    ProviderNotConfiguredError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+)
+from app.reporting import REPORT_CSP, build_report, render_html, render_markdown
+from app.runtime_settings import CLOUD_PROVIDERS, InferenceMode, RuntimeSettingsStore
 from app.logging_config import configure_logging, normalize_request_id, request_id_var
 from app.rate_limit import RateLimitExceededError, TokenBucketLimiter, rate_limit
 from app.pdf_reader import PdfReadError
 from app.schemas import (
     ComponentHealth,
+    ConnectionTestRequest,
+    CopilotRequest,
+    CopilotResponse,
     DatabaseHealth,
     DocumentDetail,
     DocumentListResponse,
@@ -39,12 +54,18 @@ from app.schemas import (
     ExtractionResponse,
     HealthResponse,
     OllamaHealth,
+    PinRequest,
+    SettingsUpdate,
+    SignOffRequest,
     UploadResponse,
 )
 from app.services import (
+    PROGRESS,
+    DocumentNotAnalyzedError,
     DocumentService,
     ServiceError,
     UploadTooLargeError,
+    UploadValidationError,
     to_detail,
 )
 
@@ -62,26 +83,30 @@ Institutionelles Backend zur automatisierten Pruefung von Geschaeftsdokumenten.
 
 **Funktionsumfang**
 
-* **Extraktion** von Rechnungen und Vertraegen (Absender, Empfaenger, Belegnummer,
-  Datum, Faelligkeit, Betrag, Waehrung, IBAN, Zusammenfassung, Auffaelligkeiten).
-* **EU-AI-Act-Klassifizierung** nach VO (EU) 2024/1689 - insbesondere die
-  Hochrisiko-Bereiche aus Anhang III (HR-Recruiting, kritische Infrastruktur,
-  Kreditwuerdigkeitspruefung).
-* **DSGVO-Audit** mit Erkennung besonderer Kategorien nach Art. 9/10
-  (Gesundheitsdaten, Religionszugehoerigkeit, Ausweisnummern).
+* **Extraktion** von Rechnungen und Vertraegen inkl. aller Pflichtangaben nach
+  § 14 Abs. 4 UStG (Steuernummer/USt-IdNr., Leistungszeitpunkt, Netto, Steuersatz).
+* **Deterministische Compliance-Scorecard (0-100)** mit vier Kacheln: formelle
+  Gueltigkeit (§ 14 UStG, EN 16931), EU AI Act, DSGVO, Finanzmathematik (MOD-97, MwSt.).
+* **EU-AI-Act-Klassifizierung** nach VO (EU) 2024/1689 mit Anhang-III-Eskalation.
+* **DSGVO-Audit** mit Art.-9/10-Erkennung und drei Maskierungsstufen.
+* **Hash-verkettetes Pruefprotokoll** (EU AI Act Art. 12, GoBD) und
+  **Human-Oversight-Siegel** (Art. 14) mit druckfertigem Pruefzertifikat.
+* **Multi-Provider-Inferenz**: lokal (Ollama, Default) oder Gemini / Claude / GPT -
+  Cloud-Aufrufe ausschliesslich ueber das Privacy Gateway (Pseudonymisierung).
 
-**Privacy-First**: Die Inferenz laeuft vollstaendig lokal ueber Ollama; kein
-Dokumentinhalt verlaesst den Rechner. PII-Treffer werden ausschliesslich
-maskiert persistiert.
-
-**Authentifizierung**: Ist `API_KEY` gesetzt, verlangen alle `/documents`-Endpunkte
-den Header `X-API-Key`. Ohne gesetzten Wert ist die Pruefung deaktiviert.
+**Authentifizierung**: Ist `API_KEY` gesetzt, verlangen alle Endpunkte ausser
+`/health` den Header `X-API-Key`. Ohne gesetzten Wert ist die Pruefung deaktiviert -
+dann kann jeder im Netz auch die Einstellungen aendern; produktiv immer setzen.
 """
 
 TAGS_METADATA = [
     {"name": "System", "description": "Betriebszustand von Datenbank, Ollama und Modell."},
     {"name": "Dokumente", "description": "Upload, Extraktion, Compliance-Audit und Uebersicht."},
     {"name": "Audit-Ledger", "description": "Hash-verkettetes Pruefprotokoll (EU AI Act Art. 12, GoBD)."},
+    {"name": "Human Oversight", "description": "Pruefbericht und Siegel durch eine Pruefperson (Art. 14)."},
+    {"name": "Compliance Copilot", "description": "Dokumentbezogene Fragen an das aktive Modell."},
+    {"name": "Einstellungen", "description": "Inferenz-Provider, API-Keys (verschluesselt), PII-Strenge."},
+    {"name": "Dashboard", "description": "Kennzahlen und Demo-Daten."},
 ]
 
 
@@ -97,14 +122,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level, json_logs=settings.log_json)
 
     engine, repository = build_repository(settings)
-    llm = OllamaClient(settings)
+    ollama_transport = getattr(app.state, "ollama_transport", None)
+    llm = OllamaClient(
+        settings,
+        client=httpx.AsyncClient(transport=ollama_transport) if ollama_transport else None,
+    )
     ledger = AuditLedger(engine)
+    runtime = RuntimeSettingsStore(settings, engine)
+    router = InferenceRouter(
+        settings, runtime, llm, cloud_transport=getattr(app.state, "cloud_transport", None)
+    )
 
     app.state.engine = engine
     app.state.repository = repository
     app.state.llm = llm
     app.state.ledger = ledger
-    app.state.service = DocumentService(settings, repository, llm, ledger=ledger)
+    app.state.runtime = runtime
+    app.state.router = router
+    app.state.service = DocumentService(
+        settings, repository, router, ledger=ledger, runtime=runtime, progress=PROGRESS
+    )
 
     logger.info(
         "%s v%s gestartet | DB=%s | Modell=%s | Auth=%s",
@@ -117,6 +154,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await router.aclose()
         await llm.aclose()
         engine.dispose()
         logger.info("Anwendung heruntergefahren.")
@@ -170,6 +208,10 @@ def get_service(request: Request) -> DocumentService:
 
 def get_llm(request: Request) -> OllamaClient:
     return request.app.state.llm
+
+
+def get_runtime(request: Request) -> RuntimeSettingsStore:
+    return request.app.state.runtime
 
 
 class ApiKeyError(Exception):
@@ -277,12 +319,16 @@ def _register_exception_handlers(application: FastAPI) -> None:
 
     @application.exception_handler(LLMError)
     async def _handle_llm_error(_request: Request, exc: LLMError) -> JSONResponse:
-        # 503, solange der Dienst selbst das Problem ist; 502 bei unbrauchbarer Antwort.
-        code = (
-            status.HTTP_503_SERVICE_UNAVAILABLE
-            if isinstance(exc, OllamaUnavailableError)
-            else status.HTTP_502_BAD_GATEWAY
-        )
+        # 400 bei fehlender Konfiguration, 503/504 bei Dienststoerung,
+        # 502 bei unbrauchbarer Antwort oder abgelehntem Key.
+        if isinstance(exc, ProviderNotConfiguredError):
+            code = status.HTTP_400_BAD_REQUEST
+        elif isinstance(exc, (OllamaUnavailableError, ProviderUnavailableError)):
+            code = status.HTTP_503_SERVICE_UNAVAILABLE
+        elif isinstance(exc, ProviderTimeoutError):
+            code = status.HTTP_504_GATEWAY_TIMEOUT
+        else:
+            code = status.HTTP_502_BAD_GATEWAY
         logger.warning("Inferenzfehler (%s): %s", exc.code, exc)
         return _error_response(code, exc.code, str(exc), exc.hint)
 
@@ -403,8 +449,23 @@ def _register_routes(application: FastAPI) -> None:
                 model=settings.ollama_model,
             )
 
+        runtime: RuntimeSettingsStore = request.app.state.runtime
+        snap = runtime.snapshot()
+        is_cloud = snap.inference_mode in CLOUD_PROVIDERS
+        inference = {
+            "mode": snap.inference_mode.value,
+            "model": snap.active_model,
+            "is_cloud": is_cloud,
+            "privacy_gateway_active": is_cloud,
+            "configured": (not is_cloud) or bool(snap.key_for(snap.inference_mode.value)),
+        }
         components: list[ComponentHealth] = [database, ollama]
-        overall = "ok" if all(item.status == "ok" for item in components) else "degraded"
+        if is_cloud:
+            # Im Cloud-Modus ist Ollama optional; massgeblich ist der hinterlegte Key.
+            healthy = database.status == "ok" and bool(inference["configured"])
+        else:
+            healthy = all(item.status == "ok" for item in components)
+        overall = "ok" if healthy else "degraded"
 
         return HealthResponse(
             status=overall,
@@ -414,6 +475,7 @@ def _register_routes(application: FastAPI) -> None:
             timestamp=utcnow(),
             database=database,
             ollama=ollama,
+            inference=inference,
         )
 
     # --- POST /documents/upload -------------------------------------------
@@ -507,6 +569,9 @@ def _register_routes(application: FastAPI) -> None:
             extraction=outcome.extraction,
             compliance=outcome.compliance,
             duration_ms=outcome.duration_ms,
+            scorecard=outcome.scorecard,
+            provider=outcome.provider,
+            audit_entry_id=outcome.audit_entry_id,
         )
 
     # --- GET /documents ----------------------------------------------------
@@ -545,9 +610,251 @@ def _register_routes(application: FastAPI) -> None:
         document_id: str = Path(..., description="UUID des Dokuments."),
         service: DocumentService = Depends(get_service),
     ) -> DocumentDetail:
-        """Gibt Metadaten, Extraktion, Compliance-Audit und eine Textvorschau zurueck."""
+        """Metadaten, Extraktion, Audit, Scorecard, Siegel und geschwaerzte Textansicht."""
         record = await service.require_document(document_id)
-        return to_detail(record)
+        return to_detail(record, pii_level=service.pii_level)
+
+    # --- Batch-Upload -------------------------------------------------------
+    @application.post(
+        "/documents/upload-batch",
+        tags=["Dokumente"],
+        summary="Mehrere PDFs in einem multipart-Request hochladen",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("upload", "rate_limit_upload_per_minute")),
+        ],
+        responses={**error_responses, 429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"}},
+    )
+    async def upload_batch(
+        files: list[UploadFile] = File(..., description="Ein oder mehrere PDF-Dateien."),
+        service: DocumentService = Depends(get_service),
+        settings: Settings = Depends(get_app_settings),
+    ) -> dict[str, object]:
+        """Jede Datei wird einzeln validiert; ein fehlerhaftes PDF bricht den Batch nicht ab."""
+        if len(files) > settings.max_batch_files:
+            raise UploadValidationError(
+                f"Maximal {settings.max_batch_files} Dateien pro Batch erlaubt ({len(files)} gesendet)."
+            )
+        items: list[dict[str, object]] = []
+        for upload in files:
+            name = upload.filename or ""
+            try:
+                data = await _read_upload(upload, settings.max_upload_bytes)
+                record, duplicate_of = await service.ingest(
+                    filename=name, content_type=upload.content_type, data=data
+                )
+                items.append(
+                    {
+                        "filename": record.original_filename,
+                        "ok": True,
+                        "id": record.id,
+                        "sha256": record.sha256,
+                        "page_count": record.page_count,
+                        "duplicate_of": duplicate_of,
+                    }
+                )
+            except (ServiceError, PdfReadError) as exc:
+                items.append({"filename": name, "ok": False, "error": {"code": exc.code, "message": str(exc)}})
+        succeeded = sum(1 for item in items if item["ok"])
+        return {"items": items, "succeeded": succeeded, "failed": len(items) - succeeded}
+
+    # --- Fortschritt, Pins, Siegel, Bericht, Copilot -----------------------
+    @application.get(
+        "/documents/{document_id}/progress",
+        tags=["Dokumente"],
+        summary="Aktuelle Pipeline-Stufe (Live-Audit-Stepper)",
+        dependencies=[Depends(require_api_key)],
+        responses=error_responses,
+    )
+    async def document_progress(
+        document_id: str = Path(...), service: DocumentService = Depends(get_service)
+    ) -> dict[str, object]:
+        record = await service.require_document(document_id)
+        return service.progress_of(record)
+
+    @application.put(
+        "/documents/{document_id}/pin",
+        response_model=DocumentDetail,
+        tags=["Dokumente"],
+        summary="Dokument oben anpinnen bzw. loesen",
+        dependencies=[Depends(require_api_key)],
+        responses=error_responses,
+    )
+    async def pin_document(
+        body: PinRequest, document_id: str = Path(...), service: DocumentService = Depends(get_service)
+    ) -> DocumentDetail:
+        record = await service.require_document(document_id)
+        updated = await service.set_pinned(record, body.pinned)
+        return to_detail(updated, pii_level=service.pii_level)
+
+    @application.post(
+        "/documents/{document_id}/sign-off",
+        response_model=DocumentDetail,
+        tags=["Human Oversight"],
+        summary="Pruefergebnis durch eine Pruefperson versiegeln (EU AI Act Art. 14)",
+        dependencies=[Depends(require_api_key)],
+        responses={**error_responses, 409: {"model": ErrorResponse, "description": "Noch nicht analysiert"}},
+    )
+    async def sign_off_document(
+        body: SignOffRequest, document_id: str = Path(...), service: DocumentService = Depends(get_service)
+    ) -> DocumentDetail:
+        """Schreibt einen ``sign_off``-Eintrag in den Hash-Ledger und versiegelt das Dokument.
+
+        Eine erneute Analyse hebt das Siegel auf (der Pruefgegenstand hat sich
+        geaendert); die Historie bleibt im Ledger vollstaendig erhalten.
+        """
+        record = await service.require_document(document_id)
+        updated = await service.sign_off(record, body)
+        return to_detail(updated, pii_level=service.pii_level)
+
+    @application.get(
+        "/documents/{document_id}/report",
+        tags=["Human Oversight"],
+        summary="Revisionssicheres Audit-Zertifikat (html | markdown | json)",
+        dependencies=[Depends(require_api_key)],
+        responses={**error_responses, 409: {"model": ErrorResponse, "description": "Noch nicht analysiert"}},
+    )
+    async def document_report(
+        request: Request,
+        document_id: str = Path(...),
+        report_format: Literal["html", "markdown", "json"] = Query("html", alias="format"),
+        service: DocumentService = Depends(get_service),
+    ) -> Response:
+        record = await service.require_document(document_id)
+        if not record.scorecard:
+            raise DocumentNotAnalyzedError(f"Dokument {document_id} ist noch nicht analysiert.")
+        ledger: AuditLedger = request.app.state.ledger
+        report = build_report(
+            record, await ledger.list(document_id=document_id, limit=50), await ledger.verify_chain()
+        )
+        stem = record.original_filename.rsplit(".", 1)[0]
+        if report_format == "json":
+            return JSONResponse(
+                report,
+                headers={"Content-Disposition": f'inline; filename="Pruefzertifikat_{stem}.json"'},
+            )
+        if report_format == "markdown":
+            return PlainTextResponse(
+                render_markdown(report),
+                media_type="text/markdown; charset=utf-8",
+                headers={"Content-Disposition": f'inline; filename="Pruefzertifikat_{stem}.md"'},
+            )
+        return HTMLResponse(
+            render_html(report),
+            headers={"Content-Security-Policy": REPORT_CSP, "X-Content-Type-Options": "nosniff"},
+        )
+
+    @application.post(
+        "/documents/{document_id}/copilot",
+        response_model=CopilotResponse,
+        tags=["Compliance Copilot"],
+        summary="Frage zum Dokument an den Compliance Copilot",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("copilot", "rate_limit_copilot_per_minute")),
+        ],
+        responses=error_responses,
+    )
+    async def copilot(
+        body: CopilotRequest, document_id: str = Path(...), service: DocumentService = Depends(get_service)
+    ) -> CopilotResponse:
+        """Antwort des aktiven Modells, geerdet auf nummeriertem Dokumenttext und Pruefergebnis."""
+        record = await service.require_document(document_id)
+        result = await service.copilot(
+            record, body.question, [turn.model_dump() for turn in body.history]
+        )
+        return CopilotResponse.model_validate(result)
+
+    # --- Dashboard & Demo ---------------------------------------------------
+    @application.get(
+        "/api/dashboard/kpis",
+        tags=["Dashboard"],
+        summary="Aggregierte Portfolio-Kennzahlen",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def dashboard_kpis(service: DocumentService = Depends(get_service)) -> dict[str, object]:
+        return await service.kpis()
+
+    @application.post(
+        "/api/demo/seed",
+        tags=["Dashboard"],
+        summary="Drei Referenzdokumente fuer Live-Demos anlegen",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("upload", "rate_limit_upload_per_minute")),
+        ],
+    )
+    async def demo_seed(service: DocumentService = Depends(get_service)) -> dict[str, object]:
+        """Idempotent: bereits vorhandene Referenzdokumente (gleiche SHA-256) werden wiederverwendet.
+
+        Die Analyse startet bewusst separat (``POST /documents/{id}/extract``),
+        damit das Frontend den Live-Stepper je Dokument zeigen kann.
+        """
+        items = await service.seed_demo()
+        return {"items": items, "created": sum(1 for item in items if item["created"])}
+
+    # --- Einstellungen ------------------------------------------------------
+    @application.get(
+        "/api/settings",
+        tags=["Einstellungen"],
+        summary="Aktive Inferenz- und Compliance-Konfiguration (Keys maskiert)",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def get_runtime_settings(runtime: RuntimeSettingsStore = Depends(get_runtime)) -> dict[str, object]:
+        return runtime.public_view()
+
+    @application.post(
+        "/api/settings",
+        tags=["Einstellungen"],
+        summary="Inferenz-Modus, Modelle, API-Keys und PII-Strenge aendern",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
+    )
+    async def update_runtime_settings(
+        body: SettingsUpdate, runtime: RuntimeSettingsStore = Depends(get_runtime)
+    ) -> dict[str, object]:
+        """API-Keys werden Fernet-verschluesselt gespeichert und nur maskiert zurueckgegeben."""
+        await runtime.update(body.model_dump(exclude_none=True))
+        logger.info(
+            "Einstellungen geaendert: %s",
+            ", ".join(sorted(body.model_dump(exclude_none=True).keys())),
+        )
+        return runtime.public_view()
+
+    @application.post(
+        "/api/settings/test-connection",
+        tags=["Einstellungen"],
+        summary="Verbindung zum gewaehlten Provider pruefen (ohne Dokumentinhalt)",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
+    )
+    async def test_connection(
+        request: Request,
+        body: ConnectionTestRequest,
+        runtime: RuntimeSettingsStore = Depends(get_runtime),
+        llm: OllamaClient = Depends(get_llm),
+    ) -> dict[str, object]:
+        snap = runtime.snapshot()
+        mode = InferenceMode(body.provider) if body.provider else snap.inference_mode
+        model = snap.models[mode.value]
+        try:
+            if mode is InferenceMode.LOCAL:
+                models = await llm.list_models()
+                wanted = {model, f"{model}:latest", model.removesuffix(":latest")}
+                if not any(name in wanted for name in models):
+                    return {"ok": False, "provider": mode.value, "model": model,
+                            "message": f"Ollama erreichbar, Modell '{model}' aber nicht installiert."}
+                message = f"Ollama erreichbar, Modell {model} installiert."
+            else:
+                router: InferenceRouter = request.app.state.router
+                message = await router.cloud_client(mode, snap).test_connection()
+        except LLMError as exc:
+            return {"ok": False, "provider": mode.value, "model": model, "message": str(exc), "code": exc.code}
+        return {"ok": True, "provider": mode.value, "model": model, "message": message}
 
     # --- Audit-Ledger ------------------------------------------------------
     @application.get(

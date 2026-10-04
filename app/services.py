@@ -1,7 +1,8 @@
 """Fachlogik: Ingestion, Extraktion, Compliance-Audit und Mapping.
 
 Diese Schicht kennt weder FastAPI noch SQLAlchemy - sie arbeitet gegen das
-``DocumentRepository``-Protocol und den ``OllamaClient``.  Dadurch ist sie
+``DocumentRepository``-Protocol und den ``InferenceRouter`` (bzw. direkt
+einen ``StructuredLLMClient``).  Dadurch ist sie
 isoliert testbar, und die Endpunkte in ``main.py`` bleiben duenn.
 
 Der Ablauf von ``extract_and_audit`` ist bewusst zweistufig: ein LLM-Aufruf
@@ -15,6 +16,7 @@ regeln), die das Modellergebnis korrigieren statt ihm blind zu vertrauen.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import unicodedata
@@ -23,12 +25,15 @@ from pathlib import Path
 
 import anyio.to_thread
 
-from app.audit_ledger import AuditEventType, AuditLedger
+from app.audit_ledger import AuditEventType, AuditLedger, LedgerEntry
 from app.config import Settings
 from app.db import DocumentRecord, DocumentRepository, NewDocument, utcnow
-from app.llm import PROMPT_HASH, OllamaClient
+from app.llm import PROMPT_HASH, StructuredLLMClient
 from app.pdf_reader import PdfExtraction, extract_text_async
-from app.redaction import enforce_masking, merge_findings, scan_text
+from app.privacy_vault import VaultedClient
+from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
+from app.runtime_settings import RuntimeSettingsStore
+from app.scoring import compute_scorecard
 from app.schemas import (
     SPECIAL_CATEGORIES,
     AIActAssessment,
@@ -42,6 +47,9 @@ from app.schemas import (
     GDPRAssessment,
     PIICategory,
     RiskLevel,
+    Scorecard,
+    SignOff,
+    SignOffRequest,
     iban_checksum_valid,
 )
 
@@ -90,6 +98,14 @@ class DocumentNotFoundError(ServiceError):
     code = "document_not_found"
     status_code = 404
     hint = "IDs aller vorhandenen Dokumente liefert GET /documents."
+
+
+class DocumentNotAnalyzedError(ServiceError):
+    """Aktion setzt eine abgeschlossene Analyse voraus."""
+
+    code = "document_not_analyzed"
+    status_code = 409
+    hint = "Zuerst POST /documents/{id}/extract ausfuehren."
 
 
 class NoTextAvailableError(ServiceError):
@@ -221,6 +237,38 @@ def escalate_ai_act(assessment: AIActAssessment) -> AIActAssessment:
 
 
 # ---------------------------------------------------------------------------
+# Fortschritt der Pipeline (fuer den Live-Audit-Stepper im Frontend)
+# ---------------------------------------------------------------------------
+
+#: Reihenfolge der echten Verarbeitungsschritte in ``extract_and_audit``.
+PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
+    ("text_check", "Text-Layer & PDF-Check"),
+    ("pii_scan", "PII-Scanner & DSGVO-Maskierung"),
+    ("ustg_check", "§ 14 UStG Rechnungspruefung"),
+    ("ai_act", "EU AI Act Risikobewertung"),
+)
+
+
+class ProgressTracker:
+    """Prozesslokaler Fortschrittsspeicher je Dokument (bewusst ohne DB-Schreiblast)."""
+
+    def __init__(self) -> None:
+        self._stages: dict[str, str] = {}
+
+    def set(self, document_id: str, stage: str) -> None:
+        self._stages[document_id] = stage
+
+    def get(self, document_id: str) -> str | None:
+        return self._stages.get(document_id)
+
+    def clear(self, document_id: str) -> None:
+        self._stages.pop(document_id, None)
+
+
+PROGRESS = ProgressTracker()
+
+
+# ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
 
@@ -233,6 +281,9 @@ class ExtractionOutcome:
     extraction: ExtractionResult
     compliance: ComplianceAudit
     duration_ms: int
+    scorecard: Scorecard | None = None
+    provider: str = "local"
+    audit_entry_id: str | None = None
 
 
 class DocumentService:
@@ -242,14 +293,44 @@ class DocumentService:
         self,
         settings: Settings,
         repository: DocumentRepository,
-        llm: OllamaClient,
+        llm: object,
         *,
         ledger: AuditLedger | None = None,
+        runtime: RuntimeSettingsStore | None = None,
+        progress: ProgressTracker | None = None,
     ) -> None:
         self._settings = settings
         self._repository = repository
+        #: Entweder ein ``InferenceRouter`` (Produktion) oder direkt ein Client (Tests).
         self._llm = llm
         self._ledger = ledger
+        self._runtime = runtime
+        self._progress = progress or PROGRESS
+
+    # --- Konfiguration -----------------------------------------------------
+    def _acquire_client(self) -> StructuredLLMClient:
+        acquire = getattr(self._llm, "acquire", None)
+        return acquire() if callable(acquire) else self._llm  # type: ignore[return-value]
+
+    @property
+    def pii_level(self) -> str:
+        if self._runtime is not None:
+            return self._runtime.snapshot().pii_strictness.value
+        return self._settings.pii_strictness
+
+    def _flags(self) -> tuple[bool, bool]:
+        """(Paragraf-14-Pruefung erzwingen, AI-Act-Eskalation aktiv)."""
+        if self._runtime is None:
+            return True, True
+        snap = self._runtime.snapshot()
+        return snap.enforce_ustg_check, snap.ai_act_escalation
+
+    def _read_pdf(self, record: DocumentRecord) -> bytes | None:
+        path = self._settings.upload_path / record.stored_filename
+        try:
+            return path.read_bytes()
+        except OSError:
+            return None
 
     # --- Ingestion ---------------------------------------------------------
     async def ingest(
@@ -314,33 +395,55 @@ class DocumentService:
 
     # --- Extraktion & Audit ------------------------------------------------
     async def extract_and_audit(self, record: DocumentRecord) -> ExtractionOutcome:
-        """Fuehrt beide LLM-Aufrufe aus und verrechnet sie mit den Regelbefunden."""
+        """Vier echte Pipeline-Stufen; jede Stufe meldet sich im ProgressTracker.
+
+        1. Text-Layer-Pruefung
+        2. Regelbasierter PII-Scan; bei Cloud-Inferenz Pseudonymisierung im Vault
+        3. LLM-Extraktion + Paragraf-14-Kontrollen
+        4. LLM-Audit (EU AI Act, DSGVO), Eskalationsregeln, Scorecard, Ledger
+        """
+        progress = self._progress
+        progress.set(record.id, "text_check")
         text = record.raw_text or ""
         if len(text.strip()) < 1:
+            progress.clear(record.id)
             raise NoTextAvailableError(
                 f"Zum Dokument {record.id} ist kein extrahierter Text gespeichert."
             )
 
         prompt_text = _truncate_for_prompt(text, self._settings.max_prompt_chars)
+        enforce_ustg, escalate = self._flags()
+
+        try:
+            client = self._acquire_client()
+        except Exception:
+            progress.clear(record.id)
+            raise
         await self._repository.mark_processing(record.id)
 
         try:
-            # Schritt 1: fachliche Extraktion.
-            extraction, extraction_ms = await self._llm.extract_document(prompt_text)
+            progress.set(record.id, "pii_scan")
+            rule_findings = scan_text(text)
+            if isinstance(client, VaultedClient):
+                # Mapping vorab aufbauen: gleiche Platzhalter fuer beide LLM-Aufrufe.
+                client.vault.pseudonymize(prompt_text)
+
+            progress.set(record.id, "ustg_check")
+            extraction, extraction_ms = await client.extract_document(prompt_text)
             extraction = augment_extraction_issues(extraction)
 
-            # Schritt 2: Compliance-Audit (EU AI Act + DSGVO).
-            audit_payload, audit_ms = await self._llm.audit_document(prompt_text)
+            progress.set(record.id, "ai_act")
+            audit_payload, audit_ms = await client.audit_document(prompt_text)
         except Exception as exc:
             await self._repository.mark_failed(record.id, f"{type(exc).__name__}: {exc}")
+            progress.clear(record.id)
             raise
 
-        # Schritt 3: deterministische Gegenprobe auf dem vollstaendigen Text.
-        # Die Maskierung laeuft vor dem Zusammenfuehren: nur so treffen sich
-        # ein vom Modell im Klartext gemeldeter Wert und derselbe, vom
+        # Deterministische Gegenprobe auf dem vollstaendigen Text.  Die
+        # Maskierung laeuft vor dem Zusammenfuehren: nur so treffen sich ein
+        # vom Modell im Klartext gemeldeter Wert und derselbe, vom
         # Regelscanner bereits maskierte Wert im selben Deduplizierungs-
         # schluessel und werden als ein Treffer (source="both") erkannt.
-        rule_findings = scan_text(text)
         llm_findings = enforce_masking(
             audit_payload.gdpr.findings, enabled=self._settings.mask_pii_in_storage
         )
@@ -355,46 +458,200 @@ class DocumentService:
                 "risk_level": _derive_gdpr_risk(categories, audit_payload.gdpr.risk_level).value,
             }
         )
-        ai_act = escalate_ai_act(audit_payload.ai_act)
+        ai_act = escalate_ai_act(audit_payload.ai_act) if escalate else audit_payload.ai_act
 
+        provider = getattr(client, "provider", "local")
+        vault_report = client.vault.report if isinstance(client, VaultedClient) else None
         compliance = ComplianceAudit(
             ai_act=ai_act,
             gdpr=gdpr,
-            model=self._llm.model,
+            model=client.model,
             audited_at=utcnow(),
             duration_ms=audit_ms,
+            provider=provider,
+            privacy_gateway=vault_report,
+        )
+        if isinstance(client, VaultedClient):
+            client.vault.clear()
+
+        pdf_bytes = await anyio.to_thread.run_sync(self._read_pdf, record)
+        scorecard = compute_scorecard(
+            extraction, compliance, text, enforce_ustg_check=enforce_ustg, pdf_bytes=pdf_bytes
         )
 
         updated = await self._repository.save_results(
             record.id,
-            model=self._llm.model,
+            model=client.model,
             extraction=extraction.model_dump(mode="json"),
             compliance=compliance.model_dump(mode="json"),
+            scorecard=scorecard.model_dump(mode="json"),
+            provider=provider,
         )
+
+        entry_id: str | None = None
         if self._ledger is not None:
-            await self._ledger.append(
+            entry = await self._ledger.append(
                 event_type=AuditEventType.ANALYSIS,
                 document_id=record.id,
                 sha256_hash=record.sha256,
-                model_name=self._llm.model,
+                model_name=client.model,
                 prompt_hash=PROMPT_HASH,
-                result_summary=compliance.headline,
-                compliance_score=None,
+                result_summary=f"{scorecard.release_recommendation} | {compliance.headline}",
+                compliance_score=scorecard.score,
                 risk_tier=ai_act.overall_risk_level.value,
-                details={"doc_type": extraction.doc_type.value},
+                details={
+                    "doc_type": extraction.doc_type.value,
+                    "provider": provider,
+                    "score_band": scorecard.band.value,
+                    "ruleset_version": scorecard.ruleset_version,
+                    "pii_findings": len(masked),
+                    "privacy_gateway": vault_report,
+                },
             )
+            entry_id = entry.entry_id
+        progress.clear(record.id)
         logger.info(
-            "Dokument %s ausgewertet: %s | %s",
+            "Dokument %s ausgewertet: %s | Score %s | %s",
             record.id,
             extraction.doc_type.value,
+            scorecard.score,
             compliance.headline,
+            extra={"document_id": record.id, "provider": provider, "score": scorecard.score},
         )
         return ExtractionOutcome(
             record=updated,
             extraction=extraction,
             compliance=compliance,
             duration_ms=extraction_ms + audit_ms,
+            scorecard=scorecard,
+            provider=provider,
+            audit_entry_id=entry_id,
         )
+
+    # --- Demo-Daten ---------------------------------------------------------
+    async def seed_demo(self) -> list[dict[str, object]]:
+        """Legt die drei Referenzdokumente an (idempotent ueber die SHA-256)."""
+        from app.demo import demo_documents
+
+        results: list[dict[str, object]] = []
+        for filename, data in demo_documents():
+            existing = await self._repository.get_by_sha256(compute_sha256(data))
+            if existing is not None:
+                results.append({"id": existing.id, "filename": existing.original_filename,
+                                "status": existing.status, "created": False})
+                continue
+            record, _ = await self.ingest(filename=filename, content_type="application/pdf", data=data)
+            results.append({"id": record.id, "filename": record.original_filename,
+                            "status": record.status, "created": True})
+        return results
+
+    # --- Human Oversight (EU AI Act Art. 14) --------------------------------
+    async def sign_off(self, record: DocumentRecord, request: SignOffRequest) -> DocumentRecord:
+        """Versiegelt das Pruefergebnis durch eine natuerliche Person."""
+        if record.status != DocumentStatus.EXTRACTED.value or not record.scorecard:
+            raise DocumentNotAnalyzedError(
+                f"Dokument {record.id} ist noch nicht analysiert - kein Siegel moeglich."
+            )
+        score = (record.scorecard or {}).get("score")
+        entry: LedgerEntry | None = None
+        if self._ledger is not None:
+            entry = await self._ledger.append(
+                event_type=AuditEventType.SIGN_OFF,
+                document_id=record.id,
+                sha256_hash=record.sha256,
+                model_name=record.model or "",
+                prompt_hash=PROMPT_HASH,
+                result_summary=f"{request.decision.value} durch {request.auditor_name}",
+                compliance_score=score,
+                risk_tier=((record.compliance or {}).get("ai_act") or {}).get("overall_risk_level", "unknown"),
+                details={"auditor_name": request.auditor_name, "note": request.note[:500]},
+            )
+        sign_off = SignOff(
+            status=request.decision,
+            auditor_name=request.auditor_name,
+            note=request.note,
+            sealed_at=utcnow(),
+            ledger_entry_id=entry.entry_id if entry else "",
+            ledger_entry_hash=entry.entry_hash if entry else "",
+            compliance_score=score,
+        )
+        return await self._repository.save_sign_off(record.id, sign_off.model_dump(mode="json"))
+
+    async def set_pinned(self, record: DocumentRecord, pinned: bool) -> DocumentRecord:
+        return await self._repository.set_pinned(record.id, pinned)
+
+    def progress_of(self, record: DocumentRecord) -> dict[str, object]:
+        stage = self._progress.get(record.id)
+        keys = [key for key, _ in PIPELINE_STAGES]
+        if record.status == DocumentStatus.EXTRACTED.value and stage is None:
+            index = len(keys)
+        elif stage in keys:
+            index = keys.index(stage)
+        else:
+            index = -1
+        return {
+            "document_id": record.id,
+            "status": record.status,
+            "current_stage": stage,
+            "stages": [
+                {
+                    "key": key,
+                    "label": label,
+                    "state": "done" if i < index else "active" if i == index else "pending",
+                }
+                for i, (key, label) in enumerate(PIPELINE_STAGES)
+            ],
+        }
+
+    # --- Compliance Copilot -------------------------------------------------
+    async def copilot(
+        self, record: DocumentRecord, question: str, history: list[dict[str, str]]
+    ) -> dict[str, object]:
+        """Beantwortet eine Pruefer-Frage, geerdet auf Dokumenttext und Pruefergebnis."""
+        if not record.raw_text:
+            raise NoTextAvailableError(f"Zum Dokument {record.id} liegt kein Text vor.")
+        client = self._acquire_client()
+        grounding = build_copilot_grounding(record, self._settings.max_prompt_chars)
+        messages = [
+            *[
+                {"role": turn["role"], "content": turn["content"][:2000]}
+                for turn in history[-8:]
+                if turn.get("role") in {"user", "assistant"} and turn.get("content")
+            ],
+            {"role": "user", "content": f"{grounding}\n\nFRAGE DES PRUEFERS:\n{question.strip()}"},
+        ]
+        answer, duration_ms = await client.chat_text(system_prompt=COPILOT_SYSTEM_PROMPT, messages=messages)
+        provider = getattr(client, "provider", "local")
+        if isinstance(client, VaultedClient):
+            client.vault.clear()
+        return {"answer": answer, "model": client.model, "provider": provider, "duration_ms": duration_ms}
+
+    # --- Kennzahlen ---------------------------------------------------------
+    async def kpis(self) -> dict[str, object]:
+        records = await self._repository.list_all()
+        analyzed = [r for r in records if r.status == DocumentStatus.EXTRACTED.value]
+        scores = [int(r.scorecard["score"]) for r in analyzed if r.scorecard and "score" in r.scorecard]
+        pii = 0
+        high_risk = 0
+        for r in analyzed:
+            compliance = r.compliance or {}
+            pii += len((compliance.get("gdpr") or {}).get("findings") or [])
+            level = (compliance.get("ai_act") or {}).get("overall_risk_level")
+            if level in {"high", "unacceptable"}:
+                high_risk += 1
+        avg = round(sum(scores) / len(scores)) if scores else None
+        return {
+            "documents_total": len(records),
+            "documents_analyzed": len(analyzed),
+            "average_score": avg,
+            "average_band": (
+                None if avg is None else "green" if avg >= 85 else "amber" if avg >= 60 else "red"
+            ),
+            "pii_elements_masked": pii,
+            "high_risk_count": high_risk,
+            "high_risk_quota": round(high_risk / len(analyzed) * 100, 1) if analyzed else 0.0,
+            "sealed_count": sum(1 for r in records if r.sign_off),
+        }
 
     # --- Lesezugriffe ------------------------------------------------------
     async def require_document(self, document_id: str) -> DocumentRecord:
@@ -410,6 +667,74 @@ class DocumentService:
             limit=limit, offset=offset, status=status.value if status else None
         )
         return [to_summary(record) for record in records], total
+
+
+# ---------------------------------------------------------------------------
+# Copilot-Grounding
+# ---------------------------------------------------------------------------
+
+COPILOT_SYSTEM_PROMPT = """\
+Du bist der Compliance Copilot eines Wirtschaftspruefungs-Teams. Du beantwortest
+Fragen zu genau einem vorliegenden Dokument.
+
+Verbindliche Regeln:
+1. Stuetze jede Aussage ausschliesslich auf den DOKUMENTTEXT und das
+   PRUEFERGEBNIS unten. Erfinde keine Fakten. Fehlt eine Information, sage das.
+2. Verweise auf Textstellen mit der Zeilennummer in eckigen Klammern, z. B. [Z. 4].
+3. Nenne Rechtsnormen praezise (z. B. "§ 14 Abs. 4 Satz 1 Nr. 2 UStG",
+   "Art. 6 Abs. 2 i. V. m. Anhang III Nr. 4 VO (EU) 2024/1689", "Art. 9 DSGVO").
+4. Antworte sachlich, knapp und auf Deutsch. Nutze kurze Aufzaehlungen.
+5. Du gibst keine verbindliche Rechts- oder Steuerberatung; weise bei
+   Grenzfaellen auf die Pruefung durch eine Fachperson hin.
+"""
+
+
+def build_copilot_grounding(record: DocumentRecord, max_chars: int) -> str:
+    """Nummerierter Dokumenttext plus kompaktes Pruefergebnis als Kontext."""
+    lines = (record.raw_text or "").splitlines()
+    numbered: list[str] = []
+    used = 0
+    for index, line in enumerate(lines, start=1):
+        entry = f"[Z. {index}] {line}"
+        if used + len(entry) > max_chars:
+            numbered.append(f"[... {len(lines) - index + 1} weitere Zeilen ausgelassen ...]")
+            break
+        numbered.append(entry)
+        used += len(entry) + 1
+
+    scorecard = record.scorecard or {}
+    open_points = [
+        f"- {check.get('label')}: {check.get('detail') or check.get('status')} ({check.get('legal_reference') or ''})"
+        for tile in scorecard.get("tiles", [])
+        for check in tile.get("checks", [])
+        if check.get("status") in {"fail", "warn"}
+    ]
+    compliance = record.compliance or {}
+    ai_act = compliance.get("ai_act") or {}
+    extraction = record.extraction or {}
+    summary = {
+        "doc_type": extraction.get("doc_type"),
+        "aussteller": extraction.get("sender"),
+        "rechnungsnummer": extraction.get("document_number"),
+        "brutto": extraction.get("total_amount"),
+        "netto": extraction.get("net_amount"),
+        "steuersatz": extraction.get("tax_rate"),
+        "steuerbetrag": extraction.get("tax_amount"),
+        "compliance_score": scorecard.get("score"),
+        "freigabeempfehlung": scorecard.get("release_recommendation"),
+        "ai_act_risikostufe": ai_act.get("overall_risk_level"),
+        "ai_act_begruendung": ai_act.get("reasoning"),
+        "anhang_iii": sorted(
+            {label for system in ai_act.get("systems", []) for label in system.get("annex_iii_labels", [])}
+        ),
+        "dsgvo_risiko": (compliance.get("gdpr") or {}).get("risk_level"),
+    }
+    return (
+        "=== DOKUMENTTEXT ===\n" + "\n".join(numbered)
+        + "\n=== PRUEFERGEBNIS (deterministische Regeln + KI-Audit) ===\n"
+        + json.dumps(summary, ensure_ascii=False, default=str, indent=1)
+        + "\nOffene Pruefpunkte:\n" + ("\n".join(open_points) or "- keine")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -457,17 +782,53 @@ def to_summary(record: DocumentRecord) -> DocumentSummary:
         contains_special_categories=(
             compliance.gdpr.contains_special_categories if compliance else None
         ),
+        compliance_score=(record.scorecard or {}).get("score"),
+        score_band=(record.scorecard or {}).get("band"),
+        pii_findings=len(compliance.gdpr.findings) if compliance else None,
+        sealed=bool(record.sign_off),
+        pinned=record.pinned,
+        provider=record.provider,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
 
 
-def to_detail(record: DocumentRecord) -> DocumentDetail:
-    """Erzeugt die Detailansicht inklusive Compliance-Audit."""
+def parse_scorecard(record: DocumentRecord) -> Scorecard | None:
+    if not record.scorecard:
+        return None
+    try:
+        return Scorecard.model_validate(record.scorecard)
+    except Exception:  # noqa: BLE001
+        logger.warning("Scorecard von Dokument %s ist nicht lesbar.", record.id, exc_info=True)
+        return None
+
+
+def parse_sign_off(record: DocumentRecord) -> SignOff | None:
+    if not record.sign_off:
+        return None
+    try:
+        return SignOff.model_validate(record.sign_off)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def to_detail(record: DocumentRecord, *, pii_level: str = "standard") -> DocumentDetail:
+    """Erzeugt die Detailansicht inklusive Compliance-Audit.
+
+    Textvorschau und Textansicht werden gemaess der aktiven PII-Strenge
+    geschwaerzt; der Rohtext verlaesst die API nie ungefiltert, ausser im
+    ausdruecklich gewaehlten Modus ``audit_only``.
+    """
+    compliance = parse_compliance(record)
     preview: str | None = None
+    text_view = None
     if record.raw_text:
-        preview = record.raw_text[:TEXT_PREVIEW_CHARS]
-        if len(record.raw_text) > TEXT_PREVIEW_CHARS:
+        text_view = build_text_view(
+            record.raw_text, pii_level, compliance.gdpr.findings if compliance else ()
+        )
+        redacted = str(text_view["text"])
+        preview = redacted[:TEXT_PREVIEW_CHARS]
+        if len(redacted) > TEXT_PREVIEW_CHARS:
             preview += " …"
 
     return DocumentDetail(
@@ -481,8 +842,13 @@ def to_detail(record: DocumentRecord) -> DocumentDetail:
         char_count=record.char_count,
         model=record.model,
         extraction=parse_extraction(record),
-        compliance=parse_compliance(record),
+        compliance=compliance,
         text_preview=preview,
+        scorecard=parse_scorecard(record),
+        sign_off=parse_sign_off(record),
+        text_view=text_view,
+        pinned=record.pinned,
+        provider=record.provider,
         error=record.error,
         created_at=record.created_at,
         updated_at=record.updated_at,

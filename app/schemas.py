@@ -19,7 +19,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
@@ -421,16 +421,58 @@ class ExtractionResult(LLMModel):
         max_length=2000,
         description="Sachliche Zusammenfassung in zwei bis vier Saetzen (Deutsch).",
     )
+    # --- Pflichtangaben nach Paragraf 14 Abs. 4 UStG (seit v2.0) -------------
+    sender_address: str | None = Field(default=None, max_length=400, description="Anschrift des Ausstellers.")
+    recipient_address: str | None = Field(default=None, max_length=400, description="Anschrift des Empfaengers.")
+    sender_tax_number: str | None = Field(default=None, max_length=40, description="Steuernummer des Ausstellers.")
+    sender_vat_id: str | None = Field(default=None, max_length=20, description="USt-IdNr. des Ausstellers.")
+    service_date: date | None = Field(default=None, description="Liefer-/Leistungsdatum.")
+    service_period: str | None = Field(default=None, max_length=120, description="Leistungszeitraum als Text.")
+    items_description: str | None = Field(
+        default=None, max_length=600, description="Menge und Art der Lieferung bzw. Umfang und Art der Leistung."
+    )
+    net_amount: Decimal | None = Field(default=None, description="Nettoentgelt.")
+    tax_rate: Decimal | None = Field(default=None, description="Umsatzsteuersatz in Prozent, z. B. 19.")
+    tax_amount: Decimal | None = Field(default=None, description="Umsatzsteuerbetrag.")
+    tax_exemption_note: str | None = Field(
+        default=None, max_length=300, description="Hinweis auf Steuerbefreiung / Reverse Charge."
+    )
     issues: list[str] = Field(
         default_factory=list,
         description="Auffaelligkeiten: fehlende Pflichtangaben, Widersprueche, ungewoehnliche Klauseln.",
     )
 
     # --- Normalisierung ----------------------------------------------------
-    @field_validator("sender", "recipient", "document_number", mode="before")
+    @field_validator(
+        "sender", "recipient", "document_number", "sender_address", "recipient_address",
+        "sender_tax_number", "sender_vat_id", "service_period", "items_description",
+        "tax_exemption_note",
+        mode="before",
+    )
     @classmethod
     def _clean_text(cls, value: Any) -> Any:
         return normalize_optional_text(value)
+
+    @field_validator("service_date", mode="before")
+    @classmethod
+    def _clean_service_date(cls, value: Any) -> Any:
+        return parse_flexible_date(value)
+
+    @field_validator("net_amount", "tax_amount", mode="before")
+    @classmethod
+    def _clean_money(cls, value: Any) -> Any:
+        return parse_flexible_amount(value)
+
+    @field_validator("tax_rate", mode="before")
+    @classmethod
+    def _clean_rate(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            value = value.replace("%", "")
+        rate = parse_flexible_amount(value)
+        # 0.19 statt 19 -> in Prozent umrechnen.
+        if isinstance(rate, Decimal) and Decimal(0) < rate < Decimal(1):
+            rate = rate * 100
+        return rate
 
     @field_validator("summary", mode="before")
     @classmethod
@@ -736,6 +778,11 @@ class ComplianceAudit(ApiModel):
     model: str = Field(description="Modell, das die Bewertung erzeugt hat.")
     audited_at: datetime = Field(description="Zeitpunkt der Bewertung (UTC).")
     duration_ms: int = Field(default=0, ge=0, description="Dauer der Bewertung in Millisekunden.")
+    provider: str = Field(default="local", description="local | gemini | anthropic | openai")
+    privacy_gateway: dict[str, int] | None = Field(
+        default=None,
+        description="Bei Cloud-Inferenz: Anzahl pseudonymisierter Werte je Kategorie (ohne Klartext).",
+    )
 
     @computed_field(description="Kurzfazit fuer Uebersichtslisten und Dashboards.")  # type: ignore[prop-decorator]
     @property
@@ -775,6 +822,12 @@ class DocumentSummary(ApiModel):
     ai_act_risk_level: AIActRiskLevel | None = None
     gdpr_risk_level: RiskLevel | None = None
     contains_special_categories: bool | None = None
+    compliance_score: int | None = None
+    score_band: str | None = None
+    pii_findings: int | None = None
+    sealed: bool = False
+    pinned: bool = False
+    provider: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -804,8 +857,13 @@ class DocumentDetail(ApiModel):
     compliance: ComplianceAudit | None = None
     text_preview: str | None = Field(
         default=None,
-        description="Erste Zeichen des extrahierten Textes (gekuerzt).",
+        description="Erste Zeichen des extrahierten Textes (gekuerzt, gemaess PII-Strenge geschwaerzt).",
     )
+    scorecard: Scorecard | None = None
+    sign_off: SignOff | None = None
+    text_view: TextView | None = None
+    pinned: bool = False
+    provider: str | None = None
     error: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -838,6 +896,158 @@ class ExtractionResponse(ApiModel):
     extraction: ExtractionResult
     compliance: ComplianceAudit
     duration_ms: int = Field(ge=0)
+    scorecard: Scorecard | None = None
+    provider: str | None = None
+    audit_entry_id: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Compliance-Scorecard (seit v2.0)
+# ---------------------------------------------------------------------------
+
+
+class CheckStatus(str, Enum):
+    PASS = "pass"
+    WARN = "warn"
+    FAIL = "fail"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class ScoreBand(str, Enum):
+    GREEN = "green"   # >= 85: verkehrsfaehig
+    AMBER = "amber"   # 60-84: Nachbesserung
+    RED = "red"       # < 60: Revisionssperre
+
+
+class ScoreCheck(ApiModel):
+    """Ein einzelnes Pruefmerkmal (z. B. Paragraf 14 Abs. 4 Nr. 2 UStG)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    label: str
+    legal_reference: str | None = None
+    status: CheckStatus
+    deduction: int = 0
+    detail: str | None = None
+    evidence_source: str | None = Field(
+        default=None, description="'llm', 'rule_based' oder 'both' - woher der Nachweis stammt."
+    )
+
+
+class ScoreTile(ApiModel):
+    """Eine der vier Unterkacheln der Scorecard."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    key: str
+    title: str
+    status: CheckStatus
+    headline: str
+    deduction: int = 0
+    checks: list[ScoreCheck] = Field(default_factory=list)
+
+
+class Scorecard(ApiModel):
+    """Deterministischer Compliance-Score (0-100) mit Begruendung je Abzug."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    score: int = Field(ge=0, le=100)
+    band: ScoreBand
+    band_label: str
+    cap_applied: str | None = Field(default=None, description="Begruendung, falls der Score gedeckelt wurde.")
+    tiles: list[ScoreTile]
+    release_recommendation: str
+    release_blocked: bool
+    ustg_required_total: int = 0
+    ustg_fulfilled: int = 0
+    small_amount_invoice: bool = False
+    structured_einvoice_detected: bool = False
+    computed_at: datetime
+    ruleset_version: str
+
+
+class SignOffDecision(str, Enum):
+    APPROVED = "SEALED_APPROVED"
+    REJECTED = "SEALED_REJECTED"
+
+
+class SignOffRequest(ApiModel):
+    auditor_name: str = Field(min_length=2, max_length=120)
+    note: str = Field(default="", max_length=2000)
+    decision: SignOffDecision = SignOffDecision.APPROVED
+
+
+class SignOff(ApiModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: SignOffDecision
+    auditor_name: str
+    note: str
+    sealed_at: datetime
+    ledger_entry_id: str
+    ledger_entry_hash: str
+    compliance_score: int | None = None
+
+
+InferenceModeLiteral = Literal["local", "gemini", "anthropic", "openai"]
+
+
+class SettingsUpdate(ApiModel):
+    """Teilaktualisierung der Laufzeit-Einstellungen (nur gesetzte Felder wirken)."""
+
+    inference_mode: InferenceModeLiteral | None = None
+    models: dict[str, str] | None = Field(default=None, description="Modell je Provider.")
+    api_keys: dict[str, str] | None = Field(
+        default=None, description="Neue Provider-Keys; leerer String loescht den Key."
+    )
+    pii_strictness: Literal["strict", "standard", "audit_only"] | None = None
+    enforce_ustg_check: bool | None = None
+    ai_act_escalation: bool | None = None
+
+
+class ConnectionTestRequest(ApiModel):
+    provider: InferenceModeLiteral | None = Field(default=None, description="Leer = aktiver Provider.")
+
+
+class PinRequest(ApiModel):
+    pinned: bool
+
+
+class CopilotTurn(ApiModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=8000)
+
+
+class CopilotRequest(ApiModel):
+    question: str = Field(min_length=2, max_length=2000)
+    history: list[CopilotTurn] = Field(default_factory=list, max_length=20)
+
+
+class CopilotResponse(ApiModel):
+    answer: str
+    model: str
+    provider: str
+    duration_ms: int
+
+
+class TextSpan(ApiModel):
+    """Markierte PII-Fundstelle in der Textansicht."""
+
+    start: int
+    end: int
+    category: str
+    label: str
+    masked: bool
+    source: str
+
+
+class TextView(ApiModel):
+    level: str
+    text: str
+    spans: list[TextSpan]
+    truncated: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -875,6 +1085,9 @@ class HealthResponse(ApiModel):
     timestamp: datetime
     database: DatabaseHealth
     ollama: OllamaHealth
+    inference: dict[str, Any] | None = Field(
+        default=None, description="Aktiver Inferenz-Modus, Modell und Privacy-Gateway-Status."
+    )
 
 
 class ErrorDetail(ApiModel):

@@ -120,6 +120,14 @@ Verbindliche Regeln:
    Pflichtangaben nach Paragraf 14 UStG (Steuernummer, Rechnungsnummer,
    Leistungsdatum), widerspruechliche Betraege oder ungewoehnliche
    Vertragsklauseln. Keine Auffaelligkeit bedeutet eine leere Liste.
+10. "net_amount" ist das Nettoentgelt, "tax_rate" der Umsatzsteuersatz in Prozent
+   (z. B. 19), "tax_amount" der Umsatzsteuerbetrag.
+11. "sender_tax_number" ist die Steuernummer (z. B. 21/815/08150),
+   "sender_vat_id" die Umsatzsteuer-Identifikationsnummer (z. B. DE123456789).
+12. "service_date" ist das Liefer- bzw. Leistungsdatum, "service_period" ein
+   Leistungszeitraum als Text (z. B. "01.03.2024 - 31.03.2024").
+13. "items_description" beschreibt Menge und Art der Lieferung bzw. Art und
+   Umfang der Leistung in einem Satz.
 
 Antwortschema (exakt diese Schluessel, keine zusaetzlichen):
 {{
@@ -132,6 +140,17 @@ Antwortschema (exakt diese Schluessel, keine zusaetzlichen):
   "total_amount": Zahl oder null,
   "currency": "EUR" oder null,
   "iban": string oder null,
+  "sender_address": string oder null,
+  "recipient_address": string oder null,
+  "sender_tax_number": string oder null,
+  "sender_vat_id": string oder null,
+  "service_date": "YYYY-MM-DD" oder null,
+  "service_period": string oder null,
+  "items_description": string oder null,
+  "net_amount": Zahl oder null,
+  "tax_rate": Zahl oder null,
+  "tax_amount": Zahl oder null,
+  "tax_exemption_note": string oder null,
   "summary": string,
   "issues": [string, ...]
 }}"""
@@ -311,95 +330,27 @@ def extract_json_object(content: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class OllamaClient:
-    """Schmaler, vollstaendig asynchroner Client fuer die Ollama-REST-API."""
+class StructuredLLMClient:
+    """Gemeinsame Basis aller Provider: JSON-Vertrag, Reparaturrunde, Fachaufrufe.
 
-    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
-        self._settings = settings
-        self._owns_client = client is None
-        self._client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=5.0,
-                read=settings.ollama_timeout_seconds,
-                write=30.0,
-                pool=5.0,
-            )
-        )
+    Ein Provider implementiert ausschliesslich ``_post_chat``; Prompts,
+    JSON-Extraktion, Schemavalidierung und Reparaturrunde sind fuer Ollama,
+    Gemini, Claude und GPT identisch.  Damit ist ein Provider-Wechsel ein
+    reiner Transportwechsel - die fachliche Pruefung bleibt gleich.
+    """
+
+    #: Kennung des Providers (local | gemini | anthropic | openai).
+    provider: str = "local"
 
     @property
-    def model(self) -> str:
-        return self._settings.ollama_model
+    def model(self) -> str:  # pragma: no cover - von Unterklassen ueberschrieben
+        raise NotImplementedError
 
-    async def aclose(self) -> None:
-        if self._owns_client:
-            await self._client.aclose()
+    async def aclose(self) -> None:  # pragma: no cover - optional
+        return None
 
-    # --- Verfuegbarkeit ----------------------------------------------------
-    async def list_models(self) -> list[str]:
-        """Namen aller auf dem Ollama-Host installierten Modelle."""
-        try:
-            response = await self._client.get(
-                self._settings.ollama_tags_url, timeout=HEALTH_TIMEOUT_SECONDS
-            )
-            response.raise_for_status()
-        except httpx.TimeoutException as exc:
-            raise OllamaUnavailableError(
-                f"Zeitueberschreitung bei {self._settings.ollama_tags_url}."
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise OllamaUnavailableError(
-                f"Ollama unter {self._settings.ollama_base_url} nicht erreichbar: {exc}"
-            ) from exc
-
-        payload = response.json()
-        return [entry.get("name", "") for entry in payload.get("models", []) if entry.get("name")]
-
-    async def is_model_available(self, models: list[str] | None = None) -> bool:
-        """Prueft das konfigurierte Modell inklusive impliziter ``:latest``-Tags."""
-        names = models if models is not None else await self.list_models()
-        wanted = self.model
-        candidates = {wanted, f"{wanted}:latest", wanted.removesuffix(":latest")}
-        return any(name in candidates for name in names)
-
-    # --- Inferenz ----------------------------------------------------------
-    async def _post_chat(self, messages: list[dict[str, str]]) -> str:
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            "format": "json",
-            "options": {
-                "temperature": self._settings.ollama_temperature,
-                "num_ctx": self._settings.ollama_num_ctx,
-                "seed": DEFAULT_SEED,
-            },
-        }
-
-        try:
-            response = await self._client.post(self._settings.ollama_chat_url, json=payload)
-        except httpx.TimeoutException as exc:
-            raise OllamaTimeoutError(
-                f"Die Inferenz hat {self._settings.ollama_timeout_seconds:.0f}s ueberschritten."
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise OllamaUnavailableError(
-                f"Ollama unter {self._settings.ollama_base_url} nicht erreichbar: {exc}"
-            ) from exc
-
-        if response.status_code == 404:
-            raise OllamaModelNotFoundError(
-                f"Das Modell '{self.model}' ist auf dem Ollama-Host nicht installiert."
-            )
-        if response.status_code >= 400:
-            raise LLMResponseError(
-                f"Ollama antwortete mit HTTP {response.status_code}: {response.text[:500]}"
-            )
-
-        body = response.json()
-        content = (body.get("message") or {}).get("content", "")
-        if not isinstance(content, str):
-            raise LLMResponseError("Die Antwort von Ollama enthielt keinen Textinhalt.")
-        return content
+    async def _post_chat(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> str:
+        raise NotImplementedError  # pragma: no cover
 
     async def chat_structured(
         self,
@@ -460,6 +411,16 @@ class OllamaClient:
             f"schemakonforme Antwort. Letzter Fehler: {last_error}"
         )
 
+    async def chat_text(
+        self, *, system_prompt: str, messages: list[dict[str, str]]
+    ) -> tuple[str, int]:
+        """Freitext-Antwort (Compliance Copilot) ohne JSON-Vertrag."""
+        started = time.perf_counter()
+        content = await self._post_chat(
+            [{"role": "system", "content": system_prompt}, *messages], json_mode=False
+        )
+        return content.strip(), int((time.perf_counter() - started) * 1000)
+
     # --- Fachliche Aufrufe -------------------------------------------------
     async def extract_document(self, text: str) -> tuple[ExtractionResult, int]:
         """Extrahiert Rechnungs- bzw. Vertragsdaten."""
@@ -476,3 +437,98 @@ class OllamaClient:
             user_prompt=build_compliance_prompt(text),
             schema=ComplianceAuditPayload,
         )
+
+
+class OllamaClient(StructuredLLMClient):
+    """Schmaler, vollstaendig asynchroner Client fuer die Ollama-REST-API."""
+
+    provider = "local"
+
+    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
+        self._settings = settings
+        self._owns_client = client is None
+        self._client = client or httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=5.0,
+                read=settings.ollama_timeout_seconds,
+                write=30.0,
+                pool=5.0,
+            )
+        )
+
+    @property
+    def model(self) -> str:
+        return self._settings.ollama_model
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self._client.aclose()
+
+    # --- Verfuegbarkeit ----------------------------------------------------
+    async def list_models(self) -> list[str]:
+        """Namen aller auf dem Ollama-Host installierten Modelle."""
+        try:
+            response = await self._client.get(
+                self._settings.ollama_tags_url, timeout=HEALTH_TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            raise OllamaUnavailableError(
+                f"Zeitueberschreitung bei {self._settings.ollama_tags_url}."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise OllamaUnavailableError(
+                f"Ollama unter {self._settings.ollama_base_url} nicht erreichbar: {exc}"
+            ) from exc
+
+        payload = response.json()
+        return [entry.get("name", "") for entry in payload.get("models", []) if entry.get("name")]
+
+    async def is_model_available(self, models: list[str] | None = None) -> bool:
+        """Prueft das konfigurierte Modell inklusive impliziter ``:latest``-Tags."""
+        names = models if models is not None else await self.list_models()
+        wanted = self.model
+        candidates = {wanted, f"{wanted}:latest", wanted.removesuffix(":latest")}
+        return any(name in candidates for name in names)
+
+    # --- Inferenz ----------------------------------------------------------
+    async def _post_chat(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> str:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": self._settings.ollama_temperature,
+                "num_ctx": self._settings.ollama_num_ctx,
+                "seed": DEFAULT_SEED,
+            },
+        }
+        if json_mode:
+            payload["format"] = "json"
+
+        try:
+            response = await self._client.post(self._settings.ollama_chat_url, json=payload)
+        except httpx.TimeoutException as exc:
+            raise OllamaTimeoutError(
+                f"Die Inferenz hat {self._settings.ollama_timeout_seconds:.0f}s ueberschritten."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise OllamaUnavailableError(
+                f"Ollama unter {self._settings.ollama_base_url} nicht erreichbar: {exc}"
+            ) from exc
+
+        if response.status_code == 404:
+            raise OllamaModelNotFoundError(
+                f"Das Modell '{self.model}' ist auf dem Ollama-Host nicht installiert."
+            )
+        if response.status_code >= 400:
+            raise LLMResponseError(
+                f"Ollama antwortete mit HTTP {response.status_code}: {response.text[:500]}"
+            )
+
+        body = response.json()
+        content = (body.get("message") or {}).get("content", "")
+        if not isinstance(content, str):
+            raise LLMResponseError("Die Antwort von Ollama enthielt keinen Textinhalt.")
+        return content
+

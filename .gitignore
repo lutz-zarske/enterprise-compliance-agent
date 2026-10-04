@@ -20,6 +20,8 @@ data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/uploads/*
+# Fernet-Schluessel fuer verschluesselte Provider-Keys - niemals committen!
+data/.settings.key
 !data/uploads/.gitkeep
 
 # IDE / OS

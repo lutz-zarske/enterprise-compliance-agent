@@ -217,6 +217,7 @@ class FakeOllama:
         self.calls: list[dict[str, Any]] = []
         #: Antworten, die vor der regulaeren Antwort ausgeliefert werden.
         self.pending_raw: list[str] = []
+        self.copilot_answer = "Es fehlt die USt-IdNr. [Z. 1] (§ 14 Abs. 4 Satz 1 Nr. 2 UStG)."
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         if self.offline:
@@ -239,6 +240,10 @@ class FakeOllama:
                 )
 
             system_prompt = payload["messages"][0]["content"]
+            if "Compliance Copilot" in system_prompt:
+                return httpx.Response(
+                    200, json={"message": {"content": self.copilot_answer}}
+                )
             is_compliance = "EU AI ACT" in system_prompt.upper()
             body = self.compliance_response if is_compliance else self.extraction_response
             content = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
@@ -332,6 +337,39 @@ def uploaded_document_id(client: TestClient, pdf: bytes, filename: str = "rechnu
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
+
+
+@pytest.fixture
+def make_full_client(
+    settings: Settings, fake_ollama: FakeOllama
+) -> Iterator[Callable[..., TestClient]]:
+    """Vollstaendige App ohne Dependency-Overrides (Router, Runtime-Store, Vault).
+
+    Ollama und Cloud-Provider werden auf HTTP-Ebene gemockt; damit laeuft der
+    Produktionspfad inklusive InferenceRouter und PrivacyVault.
+    """
+    opened: list[TestClient] = []
+
+    def factory(cloud_handler: Callable[[httpx.Request], httpx.Response] | None = None,
+                **overrides: Any) -> TestClient:
+        effective = settings.model_copy(update=overrides) if overrides else settings
+        application = create_app(effective)
+        application.state.ollama_transport = httpx.MockTransport(fake_ollama.handler)
+        if cloud_handler is not None:
+            application.state.cloud_transport = httpx.MockTransport(cloud_handler)
+        test_client = TestClient(application)
+        test_client.__enter__()
+        opened.append(test_client)
+        return test_client
+
+    yield factory
+    for test_client in opened:
+        test_client.__exit__(None, None, None)
+
+
+@pytest.fixture
+def full_client(make_full_client: Callable[..., TestClient]) -> TestClient:
+    return make_full_client()
 
 
 __all__ = ["FakeOllama", "build_pdf", "uploaded_document_id"]

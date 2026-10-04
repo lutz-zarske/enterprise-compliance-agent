@@ -104,3 +104,13 @@ def test_besondere_kategorien_stehen_in_der_ergebnisliste_vorn() -> None:
         [],
     )
     assert findings[0].category is PIICategory.HEALTH_DATA
+
+
+def test_ust_idnr_ist_keine_ausweisnummer_und_iban_keine_telefonnummer() -> None:
+    findings = scan_text(
+        "Steuernummer: 22/815/08150 USt-IdNr.: DE287654321\n"
+        "Bankverbindung: DE89 3704 0044 0532 0130 00\nAusweisnummer: L01X00T47"
+    )
+    categories = [finding.category for finding in findings]
+    assert categories.count(PIICategory.ID_DOCUMENT_NUMBER) == 1  # nur die echte Ausweisnummer
+    assert PIICategory.CONTACT_DATA not in categories

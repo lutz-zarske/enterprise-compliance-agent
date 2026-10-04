@@ -13,3 +13,5 @@ data/
 .env.local
 README.md
 docker-compose.yml
+frontend/
+docs/
