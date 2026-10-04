@@ -226,9 +226,9 @@ ANNEX_III_LABELS: dict[AnnexIIICategory, str] = {
     AnnexIIICategory.BIOMETRICS: "Anhang III Nr. 1 - Biometrie",
     AnnexIIICategory.CRITICAL_INFRASTRUCTURE: "Anhang III Nr. 2 - Kritische Infrastruktur",
     AnnexIIICategory.EDUCATION: "Anhang III Nr. 3 - Allgemeine und berufliche Bildung",
-    AnnexIIICategory.EMPLOYMENT: "Anhang III Nr. 4 - Beschaeftigung und Personalmanagement",
+    AnnexIIICategory.EMPLOYMENT: "Anhang III Nr. 4 - Beschäftigung und Personalmanagement",
     AnnexIIICategory.ESSENTIAL_SERVICES: (
-        "Anhang III Nr. 5 - Wesentliche Dienste, u. a. Kreditwuerdigkeitspruefung"
+        "Anhang III Nr. 5 - Wesentliche Dienste, u. a. Kreditwürdigkeitsprüfung"
     ),
     AnnexIIICategory.LAW_ENFORCEMENT: "Anhang III Nr. 6 - Strafverfolgung",
     AnnexIIICategory.MIGRATION_AND_BORDER: "Anhang III Nr. 7 - Migration, Asyl und Grenzkontrolle",
@@ -279,10 +279,10 @@ SPECIAL_CATEGORIES: frozenset[PIICategory] = frozenset(
 
 PII_CATEGORY_LABELS: dict[PIICategory, str] = {
     PIICategory.HEALTH_DATA: "Gesundheitsdaten (Art. 9 Abs. 1 DSGVO)",
-    PIICategory.RELIGIOUS_BELIEF: "Religions- oder Weltanschauungszugehoerigkeit (Art. 9 Abs. 1 DSGVO)",
+    PIICategory.RELIGIOUS_BELIEF: "Religions- oder Weltanschauungszugehörigkeit (Art. 9 Abs. 1 DSGVO)",
     PIICategory.ETHNIC_ORIGIN: "Rassische oder ethnische Herkunft (Art. 9 Abs. 1 DSGVO)",
     PIICategory.POLITICAL_OPINION: "Politische Meinung (Art. 9 Abs. 1 DSGVO)",
-    PIICategory.TRADE_UNION: "Gewerkschaftszugehoerigkeit (Art. 9 Abs. 1 DSGVO)",
+    PIICategory.TRADE_UNION: "Gewerkschaftszugehörigkeit (Art. 9 Abs. 1 DSGVO)",
     PIICategory.BIOMETRIC_DATA: "Biometrische Daten (Art. 9 Abs. 1 DSGVO)",
     PIICategory.GENETIC_DATA: "Genetische Daten (Art. 9 Abs. 1 DSGVO)",
     PIICategory.SEX_LIFE: "Sexualleben oder sexuelle Orientierung (Art. 9 Abs. 1 DSGVO)",
@@ -292,7 +292,7 @@ PII_CATEGORY_LABELS: dict[PIICategory, str] = {
     PIICategory.TAX_ID: "Steueridentifikationsnummer",
     PIICategory.BANK_ACCOUNT: "Bankverbindung (IBAN/BIC)",
     PIICategory.DATE_OF_BIRTH: "Geburtsdatum",
-    PIICategory.NAME: "Name einer natuerlichen Person",
+    PIICategory.NAME: "Name einer natürlichen Person",
     PIICategory.ADDRESS: "Anschrift",
     PIICategory.CONTACT_DATA: "Kontaktdaten (E-Mail, Telefon)",
     PIICategory.OTHER: "Sonstige personenbezogene Daten",

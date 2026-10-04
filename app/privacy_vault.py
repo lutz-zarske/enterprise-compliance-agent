@@ -83,7 +83,7 @@ _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
     (
         "ORG",
         re.compile(
-            rf"\b(?:{_CAP}[ ]){{0,3}}{_CAP}[ ]"
+            rf"\b(?:(?:{_CAP}|&)[ ]){{0,3}}{_CAP}[ ]"
             r"(?:GmbH\s&\sCo\.\sKG|GmbH|gGmbH|AG|SE|KGaA|KG|OHG|UG(?:\s\(haftungsbeschränkt\))?|"
             r"e\.\s?K\.|e\.\s?V\.|mbH|Ltd\.?|Inc\.?|LLC|S\.A\.|B\.V\.)(?![\wÄÖÜäöüß])"
         ),

@@ -2,8 +2,8 @@
 
 Der Bericht ist eine *Sicht* auf bereits gespeicherte, im Ledger verankerte
 Daten - er berechnet nichts neu.  Die Audit-ID ist die ``entry_id`` des
-juengsten Analyse-Eintrags im Hash-Ledger; der Eintrags-Hash steht im Bericht,
-sodass ein Pruefer das Zertifikat gegen ``GET /api/audit/trail`` abgleichen kann.
+jüngsten Analyse-Eintrags im Hash-Ledger; der Eintrags-Hash steht im Bericht,
+sodass ein Prüfer das Zertifikat gegen ``GET /api/audit/trail`` abgleichen kann.
 
 Sicherheit: Alle Werte (auch LLM-Freitexte) werden HTML-escaped; die
 HTML-Antwort wird mit einer restriktiven Content-Security-Policy ausgeliefert.
@@ -12,6 +12,7 @@ HTML-Antwort wird mit einer restriktiven Content-Security-Policy ausgeliefert.
 from __future__ import annotations
 
 import html
+from datetime import UTC, datetime
 from typing import Any
 
 from app.audit_ledger import AuditEventType, ChainVerification, LedgerEntry
@@ -21,7 +22,7 @@ from app.redaction import mask_value
 from app.schemas import ANNEX_III_LABELS, AnnexIIICategory
 from app.services import parse_compliance, parse_extraction, parse_scorecard, parse_sign_off
 
-#: CSP fuer die HTML-Ausgabe: keine Skripte, keine externen Ressourcen.
+#: CSP für die HTML-Ausgabe: keine Skripte, keine externen Ressourcen.
 REPORT_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
 
 _RISK_LABELS = {
@@ -32,7 +33,21 @@ _RISK_LABELS = {
     "not_applicable": "Kein KI-System beschrieben",
 }
 
-_STATUS_LABELS = {"pass": "Erfuellt", "warn": "Hinweis", "fail": "Mangel", "not_applicable": "n. e."}
+_SOURCE_LABELS = {"llm": "KI-Modell", "rule_based": "Regelwerk", "both": "KI + Regelwerk"}
+
+
+def _fmt_ts(value: Any) -> str:
+    """ISO-Zeitstempel -> "04.10.2026, 01:35:38 UTC" (Rohwert bleibt im JSON erhalten)."""
+    if not value:
+        return "-"
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return str(value)
+    return parsed.strftime("%d.%m.%Y, %H:%M:%S UTC")
+
+
+_STATUS_LABELS = {"pass": "Erfüllt", "warn": "Hinweis", "fail": "Mangel", "not_applicable": "n. e."}
 
 _ARTICLE_REFS = {
     "high": [
@@ -40,11 +55,11 @@ _ARTICLE_REFS = {
         "Art. 10 Daten und Daten-Governance",
         "Art. 11 Technische Dokumentation",
         "Art. 12 Aufzeichnungspflichten (Logging)",
-        "Art. 13 Transparenz gegenueber Betreibern",
+        "Art. 13 Transparenz gegenüber Betreibern",
         "Art. 14 Menschliche Aufsicht",
         "Art. 15 Genauigkeit, Robustheit, Cybersicherheit",
         "Art. 26 Pflichten der Betreiber",
-        "Art. 43 Konformitaetsbewertung",
+        "Art. 43 Konformitätsbewertung",
     ],
     "limited": ["Art. 50 Transparenzpflichten"],
     "unacceptable": ["Art. 5 Verbotene Praktiken"],
@@ -78,7 +93,7 @@ def build_report(
         return [check.model_dump(mode="json") for check in tile.checks] if tile else []
 
     return {
-        "report_type": "Compliance-Pruefzertifikat",
+        "report_type": "Compliance-Prüfzertifikat",
         "generator": f"{APP_TITLE} v{APP_VERSION}",
         "generated_at": utcnow().isoformat(),
         "audit_id": analysis.entry_id if analysis else None,
@@ -160,9 +175,9 @@ def build_report(
             for entry in entries
         ],
         "disclaimer": (
-            "Automatisierte Vorpruefung mit deterministischem Regelwerk und KI-Unterstuetzung. "
-            "Ersetzt keine Steuer- oder Rechtsberatung. Massgeblich ist die Freigabe durch die "
-            "verantwortliche Pruefperson (Human Oversight, Art. 14 VO (EU) 2024/1689)."
+            "Automatisierte Vorprüfung mit deterministischem Regelwerk und KI-Unterstützung. "
+            "Ersetzt keine Steuer- oder Rechtsberatung. Maßgeblich ist die Freigabe durch die "
+            "verantwortliche Prüfperson (Human Oversight, Art. 14 VO (EU) 2024/1689)."
         ),
     }
 
@@ -181,7 +196,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     score = report["score"] or {}
     doc = report["document"]
     lines = [
-        "# Compliance-Pruefzertifikat",
+        "# Compliance-Prüfzertifikat",
         "",
         f"**Freigabeempfehlung:** {report['release_recommendation']}  ",
         f"**Compliance-Score:** {score.get('score', '-')}/100 ({score.get('band_label', '-')})  ",
@@ -208,28 +223,31 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"- **Einstufung:** {ai['risk_label']}",
         f"- **Anhang III:** {', '.join(ai['annex_iii']) or '-'}",
-        f"- **Begruendung:** {_md(ai['reasoning'])}",
+        f"- **Begründung:** {_md(ai['reasoning'])}",
     ]
     if ai["article_references"]:
-        lines.append(f"- **Einschlaegige Artikel:** {', '.join(ai['article_references'])}")
-    lines += ["", "## Mathematische Validitaet", ""]
+        lines.append(f"- **Einschlägige Artikel:** {', '.join(ai['article_references'])}")
+    lines += ["", "## Mathematische Validität", ""]
     for check in report["math_checks"]:
         lines.append(f"- {check['label']}: **{_STATUS_LABELS.get(check['status'])}** {_md(check.get('detail')) if check.get('detail') else ''}")
     gdpr = report["gdpr"]
     lines += ["", "## DSGVO", "", f"- **Risiko:** {_md(gdpr['risk_level'])}", f"- **Treffer:** {len(gdpr['findings'])} (maskiert)"]
     for finding in gdpr["findings"][:20]:
-        lines.append(f"  - {finding['category']}: `{_md(finding['masked_value'])}` ({finding['source']})")
+        lines.append(
+            f"  - {finding['category']}: `{_md(finding['masked_value'])}` "
+            f"({_SOURCE_LABELS.get(finding['source'], finding['source'])})"
+        )
     sign = report["sign_off"]
-    lines += ["", "## Pruefvermerk (Human Oversight, Art. 14)", ""]
+    lines += ["", "## Prüfvermerk (Human Oversight, Art. 14)", ""]
     if sign:
         lines += [
-            f"**{sign['status']}** durch **{_md(sign['auditor_name'])}** am {sign['sealed_at']}  ",
+            f"**{sign['status']}** durch **{_md(sign['auditor_name'])}** am {_fmt_ts(sign['sealed_at'])}  ",
             f"Notiz: {_md(sign['note'])}  ",
             f"Siegel-Hash: `{sign['ledger_entry_hash']}`",
         ]
     else:
         lines.append("_Noch nicht versiegelt._")
-    lines += ["", "---", f"_{report['disclaimer']}_", f"_Erstellt: {report['generated_at']} · {report['generator']}_", ""]
+    lines += ["", "---", f"_{report['disclaimer']}_", f"_Erstellt: {_fmt_ts(report['generated_at'])} · {report['generator']}_", ""]
     return "\n".join(lines)
 
 
@@ -263,29 +281,29 @@ def render_html(report: dict[str, Any]) -> str:
             f"<td><span class='st st-{_e(c['status'])}'>{_e(_STATUS_LABELS.get(c['status'], c['status']))}</span></td>"
             f"<td>{_e(c.get('detail') or '')}</td></tr>"
             for c in checks
-        ) or "<tr><td colspan='4'>Keine Pruefpunkte.</td></tr>"
+        ) or "<tr><td colspan='4'>Keine Prüfpunkte.</td></tr>"
 
     findings = "".join(
         f"<tr><td>{_e(f['category'])}</td><td class='mono'>{_e(f['masked_value'])}</td>"
-        f"<td>{_e(f['source'])}</td><td>{f['confidence'] * 100:.0f} %</td></tr>"
+        f"<td>{_e(_SOURCE_LABELS.get(f['source'], f['source']))}</td><td>{f['confidence'] * 100:.0f} %</td></tr>"
         for f in report["gdpr"]["findings"][:25]
     ) or "<tr><td colspan='4'>Keine personenbezogenen Daten erkannt.</td></tr>"
 
     seal_block = (
         f"""<div class="sealbox {'ok' if approved else 'bad'}">{_SEAL_SVG}
-        <div><div class="sealtitle">{'GEPRUEFT &amp; FREIGEGEBEN' if approved else 'GEPRUEFT – FREIGABE VERWEIGERT'}</div>
-        <div>Pruefer: <strong>{_e(sign['auditor_name'])}</strong></div>
-        <div>Versiegelt: {_e(sign['sealed_at'])}</div>
+        <div><div class="sealtitle">{'GEPRÜFT &amp; FREIGEGEBEN' if approved else 'GEPRÜFT – FREIGABE VERWEIGERT'}</div>
+        <div>Prüfer: <strong>{_e(sign['auditor_name'])}</strong></div>
+        <div>Versiegelt: {_e(_fmt_ts(sign['sealed_at']))}</div>
         <div class="mono small">Siegel-Hash {_e(sign['ledger_entry_hash'])}</div>
         {f"<div class='small'>Notiz: {_e(sign['note'])}</div>" if sign.get('note') else ''}</div></div>"""
         if sign
-        else '<div class="draft">ENTWURF – noch nicht durch eine Pruefperson versiegelt (Art. 14 EU AI Act)</div>'
+        else '<div class="draft">ENTWURF – noch nicht durch eine Prüfperson versiegelt (Art. 14 EU AI Act)</div>'
     )
 
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pruefzertifikat {_e(doc['filename'])}</title>
+<title>Prüfzertifikat {_e(doc['filename'])}</title>
 <style>
 @page {{ size: A4; margin: 16mm 14mm; }}
 * {{ box-sizing: border-box; }}
@@ -323,39 +341,39 @@ footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
 </style></head>
 <body><main class="page">
 <div class="head">
-  <div><div class="kicker">Compliance-Pruefzertifikat · VO (EU) 2024/1689 · § 14 UStG · DSGVO</div>
+  <div><div class="kicker">Compliance-Prüfzertifikat · VO (EU) 2024/1689 · § 14 UStG · DSGVO</div>
   <h1>{_e(doc['filename'])}</h1>
   <div class="small">Audit-ID <span class="mono">{_e(report['audit_id'])}</span></div></div>
   <div class="score {_e(band)}"><b>{_e(score.get('score', '–'))}</b>/100<div class="small">{_e(score.get('band_label'))}</div></div>
 </div>
 <div class="verdict {'bad' if report['release_blocked'] else 'ok'}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
 
-<h2>Dokument &amp; Pruefkette</h2>
+<h2>Dokument &amp; Prüfkette</h2>
 <div class="grid small">
 <div>SHA-256 Dokument</div><div class="mono">{_e(doc['sha256'])}</div>
 <div>Ledger-Eintrag</div><div class="mono">{_e(report['ledger']['entry_hash'])}</div>
-<div>Vorgaenger-Hash</div><div class="mono">{_e(report['ledger']['previous_hash'])}</div>
+<div>Vorgänger-Hash</div><div class="mono">{_e(report['ledger']['previous_hash'])}</div>
 <div>Prompt-Hash</div><div class="mono">{_e(report['ledger']['prompt_hash'])}</div>
-<div>Pruefzeitpunkt (UTC)</div><div>{_e(report['ledger']['timestamp_utc'])}</div>
-<div>Hash-Kette</div><div>{'intakt' if report['ledger']['chain_valid'] else 'GEBROCHEN'} ({_e(report['ledger']['chain_entries'])} Eintraege)</div>
+<div>Prüfzeitpunkt</div><div>{_e(_fmt_ts(report['ledger']['timestamp_utc']))}</div>
+<div>Hash-Kette</div><div>{'intakt' if report['ledger']['chain_valid'] else 'GEBROCHEN'} ({_e(report['ledger']['chain_entries'])} Einträge)</div>
 <div>Modell / Provider</div><div>{_e(report['inference']['model'])} / {_e(report['inference']['provider'])}</div>
 <div>Regelwerk</div><div>{_e(score.get('ruleset_version'))}</div>
 </div>
 
 <h2>§ 14 Abs. 4 UStG – Pflichtangaben</h2>
-<table><thead><tr><th>Merkmal</th><th>Norm</th><th>Status</th><th>Hinweis</th></tr></thead><tbody>{rows(report['ustg_matrix'])}</tbody></table>
+<table><thead><tr><th style="width:30%">Merkmal</th><th style="width:24%">Norm</th><th style="width:11%">Status</th><th>Hinweis</th></tr></thead><tbody>{rows(report['ustg_matrix'])}</tbody></table>
 
 <h2>EU AI Act</h2>
 <p><strong>{_e(ai['risk_label'])}</strong>{(' · ' + _e(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}</p>
 <p class="small">{_e(ai['reasoning'])}</p>
-{f"<p class='small'>Einschlaegige Pflichten: {_e(', '.join(ai['article_references']))}</p>" if ai['article_references'] else ''}
+{f"<p class='small'>Einschlägige Pflichten: {_e(', '.join(ai['article_references']))}</p>" if ai['article_references'] else ''}
 
-<h2>Mathematische Validitaet</h2>
-<table><thead><tr><th>Pruefung</th><th>Norm</th><th>Status</th><th>Hinweis</th></tr></thead><tbody>{rows(report['math_checks'])}</tbody></table>
+<h2>Mathematische Validität</h2>
+<table><thead><tr><th style="width:30%">Prüfung</th><th style="width:24%">Norm</th><th style="width:11%">Status</th><th>Hinweis</th></tr></thead><tbody>{rows(report['math_checks'])}</tbody></table>
 
 <h2>DSGVO – PII-Befunde (maskiert)</h2>
 <table><thead><tr><th>Kategorie</th><th>Wert</th><th>Quelle</th><th>Konfidenz</th></tr></thead><tbody>{findings}</tbody></table>
 
 {seal_block}
-<footer>{_e(report['disclaimer'])}<br>Erstellt {_e(report['generated_at'])} · {_e(report['generator'])}</footer>
+<footer>{_e(report['disclaimer'])}<br>Erstellt {_e(_fmt_ts(report['generated_at']))} · {_e(report['generator'])}</footer>
 </main></body></html>"""

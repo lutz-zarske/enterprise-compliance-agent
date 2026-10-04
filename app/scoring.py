@@ -2,27 +2,27 @@
 
 Der Score entsteht **nicht** im LLM, sondern aus festen, versionierten Regeln
 ueber die validierte Extraktion, das Audit und den Dokumenttext.  Dieselbe
-Eingabe ergibt immer denselben Score - Voraussetzung fuer eine Pruefung, die
-ein Wirtschaftspruefer nachvollziehen und nachrechnen kann.
+Eingabe ergibt immer denselben Score - Voraussetzung für eine Prüfung, die
+ein Wirtschaftsprüfer nachvollziehen und nachrechnen kann.
 
 Jede Pflichtangabe wird doppelt belegt: zuerst aus der LLM-Extraktion, dann
 per Regex direkt im Dokumenttext.  ``evidence_source`` weist aus, woher der
 Nachweis stammt (``llm``, ``rule_based``, ``both``).
 
-Bewertungsschema (Basis 100, Abzuege je Mangel):
+Bewertungsschema (Basis 100, Abzüge je Mangel):
 
-* Formelle Gueltigkeit, Paragraf 14 Abs. 4 UStG (nur Rechnungen):
+* Formelle Gültigkeit, Paragraf 14 Abs. 4 UStG (nur Rechnungen):
   fehlende Steuernummer/USt-IdNr. -20, jede weitere fehlende Pflichtangabe -10.
   Kleinbetragsrechnungen bis 250 EUR brutto: reduzierter Katalog (Paragraf 33 UStDV).
-* Mathematische Validitaet: ungueltige IBAN (MOD-97) -15, Netto + USt != Brutto
-  -15, USt-Betrag != Netto x Satz -10, unzulaessiger Steuersatz -10.
+* Mathematische Validität: ungültige IBAN (MOD-97) -15, Netto + USt != Brutto
+  -15, USt-Betrag != Netto x Satz -10, unzulässiger Steuersatz -10.
 * Regulatorisches Risiko (EU AI Act): Hochrisiko ohne Nachweis einer
-  Konformitaetsbewertung -25 und Deckelung auf 59; mit Nachweis -10;
+  Konformitätsbewertung -25 und Deckelung auf 59; mit Nachweis -10;
   begrenztes Risiko -5; verbotene Praktik (Art. 5) Deckelung auf 20.
 * Datenschutz (DSGVO): besondere Kategorien nach Art. 9/10 -10 (Rechtsgrundlage
-  nach Art. 9 Abs. 2 nicht belegt), amtliche Kennnummern natuerlicher Personen -5.
+  nach Art. 9 Abs. 2 nicht belegt), amtliche Kennnummern natürlicher Personen -5.
 
-Baender: >= 85 gruen (verkehrsfaehig), 60-84 gelb (Nachbesserung), < 60 rot.
+Bänder: >= 85 grün (verkehrsfähig), 60-84 gelb (Nachbesserung), < 60 rot.
 """
 
 from __future__ import annotations
@@ -225,18 +225,18 @@ def _tile(key: str, title: str, checks: list[ScoreCheck], headline: str | None =
 def _formal_tile(
     extraction: ExtractionResult, facts: TextFacts, *, enforce: bool, einvoice: bool
 ) -> tuple[ScoreTile, int, int, bool]:
-    title = "Formelle Gueltigkeit (§ 14 UStG & EN 16931)"
+    title = "Formelle Gültigkeit (§ 14 UStG & EN 16931)"
     if extraction.doc_type is not DocType.INVOICE or not enforce:
         reason = (
-            "Keine Rechnung - Pflichtangaben nach § 14 Abs. 4 UStG nicht einschlaegig."
+            "Keine Rechnung - Pflichtangaben nach § 14 Abs. 4 UStG nicht einschlägig."
             if enforce
-            else "§ 14-UStG-Pruefung in den Einstellungen deaktiviert."
+            else "§ 14-UStG-Prüfung in den Einstellungen deaktiviert."
         )
         check = ScoreCheck(
             id="ustg_scope", label="Anwendungsbereich § 14 UStG", legal_reference="§ 14 Abs. 4 UStG",
             status=CheckStatus.NOT_APPLICABLE, detail=reason,
         )
-        return _tile("formal", title, [check], "Nicht einschlaegig"), 0, 0, False
+        return _tile("formal", title, [check], "Nicht einschlägig"), 0, 0, False
 
     gross = extraction.total_amount if extraction.total_amount is not None else facts.gross_amount
     small = gross is not None and Decimal(0) < gross <= SMALL_AMOUNT_LIMIT
@@ -255,7 +255,7 @@ def _formal_tile(
             10, source=_source(bool(extraction.sender_address), addresses_in_text >= 1),
         ),
         _check(
-            "ustg_1_recipient", "Name und Anschrift des Leistungsempfaengers",
+            "ustg_1_recipient", "Name und Anschrift des Leistungsempfängers",
             "§ 14 Abs. 4 Satz 1 Nr. 1 UStG",
             bool(extraction.recipient) and (bool(extraction.recipient_address) or addresses_in_text >= 2),
             10, source=_source(bool(extraction.recipient_address), addresses_in_text >= 2),
@@ -295,10 +295,10 @@ def _formal_tile(
             required=not small, na_detail=na_small,
         ),
         _check(
-            "ustg_7_net", "Nach Steuersaetzen aufgeschluesseltes Entgelt (netto)", "§ 14 Abs. 4 Satz 1 Nr. 7 UStG",
+            "ustg_7_net", "Nach Steuersätzen aufgeschlüsseltes Entgelt (netto)", "§ 14 Abs. 4 Satz 1 Nr. 7 UStG",
             extraction.net_amount is not None or facts.net_amount is not None,
             10, source=_source(extraction.net_amount is not None, facts.net_amount is not None),
-            required=not small, na_detail="Bei Kleinbetragsrechnungen genuegt das Entgelt inkl. Steuer (§ 33 UStDV).",
+            required=not small, na_detail="Bei Kleinbetragsrechnungen genügt das Entgelt inkl. Steuer (§ 33 UStDV).",
         ),
         _check(
             "ustg_8_rate", "Anzuwendender Steuersatz oder Hinweis auf Steuerbefreiung",
@@ -323,8 +323,8 @@ def _formal_tile(
             detail=None
             if einvoice
             else (
-                "Reines PDF ohne eingebettetes XML: im inlaendischen B2B-Verkehr seit 01.01.2025 eine "
-                "'sonstige Rechnung'. Zulaessig in der Uebergangsfrist bis 31.12.2026 (bei Vorjahresumsatz "
+                "Reines PDF ohne eingebettetes XML: im inländischen B2B-Verkehr seit 01.01.2025 eine "
+                "'sonstige Rechnung'. Zulässig in der Übergangsfrist bis 31.12.2026 (bei Vorjahresumsatz "
                 "<= 800.000 EUR bis 31.12.2027), danach E-Rechnungspflicht. Kein Punktabzug."
             ),
             evidence_source="rule_based",
@@ -332,19 +332,22 @@ def _formal_tile(
     )
     deduction = sum(check.deduction for check in checks)
     headline = (
-        f"Vollstaendig ({fulfilled}/{len(required)})"
+        f"Vollständig ({fulfilled}/{len(required)})"
         if fulfilled == len(required)
-        else f"Maengel ({len(required) - fulfilled} fehlend)"
+        else f"Mängel ({len(required) - fulfilled} fehlend)"
     )
     if small:
         headline += " · Kleinbetrag"
     tile = _tile("formal", title, checks, headline)
     tile.deduction = deduction
+    # Der E-Rechnungs-Hinweis ist rein informativ: Der Kachelstatus richtet sich
+    # ausschliesslich nach den Pflichtangaben.
+    tile.status = CheckStatus.FAIL if fulfilled < len(required) else CheckStatus.PASS
     return tile, len(required), fulfilled, small
 
 
 def facts_has_positions(extraction: ExtractionResult) -> bool:
-    """Hilfsregel fuer Nr. 5: Zusammenfassung beschreibt eine konkrete Leistung."""
+    """Hilfsregel für Nr. 5: Zusammenfassung beschreibt eine konkrete Leistung."""
     summary = (extraction.summary or "").casefold()
     return any(word in summary for word in ("lizenz", "lieferung", "leistung", "beratung", "artikel", "position"))
 
@@ -356,17 +359,17 @@ def _math_tile(extraction: ExtractionResult, facts: TextFacts) -> ScoreTile:
         valid = iban_checksum_valid(extraction.iban)
         checks.append(
             ScoreCheck(
-                id="iban_mod97", label="IBAN-Pruefziffer (ISO 13616, MOD-97-10)",
+                id="iban_mod97", label="IBAN-Prüfziffer (ISO 13616, MOD-97-10)",
                 legal_reference="ISO 13616",
                 status=CheckStatus.PASS if valid else CheckStatus.FAIL,
                 deduction=0 if valid else 15,
-                detail=None if valid else "Pruefziffer ungueltig - Zahlungsziel nicht verifizierbar (Betrugsrisiko).",
+                detail=None if valid else "Prüfziffer ungültig - Zahlungsziel nicht verifizierbar (Betrugsrisiko).",
                 evidence_source="rule_based",
             )
         )
     else:
         checks.append(
-            ScoreCheck(id="iban_mod97", label="IBAN-Pruefziffer (ISO 13616, MOD-97-10)",
+            ScoreCheck(id="iban_mod97", label="IBAN-Prüfziffer (ISO 13616, MOD-97-10)",
                        status=CheckStatus.NOT_APPLICABLE, detail="Keine IBAN im Dokument.")
         )
 
@@ -384,11 +387,11 @@ def _math_tile(extraction: ExtractionResult, facts: TextFacts) -> ScoreTile:
             ok = rate.normalize() in {value.normalize() for value in allowed}
             checks.append(
                 ScoreCheck(
-                    id="vat_rate", label="Zulaessiger Umsatzsteuersatz (19 % / 7 % / 0 %)",
+                    id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)",
                     legal_reference="§ 12 UStG",
                     status=CheckStatus.PASS if ok else CheckStatus.FAIL,
                     deduction=0 if ok else 10,
-                    detail=None if ok else f"Steuersatz {rate.normalize()} % ist zum Rechnungsdatum nicht zulaessig.",
+                    detail=None if ok else f"Steuersatz {rate.normalize()} % ist zum Rechnungsdatum nicht zulässig.",
                     evidence_source="rule_based",
                 )
             )
@@ -422,7 +425,7 @@ def _math_tile(extraction: ExtractionResult, facts: TextFacts) -> ScoreTile:
     if iban_part.status is CheckStatus.PASS:
         parts.append("IBAN valide")
     elif iban_part.status is CheckStatus.FAIL:
-        parts.append("IBAN ungueltig")
+        parts.append("IBAN ungültig")
     vat_checks = [c for c in checks if c.id in {"vat_rate", "sum_check", "tax_calc"}]
     if vat_checks:
         parts.append(
@@ -430,7 +433,7 @@ def _math_tile(extraction: ExtractionResult, facts: TextFacts) -> ScoreTile:
             if all(c.status is CheckStatus.PASS for c in vat_checks)
             else "MwSt.-Fehler"
         )
-    return _tile("math", "Mathematische Validitaet (MOD-97 & MwSt.)", checks, " · ".join(parts) or "Keine Betraege pruefbar")
+    return _tile("math", "Mathematische Validität (MOD-97 & MwSt.)", checks, " · ".join(parts) or "Keine Beträge prüfbar")
 
 
 def _regulatory_tile(compliance: ComplianceAudit, facts: TextFacts) -> tuple[ScoreTile, int | None, str | None]:
@@ -451,13 +454,13 @@ def _regulatory_tile(compliance: ComplianceAudit, facts: TextFacts) -> tuple[Sco
         if facts.conformity_evidence:
             check = ScoreCheck(id="ai_act", label="Hochrisiko-KI-System", legal_reference="Art. 6 Abs. 2 " + ref,
                                status=CheckStatus.WARN, deduction=10,
-                               detail=f"{where}. Hinweis auf Konformitaetsbewertung vorhanden - Nachweis pruefen (Art. 43).")
+                               detail=f"{where}. Hinweis auf Konformitätsbewertung vorhanden - Nachweis prüfen (Art. 43).")
         else:
             check = ScoreCheck(id="ai_act", label="Hochrisiko-KI-System", legal_reference="Art. 6 Abs. 2 " + ref,
                                status=CheckStatus.FAIL, deduction=25,
-                               detail=f"{where}. Kein Nachweis einer Konformitaetsbewertung (Art. 43) und "
+                               detail=f"{where}. Kein Nachweis einer Konformitätsbewertung (Art. 43) und "
                                       "CE-Kennzeichnung (Art. 48); Betreiberpflichten nach Art. 26 beachten.")
-            cap, cap_reason = HIGH_RISK_CAP, "Hochrisiko-KI (Anhang III) ohne Konformitaetsnachweis"
+            cap, cap_reason = HIGH_RISK_CAP, "Hochrisiko-KI (Anhang III) ohne Konformitätsnachweis"
         headline = "Hochrisiko (Anhang III)"
     elif level is AIActRiskLevel.LIMITED:
         check = ScoreCheck(id="ai_act", label="KI mit Transparenzpflichten", legal_reference="Art. 50 " + ref,
@@ -471,8 +474,12 @@ def _regulatory_tile(compliance: ComplianceAudit, facts: TextFacts) -> tuple[Sco
     else:
         check = ScoreCheck(id="ai_act", label="Kein KI-System beschrieben", legal_reference="Art. 3 Nr. 1 " + ref,
                            status=CheckStatus.PASS)
-        headline = "Nicht einschlaegig"
+        headline = "Nicht einschlägig"
     return _tile("regulatory", "Regulatorisches Risiko (EU AI Act)", [check], headline), cap, cap_reason
+
+
+def _records(count: int) -> str:
+    return f"{count} Datensatz" if count == 1 else f"{count} Datensätze"
 
 
 def _privacy_tile(compliance: ComplianceAudit) -> ScoreTile:
@@ -486,14 +493,14 @@ def _privacy_tile(compliance: ComplianceAudit) -> ScoreTile:
                 id="gdpr_art9", label="Besondere Kategorien personenbezogener Daten",
                 legal_reference="Art. 9 / Art. 10 DSGVO", status=CheckStatus.FAIL, deduction=10,
                 detail="Rechtsgrundlage nach Art. 9 Abs. 2 DSGVO ist im Dokument nicht belegt; "
-                       "Zugriff beschraenken und Erforderlichkeit pruefen.",
+                       "Zugriff beschränken und Erforderlichkeit prüfen.",
             )
         )
     ids = categories & {PIICategory.ID_DOCUMENT_NUMBER, PIICategory.SOCIAL_SECURITY_NUMBER, PIICategory.TAX_ID}
     if ids:
         checks.append(
             ScoreCheck(
-                id="gdpr_identifiers", label="Amtliche Kennnummern natuerlicher Personen",
+                id="gdpr_identifiers", label="Amtliche Kennnummern natürlicher Personen",
                 legal_reference="Art. 87 DSGVO i. V. m. § 139b AO", status=CheckStatus.WARN, deduction=5,
                 detail="Verarbeitung nur bei gesetzlicher Grundlage; Speicherbegrenzung (Art. 5 Abs. 1 lit. e).",
             )
@@ -503,13 +510,13 @@ def _privacy_tile(compliance: ComplianceAudit) -> ScoreTile:
             ScoreCheck(
                 id="gdpr_basic", label="Personenbezogene Daten maskiert", legal_reference="Art. 5, 25 DSGVO",
                 status=CheckStatus.PASS,
-                detail=f"{len(findings)} Datensaetze erkannt und maskiert." if findings else "Keine PII erkannt.",
+                detail=f"{_records(len(findings))} erkannt und maskiert." if findings else "Keine PII erkannt.",
             )
         )
-    headline = f"{len(findings)} Datensaetze maskiert" if findings else "0 PII-Funde"
+    headline = f"{_records(len(findings))} maskiert" if findings else "0 PII-Funde"
     if special:
         headline = f"Art. 9/10: {len(special)} Kategorie(n)"
-    return _tile("privacy", "Datenschutz-Integritaet (DSGVO)", checks, headline)
+    return _tile("privacy", "Datenschutz-Integrität (DSGVO)", checks, headline)
 
 
 # ---------------------------------------------------------------------------
@@ -526,9 +533,9 @@ def band_for(score: int) -> ScoreBand:
 
 
 BAND_LABELS = {
-    ScoreBand.GREEN: "Vollstaendig verkehrsfaehig & konform",
+    ScoreBand.GREEN: "Vollständig verkehrsfähig & konform",
     ScoreBand.AMBER: "Nachbesserung erforderlich",
-    ScoreBand.RED: "Revisionssperre / schwerer Rechtsverstoss",
+    ScoreBand.RED: "Revisionssperre / schwerer Rechtsverstoß",
 }
 
 
@@ -540,7 +547,7 @@ def compute_scorecard(
     enforce_ustg_check: bool = True,
     pdf_bytes: bytes | None = None,
 ) -> Scorecard:
-    """Berechnet Score, Baender, Kacheln und Freigabeempfehlung deterministisch."""
+    """Berechnet Score, Bänder, Kacheln und Freigabeempfehlung deterministisch."""
     facts = analyze_text(text or "")
     einvoice = detect_structured_einvoice(pdf_bytes)
 
@@ -562,15 +569,15 @@ def compute_scorecard(
     has_fail = any(tile.status is CheckStatus.FAIL for tile in tiles)
     is_invoice = extraction.doc_type is DocType.INVOICE
     if regulatory.status is CheckStatus.FAIL:
-        recommendation, blocked = "Freigabe gesperrt — Konformitaetsbewertung nach Art. 43 EU AI Act nachweisen", True
+        recommendation, blocked = "Freigabe gesperrt — Konformitätsbewertung nach Art. 43 EU AI Act nachweisen", True
     elif band is ScoreBand.RED or (has_fail and is_invoice):
-        recommendation, blocked = "Freigabe gesperrt — Nachforderung noetig", True
+        recommendation, blocked = "Freigabe gesperrt — Nachforderung nötig", True
     elif has_fail or band is ScoreBand.AMBER:
         recommendation, blocked = "Freigabe unter Vorbehalt — Nachbesserung empfohlen", False
     elif is_invoice:
         recommendation, blocked = "Zur Auszahlung freigegeben", False
     else:
-        recommendation, blocked = "Freigabe empfohlen — Pruefung ohne Befund", False
+        recommendation, blocked = "Freigabe empfohlen — Prüfung ohne Befund", False
 
     return Scorecard(
         score=score,

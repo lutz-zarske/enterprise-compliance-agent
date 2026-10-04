@@ -77,7 +77,7 @@ def test_bericht_in_drei_formaten(full_client: TestClient, invoice_pdf: bytes) -
 
     markdown = full_client.get(f"/documents/{document_id}/report", params={"format": "markdown"})
     assert markdown.headers["content-type"].startswith("text/markdown")
-    assert "# Compliance-Pruefzertifikat" in markdown.text
+    assert "# Compliance-Prüfzertifikat" in markdown.text
     assert "§ 14 Abs. 4 UStG" in markdown.text
 
     html = full_client.get(f"/documents/{document_id}/report")
@@ -119,7 +119,7 @@ def test_sign_off_versiegelt_und_schreibt_ledger(full_client: TestClient, invoic
     assert full_client.get("/api/audit/verify").json()["valid"] is True
 
     html = full_client.get(f"/documents/{document_id}/report").text
-    assert "GEPRUEFT &amp; FREIGEGEBEN" in html and "Lutz Zarske" in html
+    assert "GEPRÜFT &amp; FREIGEGEBEN" in html and "Lutz Zarske" in html
     assert full_client.get("/documents").json()["items"][0]["sealed"] is True
 
     # Neue Analyse = neuer Pruefgegenstand -> Siegel faellt, Historie bleibt.

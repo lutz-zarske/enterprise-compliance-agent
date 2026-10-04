@@ -1,360 +1,382 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Header } from "../components/Header";
-import { DocumentUploader } from "../components/DocumentUploader";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AuditStepper, DEFAULT_STAGES } from "../components/AuditStepper";
+import { CopilotDrawer } from "../components/CopilotDrawer";
+import { DocumentInspector, type InspectorTab } from "../components/DocumentInspector";
 import { DocumentList } from "../components/DocumentList";
-import { RiskCard } from "../components/RiskCard";
-import { DocumentInspector } from "../components/DocumentInspector";
-import { ExtractionCard } from "../components/ExtractionCard";
+import { DocumentUploader } from "../components/DocumentUploader";
 import { ExportModal } from "../components/ExportModal";
-import {
+import { Header } from "../components/Header";
+import { AlertTriangle, Download, FileText, RefreshCw, ShieldCheck, Sparkles, WifiOff, Zap } from "../components/icons";
+import { KpiStrip } from "../components/KpiStrip";
+import { Scorecard } from "../components/Scorecard";
+import { SettingsModal } from "../components/SettingsModal";
+import { EmptyState, Spinner, Toaster, useToasts } from "../components/ui";
+import { api, ApiError, fetchHealth, getApiBase } from "../lib/api";
+import { cx, formatBytes, formatDate, formatModel, PROVIDER_NAMES } from "../lib/format";
+import type {
+  BatchUploadResponse,
   DocumentDetail,
   DocumentSummary,
   HealthResponse,
-  UploadResponse,
+  KpiResponse,
+  ProgressStage,
+  RuntimeSettings,
+  ScoreTile,
 } from "../types/api";
-import {
-  fetchHealth,
-  fetchDocuments,
-  fetchDocument,
-  extractDocument,
-} from "../lib/api";
-import {
-  ShieldAlert,
-  ShieldCheck,
-  Cpu,
-  FileText,
-  Download,
-  Zap,
-  RefreshCw,
-  Lock,
-} from "../components/icons";
+
+const TILE_TO_TAB: Record<ScoreTile["key"], InspectorTab> = {
+  formal: "ustg",
+  regulatory: "aiact",
+  privacy: "pii",
+  math: "facts",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  uploaded: "Hochgeladen",
+  processing: "In Prüfung",
+  extracted: "Geprüft",
+  failed: "Fehlgeschlagen",
+};
+
+function asApiError(err: unknown): ApiError {
+  return err instanceof ApiError ? err : new ApiError(String(err), 0, "unknown");
+}
 
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [isLoadingHealth, setIsLoadingHealth] = useState<boolean>(true);
-
+  const [offline, setOffline] = useState(false);
+  const [settings, setSettings] = useState<RuntimeSettings | null>(null);
+  const [kpis, setKpis] = useState<KpiResponse | null>(null);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const [selectedDocument, setSelectedDocument] = useState<DocumentDetail | null>(null);
-  const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(false);
-  const [isExtractingId, setIsExtractingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<DocumentDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [extractingId, setExtractingId] = useState<string | null>(null);
+  const [stages, setStages] = useState<ProgressStage[]>(DEFAULT_STAGES);
+  const [tab, setTab] = useState<InspectorTab>("ustg");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const { toasts, push, dismiss } = useToasts();
+  const selectedRef = useRef<string | null>(null);
+  selectedRef.current = selectedId;
 
-  const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
+  const notify = useCallback(
+    (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => push({ tone, title, message }),
+    [push],
+  );
 
-  // Load backend health
-  const loadHealth = useCallback(async () => {
-    setIsLoadingHealth(true);
+  const reportError = useCallback(
+    (title: string, err: unknown) => {
+      const error = asApiError(err);
+      if (error.isOffline) setOffline(true);
+      notify("bad", title, `${error.message}${error.hint ? ` – ${error.hint}` : ""}`);
+    },
+    [notify],
+  );
+
+  const loadDetail = useCallback(async (id: string) => {
+    setLoadingDetail(true);
     try {
-      const res = await fetchHealth();
-      setHealth(res);
+      const doc = await api.document(id);
+      if (selectedRef.current === id) setDetail(doc);
     } catch (err) {
-      console.error("Health check error:", err);
+      if (asApiError(err).isOffline) setOffline(true);
     } finally {
-      setIsLoadingHealth(false);
+      setLoadingDetail(false);
     }
   }, []);
 
-  // Load documents list
-  const loadDocuments = useCallback(async () => {
-    try {
-      const res = await fetchDocuments();
-      setDocuments(res.items);
-      // Auto-select first document if none selected
-      if (!selectedDocId && res.items.length > 0) {
-        setSelectedDocId(res.items[0].id);
-      }
-    } catch (err) {
-      console.error("Error loading documents:", err);
-    }
-  }, [selectedDocId]);
-
-  // Load details for selected document
-  const loadDocumentDetail = useCallback(async (id: string) => {
-    setIsLoadingDoc(true);
-    try {
-      const doc = await fetchDocument(id);
-      setSelectedDocument(doc);
-    } catch (err) {
-      console.error("Error loading document detail:", err);
-    } finally {
-      setIsLoadingDoc(false);
-    }
+  const refreshData = useCallback(async () => {
+    const [list, kpiData] = await Promise.all([api.documents(), api.kpis()]);
+    setDocuments(list.items);
+    setKpis(kpiData);
+    return list.items;
   }, []);
 
-  // Initial load
-  useEffect(() => {
-    loadHealth();
-    loadDocuments();
-  }, [loadHealth, loadDocuments]);
-
-  // When selectedDocId changes, load its details
-  useEffect(() => {
-    if (selectedDocId) {
-      loadDocumentDetail(selectedDocId);
-    }
-  }, [selectedDocId, loadDocumentDetail]);
-
-  // Handle successful upload
-  const handleUploadSuccess = (upload: UploadResponse) => {
-    const newSummary: DocumentSummary = {
-      id: upload.id,
-      filename: upload.filename,
-      status: upload.status,
-      size_bytes: upload.size_bytes,
-      page_count: upload.page_count,
-      doc_type: null,
-      sender: null,
-      document_date: null,
-      total_amount: null,
-      currency: null,
-      ai_act_risk_level: null,
-      gdpr_risk_level: null,
-      contains_special_categories: null,
-      created_at: upload.created_at,
-      updated_at: upload.created_at,
-    };
-
-    setDocuments((prev) => [newSummary, ...prev]);
-    setSelectedDocId(upload.id);
-  };
-
-  // Trigger extraction & compliance audit
-  const handleTriggerExtract = async (id: string) => {
-    setIsExtractingId(id);
-
-    // Optimistically update document status
-    setDocuments((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, status: "processing" } : d))
-    );
-
+  const loadAll = useCallback(async () => {
     try {
-      const res = await extractDocument(id);
-
-      // Update in documents list
-      setDocuments((prev) =>
-        prev.map((d) =>
-          d.id === id
-            ? {
-                ...d,
-                status: "extracted",
-                doc_type: res.extraction.doc_type,
-                sender: res.extraction.sender,
-                total_amount: res.extraction.total_amount,
-                currency: res.extraction.currency,
-                ai_act_risk_level: res.compliance.ai_act.overall_risk_level ?? null,
-                gdpr_risk_level: res.compliance.gdpr.risk_level ?? null,
-                contains_special_categories:
-                  res.compliance.gdpr.contains_special_categories ?? null,
-              }
-            : d
-        )
-      );
-
-      // If this was the selected document, reload its detail
-      if (selectedDocId === id) {
-        await loadDocumentDetail(id);
-      }
+      const h = await fetchHealth();
+      setHealth(h);
+      setOffline(false);
+      const [items, runtime] = await Promise.all([refreshData(), api.settings()]);
+      setSettings(runtime);
+      if (!selectedRef.current && items.length) setSelectedId(items[0].id);
+      if (selectedRef.current) await loadDetail(selectedRef.current);
     } catch (err) {
-      console.error("Extraction failed:", err);
-      setDocuments((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, status: "failed" } : d))
-      );
-    } finally {
-      setIsExtractingId(null);
+      const error = asApiError(err);
+      if (error.isOffline) {
+        setOffline(true);
+        setHealth(null);
+      } else if (error.status === 401) {
+        notify("warn", "Zugang verweigert", "Backend verlangt einen X-API-Key – unter Einstellungen › Verbindung hinterlegen.");
+      }
     }
-  };
+  }, [refreshData, loadDetail, notify]);
 
-  // Quick stats calculation
-  const totalHighRiskCount = documents.filter(
-    (d) => d.ai_act_risk_level === "high" || d.ai_act_risk_level === "unacceptable"
-  ).length;
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
 
-  const totalGdprSpecialCount = documents.filter(
-    (d) => d.contains_special_categories === true
-  ).length;
+  // Ruhige Wiederverbindung, solange das Backend offline ist.
+  useEffect(() => {
+    if (!offline) return;
+    const timer = window.setInterval(() => void loadAll(), 10_000);
+    return () => window.clearInterval(timer);
+  }, [offline, loadAll]);
+
+  useEffect(() => {
+    if (selectedId) void loadDetail(selectedId);
+    else setDetail(null);
+  }, [selectedId, loadDetail]);
+
+  const runExtraction = useCallback(
+    async (id: string, filename: string): Promise<boolean> => {
+      setExtractingId(id);
+      setStages(DEFAULT_STAGES);
+      setDocuments((all) => all.map((d) => (d.id === id ? { ...d, status: "processing" } : d)));
+      const poll = window.setInterval(async () => {
+        try {
+          const progress = await api.progress(id);
+          if (progress.current_stage) setStages(progress.stages);
+        } catch {
+          /* Fortschritt ist optional */
+        }
+      }, 500);
+      let ok = false;
+      try {
+        const result = await api.extract(id);
+        ok = true;
+        notify(
+          result.scorecard?.release_blocked ? "warn" : "ok",
+          `Audit abgeschlossen: ${filename}`,
+          `Score ${result.scorecard?.score ?? "–"}/100 · ${result.scorecard?.release_recommendation ?? ""} · ${formatModel(result.model)}`,
+        );
+      } catch (err) {
+        reportError(`Analyse fehlgeschlagen: ${filename}`, err);
+      } finally {
+        window.clearInterval(poll);
+        setExtractingId(null);
+        try {
+          await refreshData();
+        } catch {
+          /* Offline-Zustand wird separat erkannt */
+        }
+        if (selectedRef.current === id) await loadDetail(id);
+      }
+      return ok;
+    },
+    [notify, reportError, refreshData, loadDetail],
+  );
+
+  async function handleSeed() {
+    setSeeding(true);
+    try {
+      const result = await api.seed();
+      await refreshData();
+      const pending = result.items.filter((item) => item.status !== "extracted");
+      notify("info", "Demo-Daten geladen", `${result.created} neu angelegt · ${pending.length} werden jetzt geprüft`);
+      for (const item of pending) {
+        setSelectedId(item.id);
+        const ok = await runExtraction(item.id, item.filename);
+        if (!ok) break; // z. B. Ollama offline: nicht dreimal denselben Fehler zeigen
+      }
+      if (!pending.length && result.items[0]) setSelectedId(result.items[0].id);
+    } catch (err) {
+      reportError("Demo-Daten konnten nicht geladen werden", err);
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  async function handleUploaded(result: BatchUploadResponse) {
+    await refreshData().catch(() => undefined);
+    const first = result.items.find((item) => item.ok && item.id);
+    if (first?.id) setSelectedId(first.id);
+    if (result.succeeded) notify("ok", `${result.succeeded} Dokument(e) hochgeladen`, "Audit über „Audit starten“ auslösen.");
+    result.items
+      .filter((item) => !item.ok)
+      .forEach((item) => notify("bad", `Upload abgelehnt: ${item.filename}`, item.error?.message));
+  }
+
+  async function handleTogglePin(doc: DocumentSummary) {
+    try {
+      await api.pin(doc.id, !doc.pinned);
+      await refreshData();
+    } catch (err) {
+      reportError("Anpinnen fehlgeschlagen", err);
+    }
+  }
+
+  const ollamaDown = !offline && health?.inference?.mode === "local" && health.ollama.status !== "ok";
+  const cloudUnconfigured = !offline && health?.inference?.is_cloud && !health.inference.configured;
+  const modelLabel = settings ? `${PROVIDER_NAMES[settings.inference_mode]} · ${formatModel(settings.active_model)}` : "–";
+  const isExtracting = detail !== null && extractingId === detail.id;
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Header */}
+    <div className="flex min-h-screen flex-col">
       <Header
         health={health}
-        isLoadingHealth={isLoadingHealth}
-        onRefresh={() => {
-          loadHealth();
-          loadDocuments();
-          if (selectedDocId) loadDocumentDetail(selectedDocId);
-        }}
+        offline={offline}
+        apiBase={getApiBase()}
+        settings={settings}
+        seeding={seeding}
+        onSeed={handleSeed}
+        onRefresh={() => void loadAll()}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-        {/* Executive Compliance KPI Strip */}
-        <section className="glass-panel rounded-2xl p-4 border border-slate-800/80 shadow-xl flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md">
-              <Cpu className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                  INSTITUTIONAL REGULATORY GOVERNANCE RADAR
-                </span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/30">
-                  VO (EU) 2024/1689
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                Lokal gehostetes LLM ({health?.ollama?.model || "qwen2.5:14b-instruct"}) | Zero Cloud Data Exfiltration
-              </p>
-            </div>
+      <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-4 px-4 py-5 sm:px-6">
+        {offline && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn" role="status">
+            <WifiOff size={16} className="shrink-0" />
+            <p className="min-w-0 flex-1">
+              <strong>Backend nicht erreichbar</strong> ({getApiBase()}). Starten mit{" "}
+              <code className="rounded bg-surface-solid px-1 font-mono text-xs text-fg">uvicorn app.main:app --port 8001</code> – die
+              Verbindung wird alle 10 s automatisch neu geprüft. Es werden keine Ersatzdaten angezeigt.
+            </p>
+            <button className="btn" onClick={() => void loadAll()}><RefreshCw size={14} /> Erneut verbinden</button>
           </div>
-
-          {/* Quick Metrics */}
-          <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-right">
-              <span className="text-[10px] text-slate-500 block uppercase">Dokumente</span>
-              <span className="font-bold text-slate-200">{documents.length} erfasst</span>
-            </div>
-
-            <div className="rounded-xl border border-red-500/30 bg-red-950/20 px-3 py-1.5 text-right">
-              <span className="text-[10px] text-red-400 block uppercase">Hochrisiko AI Act</span>
-              <span className="font-bold text-red-400">{totalHighRiskCount} Anhang-III</span>
-            </div>
-
-            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-1.5 text-right">
-              <span className="text-[10px] text-amber-400 block uppercase">DSGVO Art. 9/10</span>
-              <span className="font-bold text-amber-400">{totalGdprSpecialCount} geschützt</span>
-            </div>
-
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 px-3 py-1.5 text-right">
-              <span className="text-[10px] text-emerald-400 block uppercase">Datenschutz</span>
-              <span className="font-bold text-emerald-400 flex items-center space-x-1">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>100% Lokal</span>
-              </span>
-            </div>
+        )}
+        {ollamaDown && (
+          <div className="flex items-start gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn" role="status">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <p>
+              <strong>Lokales Modell nicht verfügbar:</strong> {health?.ollama.detail ?? "Ollama antwortet nicht."} Upload und Ansicht
+              funktionieren; für Analysen <code className="font-mono text-xs">ollama serve</code> starten oder in den Einstellungen einen Cloud-Provider wählen.
+            </p>
           </div>
-        </section>
+        )}
+        {cloudUnconfigured && (
+          <div className="flex items-start gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn" role="status">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <p><strong>Cloud-Modus ohne API-Key.</strong> Unter Einstellungen einen Key hinterlegen oder auf „Lokal“ umschalten.</p>
+          </div>
+        )}
 
-        {/* 2-Column Responsive Workspace */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Upload & Document Inventory (4 of 12 cols) */}
-          <div className="lg:col-span-4 space-y-6">
-            <DocumentUploader onUploadSuccess={handleUploadSuccess} />
+        <KpiStrip kpis={kpis} />
+
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
+          <div className="space-y-4 lg:col-span-4 xl:col-span-3">
+            <DocumentUploader disabled={offline} onUploaded={handleUploaded} onError={(err) => reportError("Upload fehlgeschlagen", err)} />
             <DocumentList
               documents={documents}
-              selectedDocId={selectedDocId}
-              onSelectDocument={(id) => setSelectedDocId(id)}
-              onTriggerExtract={handleTriggerExtract}
-              isExtractingId={isExtractingId}
+              selectedId={selectedId}
+              extractingId={extractingId}
+              onSelect={setSelectedId}
+              onTogglePin={handleTogglePin}
             />
           </div>
 
-          {/* Right Column: In-Depth Audit & Risk Classification (8 of 12 cols) */}
-          <div className="lg:col-span-8 space-y-6">
-            {/* Action Bar for Currently Selected Document */}
-            {selectedDocument && (
-              <div className="glass-panel rounded-2xl p-4 border border-slate-800/80 shadow-lg flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-cyan-400 border border-slate-700">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-bold text-white truncate max-w-sm sm:max-w-md">
-                        {selectedDocument.filename}
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-slate-800 text-slate-300 border border-slate-700">
-                        {selectedDocument.status}
-                      </span>
-                    </div>
-                    <p className="text-[11px] font-mono text-slate-400 truncate">
-                      SHA256: {selectedDocument.sha256.slice(0, 20)}... | {selectedDocument.char_count || 0} Zeichen
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2.5">
-                  {selectedDocument.status === "uploaded" && (
-                    <button
-                      onClick={() => handleTriggerExtract(selectedDocument.id)}
-                      disabled={isExtractingId === selectedDocument.id}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-xs font-mono font-bold text-white shadow-md shadow-cyan-950/40 disabled:opacity-50"
-                    >
-                      {isExtractingId === selectedDocument.id ? (
-                        <>
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          <span>Audit läuft...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="h-3.5 w-3.5" />
-                          <span>Audit starten</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                  {selectedDocument.status === "extracted" && (
-                    <button
-                      onClick={() => handleTriggerExtract(selectedDocument.id)}
-                      disabled={isExtractingId === selectedDocument.id}
-                      title="Audit erneut ausführen"
-                      className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-900/80 text-xs font-mono text-slate-300 hover:bg-slate-800 hover:text-white"
-                    >
-                      <RefreshCw
-                        className={`h-3.5 w-3.5 ${isExtractingId === selectedDocument.id ? "animate-spin text-cyan-400" : ""}`}
-                      />
-                      <span className="hidden sm:inline">Neu prüfen</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => setIsExportOpen(true)}
-                    className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-900/50 text-xs font-mono font-bold text-cyan-300 shadow"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    <span>Audit-Export</span>
-                  </button>
-                </div>
+          <div className="min-w-0 space-y-4 lg:col-span-8 xl:col-span-9">
+            {!detail && !loadingDetail && (
+              <div className="card">
+                <EmptyState icon={<ShieldCheck size={20} />} title="Kein Dokument ausgewählt">
+                  PDF hochladen oder <button className="text-accent underline-offset-2 hover:underline" onClick={handleSeed} disabled={offline || seeding}>Demo-Daten laden</button>.
+                  Jede Analyse erzeugt einen Compliance-Score, einen Eintrag in der Hash-Kette und ein druckfertiges Prüfzertifikat.
+                </EmptyState>
               </div>
             )}
+            {!detail && loadingDetail && (
+              <div className="card flex items-center justify-center gap-2 py-16 text-sm text-subtle"><Spinner /> Dokument wird geladen …</div>
+            )}
 
-            {/* 1. EU AI Act Annex III Risk Classification Card */}
-            <RiskCard
-              assessment={selectedDocument?.compliance?.ai_act || null}
-              isLoading={isLoadingDoc}
-            />
+            {detail && (
+              <>
+                <section className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="rounded-lg border border-line bg-surface-2 p-2 text-accent"><FileText size={16} /></div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="truncate text-sm font-semibold text-fg">{detail.filename}</h2>
+                        <span className={cx("chip", detail.status === "failed" ? "border-bad-line bg-bad-soft text-bad" : "border-line bg-surface-2 text-muted")}>
+                          {STATUS_LABELS[detail.status] ?? detail.status}
+                        </span>
+                      </div>
+                      <p className="truncate font-mono text-[11px] text-subtle" title={detail.sha256}>
+                        SHA-256 {detail.sha256.slice(0, 16)}… · {detail.page_count ?? "?"} S. · {formatBytes(detail.size_bytes)}
+                        {detail.extracted_at && ` · geprüft ${formatDate(detail.extracted_at, true)}`}
+                        {detail.model && ` · ${formatModel(detail.model)}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      className={cx("btn", detail.status !== "extracted" && "btn-primary")}
+                      onClick={() => void runExtraction(detail.id, detail.filename)}
+                      disabled={offline || extractingId !== null}
+                    >
+                      {isExtracting ? <Spinner size={13} /> : detail.status === "extracted" ? <RefreshCw size={14} /> : <Zap size={14} />}
+                      {detail.status === "extracted" ? "Neu prüfen" : "Audit starten"}
+                    </button>
+                    <button className="btn" onClick={() => setCopilotOpen(true)} disabled={offline}>
+                      <Sparkles size={14} /> Copilot
+                    </button>
+                    <button className="btn" onClick={() => setExportOpen(true)} disabled={offline}>
+                      <Download size={14} /> Prüfbericht exportieren
+                    </button>
+                  </div>
+                </section>
 
-            {/* 2. Live PII Redaction & Document Inspector */}
-            <DocumentInspector document={selectedDocument} />
+                {detail.status === "failed" && detail.error && !isExtracting && (
+                  <div className="rounded-lg border border-bad-line bg-bad-soft px-4 py-3 text-xs text-bad">
+                    <strong>Letzte Analyse fehlgeschlagen:</strong> {detail.error}
+                  </div>
+                )}
 
-            {/* 3. Extraction Card (Invoice / Contract core facts) */}
-            <ExtractionCard
-              extraction={selectedDocument?.extraction || null}
-              isLoading={isLoadingDoc}
-            />
+                {isExtracting && (
+                  <AuditStepper stages={stages} filename={detail.filename} provider={modelLabel} />
+                )}
+
+                {detail.scorecard && !isExtracting && (
+                  <Scorecard
+                    scorecard={detail.scorecard}
+                    sealed={Boolean(detail.sign_off)}
+                    onOpenTile={(key) => setTab(TILE_TO_TAB[key])}
+                  />
+                )}
+
+                <DocumentInspector document={detail} tab={tab} onTabChange={setTab} />
+              </>
+            )}
           </div>
         </div>
       </main>
 
-      {/* Export Modal */}
-      <ExportModal
-        document={selectedDocument}
-        isOpen={isExportOpen}
-        onClose={() => setIsExportOpen(false)}
-      />
-
-      {/* Footer */}
-      <footer className="mt-12 border-t border-slate-850 bg-[#070a11] py-4 text-center text-xs font-mono text-slate-500">
-        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Enterprise AI Compliance & Audit Agent v1.0.0</span>
-          <span>VO (EU) 2024/1689 & DSGVO (EU 2016/679) Revisionssicherheit</span>
-          <span>Privacy-First Architecture • Local On-Premise Ollama</span>
+      <footer className="border-t border-line py-4 no-print">
+        <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-1 px-4 text-[11px] text-subtle sm:flex-row sm:px-6">
+          <span>Enterprise Compliance Agent v{health?.version ?? "2.0.0"}</span>
+          <span>VO (EU) 2024/1689 · § 14 UStG · DSGVO · GoBD-Hash-Kette</span>
+          <span>{settings?.is_cloud ? "Cloud-Inferenz über Privacy Gateway" : "Lokale Inferenz · Zero Data Leakage"}</span>
         </div>
       </footer>
+
+      <SettingsModal
+        open={settingsOpen}
+        settings={settings}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={(updated) => {
+          setSettings(updated);
+          void fetchHealth().then(setHealth).catch(() => undefined);
+        }}
+        onAccessChanged={() => void loadAll()}
+        notify={notify}
+      />
+      <ExportModal
+        document={detail}
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        onSealed={(updated) => {
+          setDetail(updated);
+          void refreshData().catch(() => undefined);
+        }}
+        notify={notify}
+      />
+      <CopilotDrawer document={detail} open={copilotOpen} onClose={() => setCopilotOpen(false)} modelLabel={modelLabel} />
+      <Toaster toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }

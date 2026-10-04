@@ -244,7 +244,7 @@ def escalate_ai_act(assessment: AIActAssessment) -> AIActAssessment:
 PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
     ("text_check", "Text-Layer & PDF-Check"),
     ("pii_scan", "PII-Scanner & DSGVO-Maskierung"),
-    ("ustg_check", "§ 14 UStG Rechnungspruefung"),
+    ("ustg_check", "§ 14 UStG Rechnungsprüfung"),
     ("ai_act", "EU AI Act Risikobewertung"),
 )
 

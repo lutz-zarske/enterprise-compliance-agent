@@ -1,134 +1,222 @@
-﻿"use client";
+"use client";
 
-import React, { useState } from "react";
-import { DocumentDetail } from "../types/api";
-import { exportDocumentAsJson, exportAuditProtocolMarkdown } from "../lib/api";
-import { Download, FileText, Check, Copy, X } from "./icons";
+import React, { useEffect, useState } from "react";
+import { api, ApiError, downloadBlob } from "../lib/api";
+import type { DocumentDetail, SignOffDecision } from "../types/api";
+import { cx, formatDate } from "../lib/format";
+import { Check, Copy, Download, Printer, Stamp } from "./icons";
+import { Modal, Spinner } from "./ui";
 
-interface ExportModalProps {
+const AUDITOR_STORAGE = "eca-auditor-name";
+
+interface Props {
   document: DocumentDetail | null;
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
+  onSealed: (document: DocumentDetail) => void;
+  notify: (tone: "ok" | "bad", title: string, message?: string) => void;
 }
 
-export const ExportModal: React.FC<ExportModalProps> = ({
-  document,
-  isOpen,
-  onClose,
-}) => {
-  const [copied, setCopied] = useState<boolean>(false);
-  const [format, setFormat] = useState<"json" | "markdown">("json");
-
-  if (!isOpen || !document) return null;
-
-  const jsonContent = JSON.stringify(document, null, 2);
-
-  const handleDownload = () => {
-    if (format === "json") {
-      exportDocumentAsJson(document);
-    } else {
-      exportAuditProtocolMarkdown(document);
-    }
+/** Druckt HTML ueber ein unsichtbares iframe - funktioniert auch mit X-API-Key. */
+function printHtml(html: string) {
+  const frame = window.document.createElement("iframe");
+  frame.style.position = "fixed";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  frame.setAttribute("aria-hidden", "true");
+  frame.srcdoc = html;
+  frame.onload = () => {
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+    window.setTimeout(() => frame.remove(), 60_000);
   };
+  window.document.body.appendChild(frame);
+}
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(jsonContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
+function Option({ icon, title, text, action, busy, onClick, disabled }: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+  action: string;
+  busy: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
-      <div className="glass-panel w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900/95 p-6 shadow-2xl space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center space-x-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-              <Download className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white font-mono uppercase">
-                Compliance-Audit Export
-              </h3>
-              <p className="text-xs text-slate-400">
-                {document.filename} (ID: {document.id.slice(0, 8)}...)
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Format Selector */}
-        <div className="flex items-center space-x-2 border-b border-slate-800/80 pb-3 text-xs font-mono">
-          <button
-            onClick={() => setFormat("json")}
-            className={`px-3 py-1.5 rounded-lg border transition-all ${
-              format === "json"
-                ? "border-cyan-500/50 bg-cyan-950/40 text-cyan-300 font-bold"
-                : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            Maschinenlesbares JSON (.json)
-          </button>
-          <button
-            onClick={() => setFormat("markdown")}
-            className={`px-3 py-1.5 rounded-lg border transition-all ${
-              format === "markdown"
-                ? "border-cyan-500/50 bg-cyan-950/40 text-cyan-300 font-bold"
-                : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            Revisionssicheres Audit-Protokoll (.md)
-          </button>
-        </div>
-
-        {/* Code Preview */}
-        <div className="relative rounded-xl border border-slate-800 bg-slate-950 p-3 max-h-72 overflow-y-auto font-mono text-xs text-slate-300">
-          <pre>{format === "json" ? jsonContent : "# Vorschau Audit-Protokoll (EU AI Act & DSGVO Art. 9/10)\nKlicken Sie auf 'Herunterladen' für das vollständige Markdown-Zertifikat."}</pre>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-2">
-          <button
-            onClick={handleCopy}
-            className="flex items-center space-x-1.5 text-xs font-mono text-slate-400 hover:text-cyan-300"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-emerald-400">In Zwischenablage kopiert!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" />
-                <span>JSON kopieren</span>
-              </>
-            )}
-          </button>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={onClose}
-              className="px-3.5 py-1.5 rounded-xl border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800"
-            >
-              Schließen
-            </button>
-            <button
-              onClick={handleDownload}
-              className="flex items-center space-x-1.5 px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-xs font-mono font-bold text-white shadow-lg shadow-cyan-950/50"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>{format === "json" ? "JSON herunterladen" : "Audit-Protokoll herunterladen"}</span>
-            </button>
-          </div>
-        </div>
+    <div className="flex items-center gap-3 rounded-lg border border-line p-3">
+      <div className="rounded-lg border border-line bg-surface-2 p-2 text-accent">{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-fg">{title}</p>
+        <p className="text-xs text-subtle">{text}</p>
       </div>
+      <button className="btn" onClick={onClick} disabled={busy || disabled}>
+        {busy ? <Spinner size={13} /> : null}
+        {action}
+      </button>
     </div>
   );
-};
+}
+
+export function ExportModal({ document, open, onClose, onSealed, notify }: Props) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [auditor, setAuditor] = useState("");
+  const [note, setNote] = useState("");
+  const [decision, setDecision] = useState<SignOffDecision>("SEALED_APPROVED");
+
+  useEffect(() => {
+    if (!open) return;
+    try {
+      setAuditor(window.localStorage.getItem(AUDITOR_STORAGE) ?? "");
+    } catch {
+      /* ignorieren */
+    }
+    setNote("");
+    setDecision(document?.scorecard?.release_blocked ? "SEALED_REJECTED" : "SEALED_APPROVED");
+  }, [open, document?.id, document?.scorecard?.release_blocked]);
+
+  if (!document) return null;
+  const analyzed = Boolean(document.scorecard);
+  const stem = document.filename.replace(/\.pdf$/i, "");
+
+  async function run(key: string, task: () => Promise<void>) {
+    setBusy(key);
+    try {
+      await task();
+    } catch (err) {
+      const error = err instanceof ApiError ? err : new ApiError(String(err), 0, "unknown");
+      notify("bad", "Export fehlgeschlagen", error.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const seal = document.sign_off;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Export-Center & Prüfvermerk" subtitle={document.filename}>
+      {!analyzed && (
+        <p className="mb-3 rounded-lg border border-warn-line bg-warn-soft p-3 text-xs text-warn">
+          Das Dokument ist noch nicht analysiert. Bericht und Siegel stehen nach dem Audit zur Verfügung.
+        </p>
+      )}
+      <div className="space-y-2">
+        <Option
+          icon={<Printer size={16} />}
+          title="Compliance-Zertifikat drucken (PDF)"
+          text="A4-Prüfzertifikat mit SHA-256, Ledger-Hash, § 14-Matrix und Siegel – im Druckdialog „Als PDF speichern“."
+          action="Drucken"
+          busy={busy === "print"}
+          disabled={!analyzed}
+          onClick={() => run("print", async () => printHtml(await api.reportHtml(document.id)))}
+        />
+        <Option
+          icon={<Download size={16} />}
+          title="Audit-JSON herunterladen"
+          text="Maschinenlesbarer Bericht inkl. Ledger-Historie für SAP/ERP-Archivierung."
+          action="JSON"
+          busy={busy === "json"}
+          disabled={!analyzed}
+          onClick={() =>
+            run("json", async () => {
+              const report = await api.reportJson(document.id);
+              downloadBlob(JSON.stringify(report, null, 2), `Pruefzertifikat_${stem}.json`, "application/json");
+            })
+          }
+        />
+        <Option
+          icon={<Copy size={16} />}
+          title="Compliance-Memo kopieren"
+          text="Formatierter Markdown-Text für E-Mails an Lieferanten oder die Buchhaltung."
+          action="Kopieren"
+          busy={busy === "md"}
+          disabled={!analyzed}
+          onClick={() =>
+            run("md", async () => {
+              await navigator.clipboard.writeText(await api.reportMarkdown(document.id));
+              notify("ok", "Memo in die Zwischenablage kopiert");
+            })
+          }
+        />
+      </div>
+
+      <div className="mt-5 rounded-lg border border-line p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Stamp size={16} className="text-accent" />
+          <p className="text-sm font-semibold text-fg">Auditor Sign-Off & Siegel</p>
+          <span className="font-mono text-[11px] text-subtle">Human Oversight · Art. 14 EU AI Act</span>
+        </div>
+        {seal && (
+          <div
+            className={cx(
+              "mb-3 rounded-lg border p-3 text-xs",
+              seal.status === "SEALED_APPROVED" ? "border-ok-line bg-ok-soft text-ok" : "border-bad-line bg-bad-soft text-bad",
+            )}
+          >
+            <p className="font-semibold">
+              {seal.status === "SEALED_APPROVED" ? "Freigegeben" : "Freigabe verweigert"} durch {seal.auditor_name} am {formatDate(seal.sealed_at, true)}
+            </p>
+            <p className="mt-1 break-all font-mono text-[10.5px] opacity-80">Siegel-Hash {seal.ledger_entry_hash}</p>
+          </div>
+        )}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="label-caps">Name der Prüfperson</span>
+            <input className="input mt-1" value={auditor} onChange={(e) => setAuditor(e.target.value)} placeholder="z. B. Lutz Zarske" />
+          </label>
+          <div>
+            <span className="label-caps">Entscheidung</span>
+            <div className="mt-1 flex gap-2">
+              {(["SEALED_APPROVED", "SEALED_REJECTED"] as const).map((value) => (
+                <button
+                  key={value}
+                  onClick={() => setDecision(value)}
+                  className={cx(
+                    "btn flex-1",
+                    decision === value && (value === "SEALED_APPROVED" ? "border-ok-line bg-ok-soft text-ok" : "border-bad-line bg-bad-soft text-bad"),
+                  )}
+                >
+                  {decision === value && <Check size={13} />}
+                  {value === "SEALED_APPROVED" ? "Freigeben" : "Ablehnen"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <label className="mt-3 block">
+          <span className="label-caps">Prüfungsnotiz</span>
+          <textarea
+            className="input mt-1 min-h-[70px]"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="z. B. USt-IdNr. beim Lieferanten nachgefordert"
+          />
+        </label>
+        <p className="mt-2 text-[11px] text-subtle">
+          Das Siegel wird als eigener Eintrag in die Hash-Kette geschrieben. Eine erneute Analyse hebt es auf; die Historie bleibt erhalten.
+        </p>
+        <div className="mt-3 flex justify-end">
+          <button
+            className="btn btn-primary"
+            disabled={!analyzed || auditor.trim().length < 2 || busy === "seal"}
+            onClick={() =>
+              run("seal", async () => {
+                const updated = await api.signOff(document.id, auditor.trim(), note.trim(), decision);
+                try {
+                  window.localStorage.setItem(AUDITOR_STORAGE, auditor.trim());
+                } catch {
+                  /* ignorieren */
+                }
+                onSealed(updated);
+                notify("ok", "Prüfung versiegelt", `${auditor.trim()} · Ledger-Eintrag geschrieben`);
+              })
+            }
+          >
+            {busy === "seal" ? <Spinner size={13} /> : <Stamp size={14} />}
+            Digital versiegeln
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

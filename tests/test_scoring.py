@@ -51,7 +51,9 @@ def test_gueltige_rechnung_erreicht_100_und_freigabe() -> None:
     assert card.release_blocked is False
     assert card.ustg_fulfilled == card.ustg_required_total == 10
     formal = next(tile for tile in card.tiles if tile.key == "formal")
-    assert formal.headline.startswith("Vollstaendig (10/10)")
+    assert formal.headline.startswith("Vollständig (10/10)")
+    # Der informative E-Rechnungs-Hinweis faerbt die Kachel nicht gelb.
+    assert formal.status.value == "pass"
     # Doppelter Nachweis LLM + Regex wird ausgewiesen.
     tax_check = next(check for check in formal.checks if check.id == "ustg_2_tax_id")
     assert tax_check.evidence_source == "both"
@@ -78,7 +80,7 @@ def test_steuerfalle_ergibt_45_und_sperre() -> None:
     assert card.score == 45
     assert card.band is ScoreBand.RED
     assert card.release_blocked is True
-    assert card.release_recommendation == "Freigabe gesperrt — Nachforderung noetig"
+    assert card.release_recommendation == "Freigabe gesperrt — Nachforderung nötig"
 
 
 def test_regex_gegenprobe_rettet_luekenhafte_llm_extraktion() -> None:
@@ -113,7 +115,7 @@ def test_hochrisiko_ohne_konformitaet_deckelt_auf_59() -> None:
     )
     assert card.score == 59
     assert card.cap_applied and "Hochrisiko" in card.cap_applied
-    assert card.release_recommendation.startswith("Freigabe gesperrt — Konformitaetsbewertung")
+    assert card.release_recommendation.startswith("Freigabe gesperrt — Konformitätsbewertung")
     formal = next(tile for tile in card.tiles if tile.key == "formal")
     assert formal.status.value == "not_applicable"
     regulatory = next(tile for tile in card.tiles if tile.key == "regulatory")
