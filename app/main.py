@@ -10,6 +10,7 @@ konkretem Handlungshinweis.
 from __future__ import annotations
 
 import logging
+import secrets
 import time
 import uuid
 
@@ -226,7 +227,8 @@ async def require_api_key(
     settings: Settings = request.app.state.settings
     if not settings.auth_enabled:
         return
-    if api_key and api_key == settings.api_key:
+    # Konstantzeit-Vergleich: verhindert Timing-Angriffe auf den Schluessel.
+    if api_key and secrets.compare_digest(api_key.encode(), settings.api_key.encode()):
         return
     raise ApiKeyError()
 
