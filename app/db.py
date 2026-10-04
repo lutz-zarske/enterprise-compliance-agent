@@ -59,7 +59,51 @@ documents_table: Table = Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, index=True),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("extracted_at", sa.DateTime(timezone=True), nullable=True),
+    # --- seit v2.0 (per _migrate_columns nachgeruestet) ---
+    sa.Column("provider", sa.String(32), nullable=True),
+    sa.Column("scorecard", sa.JSON, nullable=True),
+    sa.Column("sign_off", sa.JSON, nullable=True),
+    sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
 )
+
+#: Append-only-Pruefprotokoll (siehe app/audit_ledger.py).
+audit_trails_table: Table = Table(
+    "audit_trails",
+    metadata,
+    sa.Column("seq", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("entry_id", sa.String(36), nullable=False, unique=True),
+    sa.Column("event_type", sa.String(32), nullable=False),
+    sa.Column("document_id", sa.String(36), nullable=False, index=True),
+    sa.Column("sha256_hash", sa.String(64), nullable=False),
+    sa.Column("model_name", sa.String(120), nullable=False),
+    sa.Column("prompt_hash", sa.String(64), nullable=False),
+    # ISO-8601-String statt DateTime: der Hash muss bitgenau reproduzierbar sein.
+    sa.Column("timestamp_utc", sa.String(40), nullable=False),
+    sa.Column("result_summary", sa.Text, nullable=False),
+    sa.Column("compliance_score", sa.Integer, nullable=True),
+    sa.Column("risk_tier", sa.String(32), nullable=False),
+    sa.Column("details", sa.JSON, nullable=True),
+    sa.Column("previous_hash", sa.String(64), nullable=False),
+    sa.Column("entry_hash", sa.String(64), nullable=False, unique=True),
+    sqlite_autoincrement=True,
+)
+
+#: Laufzeit-Einstellungen (Inferenz-Modus, verschluesselte Provider-Schluessel).
+app_settings_table: Table = Table(
+    "app_settings",
+    metadata,
+    sa.Column("key", sa.String(64), primary_key=True),
+    sa.Column("value", sa.Text, nullable=True),
+    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+#: Spalten, die bestehenden Datenbanken beim Start ergaenzt werden.
+_MIGRATED_COLUMNS: dict[str, str] = {
+    "provider": "VARCHAR(32)",
+    "scorecard": "JSON",
+    "sign_off": "JSON",
+    "pinned": "BOOLEAN NOT NULL DEFAULT FALSE",
+}
 
 
 def utcnow() -> datetime:
@@ -100,6 +144,10 @@ class DocumentRecord:
     compliance: dict[str, Any] | None = None
     error: str | None = None
     extracted_at: datetime | None = None
+    provider: str | None = None
+    scorecard: dict[str, Any] | None = None
+    sign_off: dict[str, Any] | None = None
+    pinned: bool = False
 
     @classmethod
     def from_row(cls, row: Row[Any]) -> DocumentRecord:
@@ -122,6 +170,10 @@ class DocumentRecord:
             created_at=_ensure_utc(mapping["created_at"]),  # type: ignore[arg-type]
             updated_at=_ensure_utc(mapping["updated_at"]),  # type: ignore[arg-type]
             extracted_at=_ensure_utc(mapping["extracted_at"]),
+            provider=mapping["provider"],
+            scorecard=mapping["scorecard"],
+            sign_off=mapping["sign_off"],
+            pinned=bool(mapping["pinned"]),
         )
 
 
@@ -172,7 +224,15 @@ class DocumentRepository(Protocol):
         model: str,
         extraction: dict[str, Any],
         compliance: dict[str, Any],
+        scorecard: dict[str, Any] | None = None,
+        provider: str | None = None,
     ) -> DocumentRecord: ...
+
+    async def save_sign_off(self, document_id: str, sign_off: dict[str, Any]) -> DocumentRecord: ...
+
+    async def set_pinned(self, document_id: str, pinned: bool) -> DocumentRecord: ...
+
+    async def list_all(self) -> list[DocumentRecord]: ...
 
     async def mark_failed(self, document_id: str, error: str) -> None: ...
 
@@ -211,6 +271,10 @@ class SqlDocumentRepository:
             "created_at": now,
             "updated_at": now,
             "extracted_at": None,
+            "provider": None,
+            "scorecard": None,
+            "sign_off": None,
+            "pinned": False,
         }
         with self._engine.begin() as connection:
             connection.execute(sa.insert(documents_table).values(**values))
@@ -243,7 +307,7 @@ class SqlDocumentRepository:
             count_statement = count_statement.where(documents_table.c.status == status)
 
         statement = (
-            statement.order_by(documents_table.c.created_at.desc())
+            statement.order_by(documents_table.c.pinned.desc(), documents_table.c.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -298,15 +362,35 @@ class SqlDocumentRepository:
         model: str,
         extraction: dict[str, Any],
         compliance: dict[str, Any],
+        scorecard: dict[str, Any] | None = None,
+        provider: str | None = None,
     ) -> DocumentRecord:
         values = {
             "status": "extracted",
             "model": model,
             "extraction": extraction,
             "compliance": compliance,
+            "scorecard": scorecard,
+            "provider": provider,
+            # Eine neue Analyse ersetzt den Pruefgegenstand: ein altes Siegel
+            # gilt nicht mehr (die Historie bleibt im Audit-Ledger erhalten).
+            "sign_off": None,
             "error": None,
             "extracted_at": utcnow(),
         }
+        return await self._update_and_get(document_id, values)
+
+    async def save_sign_off(self, document_id: str, sign_off: dict[str, Any]) -> DocumentRecord:
+        return await self._update_and_get(document_id, {"sign_off": sign_off})
+
+    async def set_pinned(self, document_id: str, pinned: bool) -> DocumentRecord:
+        return await self._update_and_get(document_id, {"pinned": pinned})
+
+    async def list_all(self) -> list[DocumentRecord]:
+        records, _ = await anyio.to_thread.run_sync(partial(self._select_many, 100_000, 0, None))
+        return records
+
+    async def _update_and_get(self, document_id: str, values: dict[str, Any]) -> DocumentRecord:
         await anyio.to_thread.run_sync(partial(self._update, document_id, values))
         record = await self.get(document_id)
         if record is None:  # pragma: no cover - nur bei parallelem Loeschen erreichbar
@@ -354,9 +438,53 @@ def create_engine_from_settings(settings: Settings) -> Engine:
     return engine
 
 
+def _migrate_columns(engine: Engine) -> None:
+    """Ergaenzt neue Spalten in bestehenden Datenbanken (additiv, ohne Datenverlust).
+
+    Fuer ein Projekt dieser Groesse genuegt diese idempotente Additiv-Migration;
+    bei echten Schemaaenderungen (Umbenennen, Typwechsel) gehoert Alembic dazu.
+    """
+    existing = {column["name"] for column in sa.inspect(engine).get_columns("documents")}
+    missing = {name: ddl for name, ddl in _MIGRATED_COLUMNS.items() if name not in existing}
+    if not missing:
+        return
+    with engine.begin() as connection:
+        for name, ddl in missing.items():
+            connection.execute(sa.text(f"ALTER TABLE documents ADD COLUMN {name} {ddl}"))
+
+
+_SQLITE_IMMUTABILITY_TRIGGERS = (
+    """CREATE TRIGGER IF NOT EXISTS audit_trails_no_update BEFORE UPDATE ON audit_trails
+    BEGIN SELECT RAISE(ABORT, 'audit_trails ist append-only: UPDATE verboten'); END""",
+    """CREATE TRIGGER IF NOT EXISTS audit_trails_no_delete BEFORE DELETE ON audit_trails
+    BEGIN SELECT RAISE(ABORT, 'audit_trails ist append-only: DELETE verboten'); END""",
+)
+
+_POSTGRES_IMMUTABILITY_TRIGGERS = (
+    """CREATE OR REPLACE FUNCTION audit_trails_append_only() RETURNS trigger AS $$
+    BEGIN RAISE EXCEPTION 'audit_trails ist append-only'; END; $$ LANGUAGE plpgsql""",
+    "DROP TRIGGER IF EXISTS audit_trails_append_only ON audit_trails",
+    """CREATE TRIGGER audit_trails_append_only BEFORE UPDATE OR DELETE ON audit_trails
+    FOR EACH ROW EXECUTE FUNCTION audit_trails_append_only()""",
+)
+
+
+def _install_immutability_triggers(engine: Engine) -> None:
+    """Verhindert UPDATE/DELETE auf dem Pruefprotokoll bereits auf Datenbankebene."""
+    statements = {
+        "sqlite": _SQLITE_IMMUTABILITY_TRIGGERS,
+        "postgresql": _POSTGRES_IMMUTABILITY_TRIGGERS,
+    }.get(engine.dialect.name, ())
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(sa.text(statement))
+
+
 def init_database(engine: Engine) -> None:
-    """Legt fehlende Tabellen an (idempotent, ersetzt keine Migrationen)."""
+    """Legt fehlende Tabellen/Spalten und die Ledger-Trigger an (idempotent)."""
     metadata.create_all(engine)
+    _migrate_columns(engine)
+    _install_immutability_triggers(engine)
 
 
 def build_repository(settings: Settings) -> tuple[Engine, SqlDocumentRepository]:

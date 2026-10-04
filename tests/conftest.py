@@ -265,6 +265,7 @@ def settings(tmp_path: Path) -> Settings:
         ollama_model="qwen2.5:14b-instruct",
         max_prompt_chars=8000,
         mask_pii_in_storage=True,
+        log_json=False,
     )
 
 
@@ -286,7 +287,12 @@ def make_client(
 
         def service_override(request: Request) -> DocumentService:
             # Das Repository entsteht erst im Lifespan, daher hier verzoegert lesen.
-            return DocumentService(effective, request.app.state.repository, llm)
+            return DocumentService(
+                effective,
+                request.app.state.repository,
+                llm,
+                ledger=request.app.state.ledger,
+            )
 
         application = create_app(effective)
         application.dependency_overrides[get_llm] = lambda: llm

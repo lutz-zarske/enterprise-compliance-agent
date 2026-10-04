@@ -22,9 +22,12 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.audit_ledger import AuditLedger
 from app.config import APP_TITLE, APP_VERSION, Settings, get_settings
 from app.db import build_repository, utcnow
 from app.llm import LLMError, OllamaClient, OllamaUnavailableError
+from app.logging_config import configure_logging, normalize_request_id, request_id_var
+from app.rate_limit import RateLimitExceededError, TokenBucketLimiter, rate_limit
 from app.pdf_reader import PdfReadError
 from app.schemas import (
     ComponentHealth,
@@ -46,6 +49,7 @@ from app.services import (
 )
 
 logger = logging.getLogger(__name__)
+access_logger = logging.getLogger("app.access")
 
 API_KEY_HEADER = "X-API-Key"
 _api_key_scheme = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
@@ -77,6 +81,7 @@ den Header `X-API-Key`. Ohne gesetzten Wert ist die Pruefung deaktiviert.
 TAGS_METADATA = [
     {"name": "System", "description": "Betriebszustand von Datenbank, Ollama und Modell."},
     {"name": "Dokumente", "description": "Upload, Extraktion, Compliance-Audit und Uebersicht."},
+    {"name": "Audit-Ledger", "description": "Hash-verkettetes Pruefprotokoll (EU AI Act Art. 12, GoBD)."},
 ]
 
 
@@ -89,18 +94,17 @@ TAGS_METADATA = [
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Baut Datenbank, Repository und Ollama-Client einmalig auf."""
     settings: Settings = app.state.settings
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-    )
+    configure_logging(settings.log_level, json_logs=settings.log_json)
 
     engine, repository = build_repository(settings)
     llm = OllamaClient(settings)
+    ledger = AuditLedger(engine)
 
     app.state.engine = engine
     app.state.repository = repository
     app.state.llm = llm
-    app.state.service = DocumentService(settings, repository, llm)
+    app.state.ledger = ledger
+    app.state.service = DocumentService(settings, repository, llm, ledger=ledger)
 
     logger.info(
         "%s v%s gestartet | DB=%s | Modell=%s | Auth=%s",
@@ -135,6 +139,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         },
     )
     application.state.settings = resolved
+    application.state.rate_limiter = TokenBucketLimiter()
 
     application.add_middleware(
         CORSMiddleware,
@@ -203,13 +208,38 @@ def _register_middleware(application: FastAPI) -> None:
     async def add_request_context(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Vergibt eine Request-ID und misst die Bearbeitungsdauer."""
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        """Vergibt eine Request-ID, misst die Dauer und schreibt eine Accesslog-Zeile.
+
+        Eine vom Client gelieferte ``X-Request-ID`` wird nur uebernommen, wenn
+        sie dem erlaubten Zeichensatz entspricht (Schutz vor Log-Injection).
+        Geloggt werden Methode, Pfad (enthaelt nur UUIDs), Status und Dauer -
+        niemals Query-Strings, Header oder Bodies.
+        """
+        request_id = normalize_request_id(request.headers.get("X-Request-ID")) or str(uuid.uuid4())
+        token = request_id_var.set(request_id)
         started = time.perf_counter()
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        response.headers["X-Process-Time-Ms"] = f"{(time.perf_counter() - started) * 1000:.1f}"
-        return response
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            response.headers["X-Request-ID"] = request_id
+            response.headers["X-Process-Time-Ms"] = f"{(time.perf_counter() - started) * 1000:.1f}"
+            return response
+        finally:
+            access_logger.info(
+                "%s %s -> %s",
+                request.method,
+                request.url.path,
+                status_code,
+                extra={
+                    "http_method": request.method,
+                    "http_path": request.url.path,
+                    "http_status": status_code,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "client_ip": request.client.host if request.client else None,
+                },
+            )
+            request_id_var.reset(token)
 
 
 def _register_exception_handlers(application: FastAPI) -> None:
@@ -222,6 +252,17 @@ def _register_exception_handlers(application: FastAPI) -> None:
             "Den in der .env hinterlegten Wert von API_KEY als Header senden.",
         )
         response.headers["WWW-Authenticate"] = API_KEY_HEADER
+        return response
+
+    @application.exception_handler(RateLimitExceededError)
+    async def _handle_rate_limit(_request: Request, exc: RateLimitExceededError) -> JSONResponse:
+        response = _error_response(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            exc.code,
+            str(exc),
+            "Das Kontingent schuetzt die Inferenz-Schnittstelle vor Ueberlastung.",
+        )
+        response.headers["Retry-After"] = str(exc.retry_after)
         return response
 
     @application.exception_handler(ServiceError)
@@ -382,10 +423,14 @@ def _register_routes(application: FastAPI) -> None:
         status_code=status.HTTP_201_CREATED,
         tags=["Dokumente"],
         summary="PDF hochladen, validieren und Text extrahieren",
-        dependencies=[Depends(require_api_key)],
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("upload", "rate_limit_upload_per_minute")),
+        ],
         responses={
             **error_responses,
             413: {"model": ErrorResponse, "description": "Datei zu gross"},
+            429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"},
             415: {"model": ErrorResponse, "description": "Kein PDF"},
             422: {"model": ErrorResponse, "description": "PDF ohne Textlayer oder beschaedigt"},
         },
@@ -426,10 +471,14 @@ def _register_routes(application: FastAPI) -> None:
         response_model=ExtractionResponse,
         tags=["Dokumente"],
         summary="Extraktion und Compliance-Audit ausfuehren",
-        dependencies=[Depends(require_api_key)],
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("extract", "rate_limit_extract_per_minute")),
+        ],
         responses={
             **error_responses,
             422: {"model": ErrorResponse, "description": "Kein Text zum Dokument vorhanden"},
+            429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"},
             502: {"model": ErrorResponse, "description": "Modellantwort unbrauchbar"},
             503: {"model": ErrorResponse, "description": "Ollama nicht erreichbar"},
         },
@@ -499,6 +548,46 @@ def _register_routes(application: FastAPI) -> None:
         """Gibt Metadaten, Extraktion, Compliance-Audit und eine Textvorschau zurueck."""
         record = await service.require_document(document_id)
         return to_detail(record)
+
+    # --- Audit-Ledger ------------------------------------------------------
+    @application.get(
+        "/api/audit/trail",
+        tags=["Audit-Ledger"],
+        summary="Eintraege des unveraenderbaren Pruefprotokolls",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def audit_trail(
+        request: Request,
+        document_id: str | None = Query(None, description="Optional auf ein Dokument filtern."),
+        limit: int = Query(100, ge=1, le=1000),
+    ) -> dict[str, object]:
+        """Neueste Eintraege zuerst; jeder Eintrag traegt ``previous_hash`` und ``entry_hash``."""
+        ledger: AuditLedger = request.app.state.ledger
+        entries = await ledger.list(document_id=document_id, limit=limit)
+        return {"items": [entry.to_dict() for entry in entries], "count": len(entries)}
+
+    @application.get(
+        "/api/audit/verify",
+        tags=["Audit-Ledger"],
+        summary="Hash-Kette vollstaendig nachrechnen",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def audit_verify(request: Request) -> dict[str, object]:
+        """Prueft Sequenz, Verkettung und Inhalts-Hash jedes Eintrags."""
+        ledger: AuditLedger = request.app.state.ledger
+        return (await ledger.verify_chain()).to_dict()
+
+    @application.get(
+        "/api/audit/head",
+        tags=["Audit-Ledger"],
+        summary="Aktueller Kopf-Hash zur externen Verankerung",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def audit_head(request: Request) -> dict[str, object]:
+        """Den Kopf-Hash regelmaessig extern ablegen - dann ist auch Abschneiden nachweisbar."""
+        ledger: AuditLedger = request.app.state.ledger
+        head_hash, seq = await ledger.head()
+        return {"head_hash": head_hash, "seq": seq, "timestamp": utcnow().isoformat()}
 
 
 # Modul-Level-Instanz fuer "uvicorn app.main:app".

@@ -17,6 +17,7 @@ Robustheitsmassnahmen:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -219,6 +220,14 @@ Antwortschema (exakt diese Schluessel, keine zusaetzlichen):
     "recommendations": [string, ...]
   }}
 }}"""
+
+
+#: Fingerabdruck der Prompt-Version - geht in jeden Audit-Ledger-Eintrag ein.
+#: Aendert sich ein Prompt, aendert sich der Hash; damit ist nachweisbar,
+#: mit welcher Anweisung eine historische Bewertung entstanden ist.
+PROMPT_HASH = hashlib.sha256(
+    (EXTRACTION_SYSTEM_PROMPT + "\n---\n" + COMPLIANCE_SYSTEM_PROMPT).encode("utf-8")
+).hexdigest()
 
 
 class ComplianceAuditPayload(BaseModel):

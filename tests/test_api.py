@@ -379,7 +379,9 @@ def test_api_key_schuetzt_dokumentendpunkte(
 def test_openapi_dokumentiert_alle_fuenf_endpunkte(client: TestClient) -> None:
     schema = client.get("/openapi.json").json()
 
-    assert set(schema["paths"]) == {
+    # Seit v2.0 kommen weitere Endpunkte hinzu; die fuenf Kernendpunkte
+    # muessen unveraendert dokumentiert bleiben.
+    assert set(schema["paths"]) >= {
         "/health",
         "/documents/upload",
         "/documents/{document_id}/extract",

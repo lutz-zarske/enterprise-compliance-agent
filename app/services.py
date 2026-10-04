@@ -23,9 +23,10 @@ from pathlib import Path
 
 import anyio.to_thread
 
+from app.audit_ledger import AuditEventType, AuditLedger
 from app.config import Settings
 from app.db import DocumentRecord, DocumentRepository, NewDocument, utcnow
-from app.llm import OllamaClient
+from app.llm import PROMPT_HASH, OllamaClient
 from app.pdf_reader import PdfExtraction, extract_text_async
 from app.redaction import enforce_masking, merge_findings, scan_text
 from app.schemas import (
@@ -242,10 +243,13 @@ class DocumentService:
         settings: Settings,
         repository: DocumentRepository,
         llm: OllamaClient,
+        *,
+        ledger: AuditLedger | None = None,
     ) -> None:
         self._settings = settings
         self._repository = repository
         self._llm = llm
+        self._ledger = ledger
 
     # --- Ingestion ---------------------------------------------------------
     async def ingest(
@@ -367,6 +371,18 @@ class DocumentService:
             extraction=extraction.model_dump(mode="json"),
             compliance=compliance.model_dump(mode="json"),
         )
+        if self._ledger is not None:
+            await self._ledger.append(
+                event_type=AuditEventType.ANALYSIS,
+                document_id=record.id,
+                sha256_hash=record.sha256,
+                model_name=self._llm.model,
+                prompt_hash=PROMPT_HASH,
+                result_summary=compliance.headline,
+                compliance_score=None,
+                risk_tier=ai_act.overall_risk_level.value,
+                details={"doc_type": extraction.doc_type.value},
+            )
         logger.info(
             "Dokument %s ausgewertet: %s | %s",
             record.id,
