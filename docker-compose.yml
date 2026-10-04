@@ -1,6 +1,7 @@
 # ---------------------------------------------------------------------------
 # Standard:            docker compose up --build
-#   -> API im Container, Ollama laeuft auf dem Host (host.docker.internal).
+#   -> API (http://localhost:8001) und Frontend (http://localhost:3001) im
+#      Container, Ollama laeuft auf dem Host (host.docker.internal).
 #
 # Vollstaendiger Stack: docker compose --profile full up --build
 #   -> zusaetzlich ein Ollama-Container; Modell danach einmalig ziehen mit
@@ -15,17 +16,27 @@ services:
     container_name: compliance-agent-api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      # Host 8001 -> Container 8000 (Frontend und Doku erwarten die API auf 8001).
+      - "8001:8000"
     environment:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
       API_KEY: ${API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001,http://127.0.0.1:3001}
       DATABASE_URL: ${DATABASE_URL:-sqlite:///data/agent.db}
       UPLOAD_DIR: data/uploads
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:14b-instruct}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       MASK_PII_IN_STORAGE: ${MASK_PII_IN_STORAGE:-true}
+      PII_STRICTNESS: ${PII_STRICTNESS:-standard}
+      INFERENCE_MODE: ${INFERENCE_MODE:-local}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
     volumes:
       # Benanntes Volume statt Bind-Mount: Docker uebernimmt beim ersten Start
       # Inhalt und Besitzrechte (appuser, UID 10001) aus dem Image. Ein
@@ -35,6 +46,22 @@ services:
     extra_hosts:
       # Erlaubt den Zugriff auf einen Ollama-Dienst des Hosts unter Linux.
       - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Adresse, unter der der *Browser* die API erreicht.
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:8001}
+    image: enterprise-compliance-frontend:latest
+    container_name: compliance-agent-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    depends_on:
+      api:
+        condition: service_healthy
 
   ollama:
     image: ollama/ollama:latest
