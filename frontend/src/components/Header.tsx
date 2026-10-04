@@ -4,7 +4,7 @@ import React from "react";
 import type { HealthResponse, RuntimeSettings } from "../types/api";
 import { cx, formatModel, PROVIDER_SHORT } from "../lib/format";
 import { useTheme } from "./ThemeProvider";
-import { Database, Layers, Lock, Moon, RefreshCw, Settings, ShieldCheck, Sun } from "./icons";
+import { Database, FileText, Lock, Moon, RefreshCw, Settings, ShieldCheck, Sun } from "./icons";
 import { Spinner } from "./ui";
 
 interface HeaderProps {
@@ -87,9 +87,9 @@ export function Header({ health, offline, apiBase, settings, seeding, onSeed, on
             onClick={onSeed}
             disabled={offline || seeding}
             aria-label="Musterdaten laden"
-            title="Drei geprüfte Musterdokumente laden – funktioniert ohne KI-Modell"
+            title="Standardisierte Prüfbelege laden (§ 14 UStG, Steuerfalle, EU AI Act) – funktioniert ohne KI-Modell"
           >
-            {seeding ? <Spinner size={13} /> : <Layers size={14} aria-hidden="true" />}
+            {seeding ? <Spinner size={13} /> : <FileText size={14} aria-hidden="true" />}
             <span className="hidden md:inline">Musterdaten laden</span>
           </button>
           <button className="btn btn-icon" onClick={onRefresh} aria-label="Aktualisieren" title="Aktualisieren">

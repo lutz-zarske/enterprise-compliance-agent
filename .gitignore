@@ -38,3 +38,6 @@ frontend/out/
 
 # Lokale Claude-Desktop-Startkonfiguration (maschinenspezifisch)
 .claude/launch.json
+
+# Lokale Starter-Laufzeitdateien und Logs
+.run/

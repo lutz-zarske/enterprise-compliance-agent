@@ -10,10 +10,10 @@ import { Modal, Segmented, Spinner, Tabs, Toggle } from "./ui";
 type Tab = "inference" | "compliance" | "connection";
 
 const PROVIDERS: { mode: InferenceMode; title: string; text: string; dot: string }[] = [
-  { mode: "local", title: "Lokal: Ollama (Qwen 2.5 14B)", text: "Zero Data Leakage – kein Dokumentinhalt verlässt den Rechner.", dot: "bg-ok" },
-  { mode: "gemini", title: "Google Gemini (2.5 Pro / Flash)", text: "Hohe Geschwindigkeit, großer Kontext.", dot: "bg-sky-500" },
-  { mode: "anthropic", title: "Anthropic Claude", text: "Tiefe Begründungen, präzise Rechtsprüfung.", dot: "bg-violet-500" },
-  { mode: "openai", title: "OpenAI (GPT-4o)", text: "Breit verfügbar, JSON-Mode.", dot: "bg-orange-500" },
+  { mode: "local", title: "Lokal (Ollama Engine)", text: "On-Premises Zero-Data-Leakage – Inferenz verlässt die lokale Umgebung nicht.", dot: "bg-ok" },
+  { mode: "gemini", title: "Google Gemini API", text: "Enterprise Multimodal-Inferenz & Hochgeschwindigkeits-Extraktion.", dot: "bg-sky-500" },
+  { mode: "anthropic", title: "Anthropic Claude API", text: "Inferenz mit hoher juristischer Begründungstiefe.", dot: "bg-violet-500" },
+  { mode: "openai", title: "OpenAI GPT API", text: "Strukturierte Extraktion im JSON-Modus.", dot: "bg-orange-500" },
 ];
 
 const STRICTNESS: { value: PiiStrictness; label: string; text: string }[] = [
@@ -150,7 +150,7 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="label-caps">Modell</span>
+              <span className="label-caps">Modell-ID</span>
               <input
                 className="input mt-1 font-mono"
                 name="model"
@@ -158,11 +158,15 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
                 value={model}
                 autoComplete="off"
                 spellCheck={false}
+                placeholder="z. B. Modellname manuell eingeben…"
                 onChange={(e) => setModel(e.target.value)}
               />
               <datalist id={`models-${mode}`}>
                 {settings.suggested_models[mode]?.map((name) => <option key={name} value={name} />)}
               </datalist>
+              <span className="mt-1 block text-[11px] text-subtle">
+                Vorschläge im Dropdown verfügbar oder beliebige neue Modell-ID eintragen.
+              </span>
             </label>
             {mode !== "local" && (
               <label className="block">

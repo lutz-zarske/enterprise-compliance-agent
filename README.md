@@ -31,11 +31,13 @@ dem Versand pseudonymisiert.
 
 ## Ein-Klick-Start
 
-**Windows:** `Start_Compliance_Agent.bat` doppelklicken. Das Skript legt beim
-ersten Start die Python-Umgebung an, installiert die Abhängigkeiten, startet
-Backend (`:8001`) und Frontend (`:3001`) in eigenen Fenstern, startet Ollama,
-falls installiert, und öffnet den Browser. Voraussetzung: Python 3.11+ und
-Node.js 20+.
+**Windows:** `Start_Compliance_Agent.bat` doppelklicken (ruft
+`Start_Compliance_Agent.ps1` auf). Der Starter legt bei Bedarf die
+Python-Umgebung an, hält Python- und npm-Abhängigkeiten über Datei-Hashes
+aktuell, startet Backend (`:8001`) und Frontend (`:3001`) im Hintergrund und
+öffnet den Browser erst, wenn beide antworten. Er meldet, ob Ollama läuft.
+Logs unter `.run/logs`, beenden mit `Stop_Compliance_Agent.bat`.
+Voraussetzung: Python 3.11+ und Node.js 20+.
 
 **Docker:** `docker compose up --build` → <http://localhost:3001>
 
