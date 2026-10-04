@@ -48,7 +48,7 @@ from app.schemas import (
     iban_checksum_valid,
 )
 
-RULESET_VERSION = "2025.1"
+RULESET_VERSION = "2026.1"
 
 #: Grenze der Kleinbetragsrechnung nach Paragraf 33 UStDV (seit 01.01.2017).
 SMALL_AMOUNT_LIMIT = Decimal("250")
@@ -314,20 +314,33 @@ def _formal_tile(
     required = [check for check in checks if check.status is not CheckStatus.NOT_APPLICABLE]
     fulfilled = sum(check.status is CheckStatus.PASS for check in required)
 
+    if einvoice:
+        en_status = CheckStatus.WARN
+        en_detail = (
+            "Eingebettetes XML (ZUGFeRD/Factur-X/XRechnung) erkannt. Rechtlich maßgeblich ist bei hybriden "
+            "Rechnungen der strukturierte XML-Teil; diese Prüfung bewertet den PDF-Bildteil. Eine Validierung "
+            "des XML gegen EN 16931 ist nicht implementiert. Kein Punktabzug."
+        )
+    else:
+        en_status = CheckStatus.WARN
+        en_detail = (
+            "Reines PDF ohne eingebettetes XML: im inländischen B2B-Verkehr seit 01.01.2025 eine "
+            "„sonstige Rechnung“. Zulässig in der Übergangsfrist bis 31.12.2026 (bei Vorjahresumsatz "
+            "bis 800.000 EUR bis 31.12.2027), danach Ausstellungspflicht für E-Rechnungen. Kein Punktabzug."
+        )
     checks.append(
         ScoreCheck(
             id="en16931",
             label="Strukturierte E-Rechnung (EN 16931: XRechnung / ZUGFeRD)",
             legal_reference="§ 14 Abs. 1 UStG i. d. F. des Wachstumschancengesetzes",
-            status=CheckStatus.PASS if einvoice else CheckStatus.WARN,
-            detail=None
-            if einvoice
-            else (
-                "Reines PDF ohne eingebettetes XML: im inländischen B2B-Verkehr seit 01.01.2025 eine "
-                "'sonstige Rechnung'. Zulässig in der Übergangsfrist bis 31.12.2026 (bei Vorjahresumsatz "
-                "<= 800.000 EUR bis 31.12.2027), danach E-Rechnungspflicht. Kein Punktabzug."
-            ),
+            status=en_status,
+            detail=en_detail,
             evidence_source="rule_based",
+            note=(
+                "Empfangspflicht für E-Rechnungen seit 01.01.2025. Bei hybriden Formaten ist der XML-Teil "
+                "führend; abweichende Angaben im Bildteil können als eigene Rechnung gelten "
+                "(BMF-Schreiben vom 15.10.2024, präzisiert durch BMF-Schreiben vom 15.10.2025)."
+            ),
         )
     )
     deduction = sum(check.deduction for check in checks)
@@ -461,6 +474,12 @@ def _regulatory_tile(compliance: ComplianceAudit, facts: TextFacts) -> tuple[Sco
                                detail=f"{where}. Kein Nachweis einer Konformitätsbewertung (Art. 43) und "
                                       "CE-Kennzeichnung (Art. 48); Betreiberpflichten nach Art. 26 beachten.")
             cap, cap_reason = HIGH_RISK_CAP, "Hochrisiko-KI (Anhang III) ohne Konformitätsnachweis"
+        check.note = (
+            "Art. 6 Abs. 3: Ausnahme möglich bei eng begrenzten oder rein vorbereitenden Aufgaben ohne "
+            "Profiling – Profiling natürlicher Personen ist immer Hochrisiko. Das System eskaliert "
+            "konservativ auf Hochrisiko. Die Pflichten für Anhang-III-Systeme gelten nach der Änderung durch "
+            "VO (EU) 2026/1744 ab dem 02.12.2027."
+        )
         headline = "Hochrisiko (Anhang III)"
     elif level is AIActRiskLevel.LIMITED:
         check = ScoreCheck(id="ai_act", label="KI mit Transparenzpflichten", legal_reference="Art. 50 " + ref,
@@ -469,7 +488,8 @@ def _regulatory_tile(compliance: ComplianceAudit, facts: TextFacts) -> tuple[Sco
         headline = "Begrenztes Risiko (Art. 50)"
     elif level is AIActRiskLevel.MINIMAL:
         check = ScoreCheck(id="ai_act", label="KI-System mit minimalem Risiko", legal_reference=ref,
-                           status=CheckStatus.PASS, detail="Keine spezifischen Pflichten; AI Literacy (Art. 4) beachten.")
+                           status=CheckStatus.PASS,
+                           detail="Keine spezifischen Pflichten; Maßnahmen zur KI-Kompetenz nach Art. 4 ergreifen.")
         headline = "Minimales Risiko"
     else:
         check = ScoreCheck(id="ai_act", label="Kein KI-System beschrieben", legal_reference="Art. 3 Nr. 1 " + ref,
@@ -520,6 +540,53 @@ def _privacy_tile(compliance: ComplianceAudit) -> ScoreTile:
 
 
 # ---------------------------------------------------------------------------
+# Risikoerklaerung je Mangel (ein Satz, fuer Tooltips und Zertifikat)
+# ---------------------------------------------------------------------------
+
+RISK_NOTES: dict[str, str] = {
+    "ustg_1_sender": "Ohne vollständige Anschrift des Ausstellers ist die Rechnung nicht ordnungsgemäß und der Vorsteuerabzug nach § 15 UStG gefährdet.",
+    "ustg_1_recipient": "Fehlt die Anschrift des Leistungsempfängers, kann das Finanzamt den Vorsteuerabzug nach § 15 UStG versagen.",
+    "ustg_2_tax_id": "Ohne Steuernummer oder USt-IdNr. entfällt der Vorsteuerabzug nach § 15 UStG.",
+    "ustg_3_date": "Ohne Ausstellungsdatum lässt sich der Zeitpunkt des Vorsteuerabzugs nicht bestimmen.",
+    "ustg_4_number": "Ohne eindeutige Rechnungsnummer ist die Rechnung nicht ordnungsgemäß, und Doppelzahlungen bleiben unerkannt.",
+    "ustg_5_items": "Ohne hinreichend konkrete Leistungsbeschreibung kann der Vorsteuerabzug versagt werden.",
+    "ustg_6_service_date": "Ohne Leistungszeitpunkt lässt sich die Steuerentstehung nicht zuordnen; der Hinweis „Leistungsdatum entspricht Rechnungsdatum“ genügt.",
+    "ustg_7_net": "Ohne ausgewiesenes Nettoentgelt ist der Steuerbetrag nicht nachprüfbar.",
+    "ustg_8_rate": "Ohne Steuersatz oder Befreiungshinweis bleibt offen, ob die Steuer zutreffend berechnet ist.",
+    "ustg_8_amount": "Als Vorsteuer abziehbar ist höchstens die gesondert ausgewiesene Steuer; ohne Steuerbetrag entfällt der Abzug.",
+    "en16931": "Ab 2027 bzw. 2028 erfüllt eine reine PDF-Rechnung im inländischen B2B-Verkehr die Rechnungspflicht nicht mehr.",
+    "iban_mod97": "Eine IBAN mit falscher Prüfziffer ist ein typisches Merkmal von Zahlungsumleitungsbetrug – vor Zahlung auf bekanntem Weg verifizieren.",
+    "vat_rate": "Bei zu niedrigem Steuerausweis schuldet der Lieferant die gesetzliche Steuer, der Empfänger kann aber nur den ausgewiesenen Betrag als Vorsteuer abziehen.",
+    "sum_check": "Rechenfehler zwischen Netto, Steuer und Brutto führen zu falsch gebuchter Vorsteuer und Zahlungsdifferenzen.",
+    "tax_calc": "Zu hoch ausgewiesene Steuer schuldet der Aussteller nach § 14c Abs. 1 UStG, zu niedrig ausgewiesene ist nur in ausgewiesener Höhe abziehbar.",
+    "ai_act_high": "Hochrisiko-KI nach Anhang III darf ab dem 02.12.2027 nur mit Konformitätsbewertung betrieben werden; Verstöße kosten bis zu 15 Mio. € oder 3 % des Jahresumsatzes (Art. 99 Abs. 4).",
+    "ai_act_unacceptable": "Verbotene Praktiken sind seit 02.02.2025 untersagt; das Bußgeld reicht bis 35 Mio. € oder 7 % des weltweiten Jahresumsatzes (Art. 99 Abs. 3).",
+    "ai_act_limited": "Verstöße gegen die Transparenzpflichten nach Art. 50 können mit bis zu 15 Mio. € oder 3 % des Jahresumsatzes geahndet werden.",
+    "gdpr_art9": "Verarbeitung besonderer Kategorien ohne Rechtsgrundlage nach Art. 9 Abs. 2 kann mit bis zu 20 Mio. € oder 4 % des Jahresumsatzes geahndet werden (Art. 83 Abs. 5 DSGVO).",
+    "gdpr_identifiers": "Amtliche Kennnummern sind besonders missbrauchsanfällig (Identitätsdiebstahl) und dürfen nur mit Rechtsgrundlage gespeichert werden.",
+}
+
+#: Rechtlicher Kontext, der unabhaengig vom Ergebnis angezeigt wird.
+CHECK_NOTES: dict[str, str] = {
+    "tax_calc": (
+        "Bei Rechnungen ausschließlich an Endverbraucher entsteht keine Steuerschuld aus § 14c UStG "
+        "(EuGH, Urteil vom 08.12.2022, C-378/21; BMF-Schreiben vom 27.02.2024)."
+    ),
+}
+
+
+def _annotate(tiles: list[ScoreTile], compliance: ComplianceAudit) -> None:
+    level = compliance.ai_act.overall_risk_level.value
+    for tile in tiles:
+        for check in tile.checks:
+            key = f"ai_act_{level}" if check.id == "ai_act" else check.id
+            if check.status in (CheckStatus.FAIL, CheckStatus.WARN) and key in RISK_NOTES:
+                check.risk_note = RISK_NOTES[key]
+            if check.id in CHECK_NOTES and check.note is None:
+                check.note = CHECK_NOTES[check.id]
+
+
+# ---------------------------------------------------------------------------
 # Gesamtscore
 # ---------------------------------------------------------------------------
 
@@ -558,6 +625,7 @@ def compute_scorecard(
     privacy = _privacy_tile(compliance)
     math = _math_tile(extraction, facts)
     tiles = [formal, regulatory, privacy, math]
+    _annotate(tiles, compliance)
 
     raw = 100 - sum(tile.deduction for tile in tiles)
     score = max(0, min(100, raw))

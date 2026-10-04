@@ -223,7 +223,8 @@ def render_markdown(report: dict[str, Any]) -> str:
     for check in report["ustg_matrix"]:
         lines.append(
             f"| {_md(check['label'])} | {_md(check.get('legal_reference'))} | "
-            f"{_STATUS_LABELS.get(check['status'], check['status'])} | {_md(check.get('detail'))} |"
+            f"{_STATUS_LABELS.get(check['status'], check['status'])} | {_md(check.get('detail'))}"
+            f"{(' ' + _md(check['risk_note'])) if check.get('risk_note') else ''} |"
         )
     ai = report["ai_act"]
     lines += [
@@ -288,7 +289,9 @@ def render_html(report: dict[str, Any]) -> str:
         return "".join(
             f"<tr><td>{_e(c['label'])}</td><td class='mono'>{_e(c.get('legal_reference'))}</td>"
             f"<td><span class='st st-{_e(c['status'])}'>{_e(_STATUS_LABELS.get(c['status'], c['status']))}</span></td>"
-            f"<td>{_e(c.get('detail') or '')}</td></tr>"
+            f"<td>{_e(c.get('detail') or '')}"
+            f"{('<div class=risk>' + _e(c['risk_note']) + '</div>') if c.get('risk_note') else ''}"
+            f"{('<div class=small>' + _e(c['note']) + '</div>') if c.get('note') else ''}</td></tr>"
             for c in checks
         ) or "<tr><td colspan='4'>Keine Prüfpunkte.</td></tr>"
 
@@ -328,6 +331,7 @@ h2 {{ font-size: 11.5pt; margin: 18px 0 6px; padding-bottom: 4px; border-bottom:
 .score b {{ font-size: 26pt; display: block; line-height: 1; }}
 .green {{ color: #047857; border-color: #059669; }} .amber {{ color: #b45309; border-color: #d97706; }} .red {{ color: #be123c; border-color: #e11d48; }}
 .verdict {{ margin: 14px 0; padding: 10px 12px; border-radius: 8px; font-weight: 600; }}
+.risk {{ margin-top: 3px; color: #9f1239; font-size: 8.5pt; }}
 .refnote {{ margin-top: 12px; padding: 8px 12px; border: 1px dashed #94a3b8; border-radius: 8px; font-size: 9pt; color: #334155; }}
 .verdict.ok {{ background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }}
 .verdict.bad {{ background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }}
@@ -347,7 +351,13 @@ th {{ font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #
 .sealbox.ok .sealtitle {{ color: #047857 !important; }} .sealbox.bad .sealtitle {{ color: #be123c !important; }}
 .draft {{ margin-top: 18px; padding: 10px; border: 1px dashed #94a3b8; color: #475569; text-align: center; border-radius: 8px; }}
 footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
-@media print {{ body {{ background: #fff; }} .page {{ border: 0; margin: 0; padding: 0; max-width: none; }} h2, table, .sealbox {{ break-inside: avoid; }} }}
+@media print {{
+  body {{ background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+  .page {{ border: 0; margin: 0; padding: 0; max-width: none; }}
+  h2 {{ break-after: avoid; }}
+  tr, .sealbox, .verdict, .refnote, .grid {{ break-inside: avoid; }}
+  thead {{ display: table-header-group; }}
+}}
 </style></head>
 <body><main class="page">
 <div class="head">
@@ -378,6 +388,8 @@ footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
 <p><strong>{_e(ai['risk_label'])}</strong>{(' · ' + _e(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}</p>
 <p class="small">{_e(ai['reasoning'])}</p>
 {f"<p class='small'>Einschlägige Pflichten: {_e(', '.join(ai['article_references']))}</p>" if ai['article_references'] else ''}
+{''.join(f"<p class='small'>{_e(c['note'])}</p>" for c in ai['checks'] if c.get('note'))}
+{''.join(f"<p class='risk'>{_e(c['risk_note'])}</p>" for c in ai['checks'] if c.get('risk_note'))}
 
 <h2>Mathematische Validität</h2>
 <table><thead><tr><th style="width:30%">Prüfung</th><th style="width:24%">Norm</th><th style="width:11%">Status</th><th>Hinweis</th></tr></thead><tbody>{rows(report['math_checks'])}</tbody></table>

@@ -933,6 +933,10 @@ class ScoreCheck(ApiModel):
     evidence_source: str | None = Field(
         default=None, description="'llm', 'rule_based' oder 'both' - woher der Nachweis stammt."
     )
+    risk_note: str | None = Field(
+        default=None, description="Ein Satz zur steuerlichen bzw. haftungsrechtlichen Folge eines Mangels."
+    )
+    note: str | None = Field(default=None, description="Rechtlicher Kontext (z. B. Stichtage, Ausnahmen).")
 
 
 class ScoreTile(ApiModel):

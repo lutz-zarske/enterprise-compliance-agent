@@ -3,7 +3,7 @@
 Drei bewusst konstruierte Faelle decken die drei Ampelfarben ab:
 
 1. ``Rechnung_Gueltig_14UStG.pdf`` - alle Pflichtangaben, korrekte Mathematik.
-   Erwartung: gruen, Score 100 (keine Abzuege nach Regelwerk 2025.1).
+   Erwartung: gruen, Score 100 (keine Abzuege nach Regelwerk 2026.1).
 2. ``Rechnung_Fehlerhaft_Steuerfalle.pdf`` - keine Steuernummer/USt-IdNr. (-20),
    unzulaessiger Steuersatz 16 % (-10), kein Leistungsdatum (-10), IBAN mit
    falscher Pruefziffer (-15).  Erwartung: rot, Score 45.

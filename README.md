@@ -91,7 +91,7 @@ flowchart LR
 app/
   main.py            FastAPI: Endpunkte, Auth, Fehlerformat, Request-Tracing
   services.py        Pipeline (4 Stufen), Sign-off, KPIs, Copilot, Demo-Seed
-  scoring.py         Deterministische Scorecard (Regelwerk 2025.1)
+  scoring.py         Deterministische Scorecard (Regelwerk 2026.1)
   audit_ledger.py    Append-only-Ledger mit SHA-256-Hash-Kette
   inference.py       InferenceRouter: lokal oder Cloud (immer mit Vault)
   llm.py             Basisclient (JSON-Vertrag, Reparatur), Ollama, Prompts

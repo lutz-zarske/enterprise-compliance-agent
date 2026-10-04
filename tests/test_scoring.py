@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from datetime import UTC, datetime
 from typing import Any
 
@@ -196,3 +198,56 @@ def test_zugferd_erkennung() -> None:
     assert detect_structured_einvoice(b"%PDF-1.7 ... /F (factur-x.xml) ...") is True
     assert detect_structured_einvoice(b"%PDF-1.4 plain") is False
     assert detect_structured_einvoice(None) is False
+
+
+def test_jeder_abzug_traegt_eine_risikoerklaerung() -> None:
+    extraction = ExtractionResult.model_validate(
+        {"doc_type": "invoice", "sender": "X GmbH", "document_number": "1", "document_date": "2025-05-02",
+         "net_amount": 1000, "tax_rate": 16, "tax_amount": 160, "total_amount": 1160, "iban": "DE12345678901234567890"}
+    )
+    card = compute_scorecard(extraction, _compliance("high", annex=["employment_and_worker_management"]), "")
+    deducted = [check for tile in card.tiles for check in tile.checks if check.deduction]
+    assert deducted
+    for check in deducted:
+        assert check.risk_note, check.id
+        # Genau ein Satz: Abkuerzungen wie "Abs." oder "Mio." sind kein Satzende.
+        assert check.risk_note.endswith("."), check.risk_note
+        assert not re.search(r"[a-zäöüß)]\.\s+[A-ZÄÖÜ]", check.risk_note), check.risk_note
+    tax_id = next(c for c in deducted if c.id == "ustg_2_tax_id")
+    assert "§ 15 UStG" in tax_id.risk_note
+    assert card.ruleset_version == "2026.1"
+
+
+def test_hochrisiko_hinweis_auf_art_6_abs_3_und_stichtag() -> None:
+    card = compute_scorecard(
+        ExtractionResult(doc_type="contract"), _compliance("high", annex=["employment_and_worker_management"]), ""
+    )
+    check = next(tile for tile in card.tiles if tile.key == "regulatory").checks[0]
+    assert "Art. 6 Abs. 3" in (check.note or "")
+    assert "02.12.2027" in (check.note or "") and "2026/1744" in (check.note or "")
+    assert "02.12.2027" in (check.risk_note or "")
+
+
+def test_hybride_e_rechnung_verweist_auf_xml_vorrang() -> None:
+    card = compute_scorecard(
+        VALID_EXTRACTION, _compliance(), "\n".join(VALID_INVOICE_LINES),
+        pdf_bytes=b"%PDF-1.7 /EmbeddedFile (factur-x.xml)",
+    )
+    assert card.structured_einvoice_detected is True
+    en = next(c for t in card.tiles for c in t.checks if c.id == "en16931")
+    # Der rechtlich massgebliche XML-Teil wird nicht validiert -> Hinweis statt "erfuellt".
+    assert en.status.value == "warn"
+    assert "maßgeblich ist bei hybriden Rechnungen der strukturierte XML-Teil" in (en.detail or "")
+    assert "15.10.2024" in (en.note or "")
+    assert card.score == 100
+
+
+def test_paragraf_14c_endverbraucher_hinweis() -> None:
+    card = compute_scorecard(
+        ExtractionResult.model_validate({"doc_type": "invoice", "net_amount": 100, "tax_rate": 19,
+                                         "tax_amount": 19, "total_amount": 119}),
+        _compliance(), "",
+    )
+    calc = next(c for t in card.tiles for c in t.checks if c.id == "tax_calc")
+    assert "C-378/21" in (calc.note or "") and "27.02.2024" in (calc.note or "")
+    assert calc.risk_note is None  # kein Mangel -> keine Risikoerklaerung

@@ -33,7 +33,7 @@ from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import VaultedClient
 from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
 from app.runtime_settings import RuntimeSettingsStore
-from app.scoring import compute_scorecard
+from app.scoring import RULESET_VERSION, compute_scorecard
 from app.schemas import (
     SPECIAL_CATEGORIES,
     AIActAssessment,
@@ -753,6 +753,8 @@ class DocumentService:
             "high_risk_count": high_risk,
             "high_risk_quota": round(high_risk / len(analyzed) * 100, 1) if analyzed else 0.0,
             "sealed_count": sum(1 for r in records if r.sign_off),
+            "reference_count": sum(1 for r in records if r.provider == "reference"),
+            "ruleset_version": RULESET_VERSION,
         }
 
     # --- Lesezugriffe ------------------------------------------------------
