@@ -47,7 +47,7 @@ T = TypeVar("T", bound=BaseModel)
 DEFAULT_SEED = 42
 
 #: Kurzes Timeout fuer Verfuegbarkeitspruefungen, damit /health schnell bleibt.
-HEALTH_TIMEOUT_SECONDS = 5.0
+HEALTH_TIMEOUT_SECONDS = 1.5
 
 
 # ---------------------------------------------------------------------------

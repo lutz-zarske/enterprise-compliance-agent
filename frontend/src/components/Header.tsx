@@ -4,7 +4,7 @@ import React from "react";
 import type { HealthResponse, RuntimeSettings } from "../types/api";
 import { cx, formatModel, PROVIDER_SHORT } from "../lib/format";
 import { useTheme } from "./ThemeProvider";
-import { Database, Lock, Moon, RefreshCw, Settings, ShieldCheck, Sparkles, Sun } from "./icons";
+import { Database, FileText, Lock, Moon, RefreshCw, Settings, ShieldCheck, Sun } from "./icons";
 import { Spinner } from "./ui";
 
 interface HeaderProps {
@@ -82,9 +82,9 @@ export function Header({ health, offline, apiBase, settings, seeding, onSeed, on
 
           <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
-          <button className="btn" onClick={onSeed} disabled={offline || seeding}>
-            {seeding ? <Spinner size={13} /> : <Sparkles size={14} />}
-            <span className="hidden md:inline">Demo-Daten laden</span>
+          <button className="btn" onClick={onSeed} disabled={offline || seeding} title="Standardisierte Prüfbelege laden (§ 14 UStG, Steuerfalle, EU AI Act)">
+            {seeding ? <Spinner size={13} /> : <FileText size={14} />}
+            <span className="hidden md:inline">Musterdaten laden</span>
           </button>
           <button className="btn btn-icon" onClick={onRefresh} aria-label="Aktualisieren" title="Aktualisieren">
             <RefreshCw size={15} />
