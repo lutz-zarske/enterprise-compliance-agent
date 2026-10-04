@@ -162,7 +162,14 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="label-caps">Name der Prüfperson</span>
-            <input className="input mt-1" value={auditor} onChange={(e) => setAuditor(e.target.value)} placeholder="z. B. Lutz Zarske" />
+            <input
+              className="input mt-1"
+              name="auditor-name"
+              autoComplete="name"
+              value={auditor}
+              onChange={(e) => setAuditor(e.target.value)}
+              placeholder="z. B. Lutz Zarske…"
+            />
           </label>
           <div>
             <span className="label-caps">Entscheidung</span>
@@ -189,7 +196,8 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
             className="input mt-1 min-h-[70px]"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="z. B. USt-IdNr. beim Lieferanten nachgefordert"
+            name="audit-note"
+            placeholder="z. B. USt-IdNr. beim Lieferanten nachgefordert…"
           />
         </label>
         <p className="mt-2 text-[11px] text-subtle">

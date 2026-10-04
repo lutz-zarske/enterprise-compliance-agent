@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
@@ -7,7 +7,14 @@ import { ThemeProvider } from "../components/ThemeProvider";
 export const metadata: Metadata = {
   title: "Compliance Agent | VO (EU) 2024/1689 · § 14 UStG",
   description:
-    "Revisionssichere Pruefung von Rechnungen und Vertraegen: EU AI Act, § 14 UStG, DSGVO - lokal oder ueber ein Privacy Gateway.",
+    "Revisionssichere Prüfung von Rechnungen und Verträgen: EU AI Act, § 14 UStG, DSGVO – lokal oder über ein Privacy Gateway.",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#090d16" },
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+  ],
 };
 
 /**

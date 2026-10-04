@@ -96,6 +96,8 @@ export interface ScoreCheck {
   deduction: number;
   detail: string | null;
   evidence_source: DetectionSource | null;
+  risk_note: string | null;
+  note: string | null;
 }
 
 export interface ScoreTile {
@@ -231,7 +233,14 @@ export interface BatchUploadResponse {
 }
 
 export interface SeedResponse {
-  items: { id: string; filename: string; status: DocumentStatus; created: boolean }[];
+  items: {
+    id: string;
+    filename: string;
+    status: DocumentStatus;
+    created: boolean;
+    reference_audit: boolean;
+    compliance_score: number | null;
+  }[];
   created: number;
 }
 
@@ -257,6 +266,8 @@ export interface KpiResponse {
   high_risk_count: number;
   high_risk_quota: number;
   sealed_count: number;
+  reference_count: number;
+  ruleset_version: string;
 }
 
 export interface RuntimeSettings {
@@ -303,6 +314,7 @@ export interface CopilotResponse {
   model: string;
   provider: string;
   duration_ms: number;
+  reference: boolean;
 }
 
 export interface HealthResponse {

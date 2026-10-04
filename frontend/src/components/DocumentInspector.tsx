@@ -13,28 +13,50 @@ import {
   toneForRisk,
   toneForStatus,
 } from "../lib/format";
-import { FileText, Info, Lock } from "./icons";
-import { Chip, EmptyState, StatusIcon, Tabs } from "./ui";
+import { Check, FileText, Info, Lock } from "./icons";
+import { Chip, EmptyState, StatusIcon, Tabs, Tooltip } from "./ui";
 
 export type InspectorTab = "ustg" | "aiact" | "pii" | "facts";
 
 // --- Farbcodierung der PII-Markierungen --------------------------------------
+// IBAN/Steuer-IDs cyan, Namen bernstein, Betraege smaragd, Kontakt/Adresse indigo,
+// Art.-9-Daten rose; Firmen und Datumsangaben neutral.
 
-const SPAN_STYLE: Record<string, string> = {
-  iban: "bg-accent-soft text-accent border-accent-line",
-  vat_id: "bg-accent-soft text-accent border-accent-line",
-  tax_number: "bg-accent-soft text-accent border-accent-line",
-  id_number: "bg-accent-soft text-accent border-accent-line",
-  address: "bg-warn-soft text-warn border-warn-line",
-  person: "bg-bad-soft text-bad border-bad-line",
-  date_of_birth: "bg-bad-soft text-bad border-bad-line",
-  art9: "bg-bad-soft text-bad border-bad-line font-semibold",
-  email: "bg-pii-soft text-pii border-pii-line",
-  phone: "bg-pii-soft text-pii border-pii-line",
-  org: "bg-surface-2 text-fg border-line-strong",
-  amount: "bg-surface-2 text-fg border-line-strong",
-  date: "bg-surface-2 text-fg border-line-strong",
+type MarkTone = "accent" | "warn" | "ok" | "pii" | "bad" | "neutral";
+
+const SPAN_TONE: Record<string, MarkTone> = {
+  iban: "accent",
+  vat_id: "accent",
+  tax_number: "accent",
+  id_number: "accent",
+  person: "warn",
+  date_of_birth: "warn",
+  amount: "ok",
+  email: "pii",
+  phone: "pii",
+  address: "pii",
+  art9: "bad",
+  org: "neutral",
+  date: "neutral",
 };
+
+const MARK_VARS: Record<MarkTone, React.CSSProperties> = {
+  accent: { "--mark-bg": "var(--accent-soft)", "--mark-fg": "var(--accent)", "--mark-line": "var(--accent-line)" } as React.CSSProperties,
+  warn: { "--mark-bg": "var(--warn-soft)", "--mark-fg": "var(--warn)", "--mark-line": "var(--warn-line)" } as React.CSSProperties,
+  ok: { "--mark-bg": "var(--ok-soft)", "--mark-fg": "var(--ok)", "--mark-line": "var(--ok-line)" } as React.CSSProperties,
+  pii: { "--mark-bg": "var(--pii-soft)", "--mark-fg": "var(--pii)", "--mark-line": "var(--pii-line)" } as React.CSSProperties,
+  bad: { "--mark-bg": "var(--bad-soft)", "--mark-fg": "var(--bad)", "--mark-line": "var(--bad-line)" } as React.CSSProperties,
+  neutral: { "--mark-bg": "var(--surface-2)", "--mark-fg": "var(--fg)", "--mark-line": "var(--line-strong)" } as React.CSSProperties,
+};
+
+const LEGEND: { tone: MarkTone; label: string }[] = [
+  { tone: "accent", label: "IBAN / Steuer-ID" },
+  { tone: "warn", label: "Name" },
+  { tone: "ok", label: "Betrag" },
+  { tone: "pii", label: "Kontakt / Adresse" },
+  { tone: "bad", label: "Art. 9 DSGVO" },
+  { tone: "neutral", label: "Firma / Datum" },
+];
 
 /** Welche Befund-Kategorien eine Textmarkierung im PII-Ledger hervorhebt. */
 const SPAN_TO_FINDINGS: Record<string, (finding: PIIFinding) => boolean> = {
@@ -86,21 +108,20 @@ function TextViewer({ document, activeSpan, onSpanClick }: {
               <button
                 type="button"
                 onClick={() => onSpanClick(span)}
-                className={cx(
-                  "rounded border px-0.5 transition-colors duration-150",
-                  SPAN_STYLE[span.category] ?? SPAN_STYLE.org,
-                  activeSpan === span.category && "ring-1 ring-current",
-                )}
+                className="pii-mark"
+                style={MARK_VARS[SPAN_TONE[span.category] ?? "neutral"]}
+                data-active={activeSpan === span.category}
+                aria-label={`${span.label}: ${text}`}
               >
                 {text}
               </button>
               <span
                 role="tooltip"
-                className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-max max-w-[260px] rounded-md border border-line bg-surface-solid px-2 py-1.5 font-sans text-[11px] leading-snug text-fg shadow-lg group-hover:block"
+                className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-max max-w-[260px] rounded-md border border-line bg-surface-solid px-2.5 py-1.5 font-sans text-[11px] leading-snug text-fg shadow-lg group-hover:block group-focus-within:block"
               >
                 <span className="block font-semibold">{span.label}</span>
                 <span className="block text-subtle">Quelle: {SOURCE_LABELS[span.source] ?? span.source}</span>
-                <span className="block text-subtle">{span.masked ? "Geschwärzt" : "Nur markiert (nicht geschwärzt)"}</span>
+                <span className="block text-subtle">{span.masked ? "Geschwärzt" : "Nur markiert, nicht geschwärzt"}</span>
               </span>
             </span>
           ) : (
@@ -117,15 +138,30 @@ function TextViewer({ document, activeSpan, onSpanClick }: {
 
 function CheckRow({ check }: { check: ScoreCheck }) {
   return (
-    <li className="flex items-start gap-3 py-2.5">
-      <StatusIcon status={check.status} />
+    <li className="flex items-start gap-3 py-3">
+      <span className="mt-0.5"><StatusIcon status={check.status} /></span>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="text-[13px] font-medium text-fg">{check.label}</span>
-          {check.deduction > 0 && <span className="font-mono text-[11px] text-bad">−{check.deduction}</span>}
+          {check.deduction > 0 && (
+            <Tooltip content={check.risk_note}>
+              <span
+                tabIndex={check.risk_note ? 0 : undefined}
+                className="cursor-help rounded font-mono text-[11px] text-bad underline decoration-dotted underline-offset-2"
+                aria-label={`Abzug ${check.deduction} Punkte${check.risk_note ? `: ${check.risk_note}` : ""}`}
+              >
+                −{check.deduction}
+              </span>
+            </Tooltip>
+          )}
         </div>
         {check.legal_reference && <p className="font-mono text-[11px] text-subtle">{check.legal_reference}</p>}
-        {check.detail && <p className="mt-0.5 text-xs text-muted">{check.detail}</p>}
+        {check.detail && <p className="mt-1 text-xs leading-relaxed text-muted">{check.detail}</p>}
+        {/* Bei Abzuegen steht die Risikoerklaerung im Tooltip am Abzug; Hinweise ohne Abzug inline. */}
+        {check.risk_note && check.deduction === 0 && check.status !== "pass" && (
+          <p className="mt-1 text-xs leading-relaxed text-warn">{check.risk_note}</p>
+        )}
+        {check.note && <p className="mt-1 text-[11.5px] leading-relaxed text-subtle">{check.note}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         <Chip tone={toneForStatus(check.status)}>{STATUS_LABELS[check.status]}</Chip>
@@ -176,7 +212,7 @@ function AiActPanel({ document }: { document: DocumentDetail }) {
 
       <div>
         <p className="label-caps mb-1">Begründung der KI</p>
-        <p className="whitespace-pre-line text-[13px] leading-relaxed text-muted">{ai.reasoning || "–"}</p>
+        <p className="max-w-[70ch] whitespace-pre-line text-[13px] leading-relaxed text-muted">{ai.reasoning || "–"}</p>
       </div>
 
       {regulatory?.checks.map((check) => (
@@ -319,7 +355,16 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
         <Fact label="Brutto" value={formatMoney(ex.total_amount, ex.currency)} mono />
         <Fact
           label="IBAN"
-          value={iban && <span>{iban} <Chip tone={ex.iban_valid ? "ok" : "bad"} className="ml-1">{ex.iban_valid ? "MOD-97 ✓" : "ungültig"}</Chip></span>}
+          value={
+            iban && (
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                {iban}
+                <Chip tone={ex.iban_valid ? "ok" : "bad"}>
+                  {ex.iban_valid ? <><Check size={11} aria-hidden="true" /> MOD-97</> : "Prüfziffer ungültig"}
+                </Chip>
+              </span>
+            )
+          }
           mono
         />
       </dl>
@@ -376,13 +421,18 @@ export function DocumentInspector({ document, tab, onTabChange }: {
               onTabChange("pii");
             }}
           />
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[10.5px]">
-            <span className="chip border-accent-line bg-accent-soft text-accent">IBAN / Steuer-ID</span>
-            <span className="chip border-pii-line bg-pii-soft text-pii">Kontakt</span>
-            <span className="chip border-warn-line bg-warn-soft text-warn">Adresse</span>
-            <span className="chip border-bad-line bg-bad-soft text-bad">Name / Art. 9</span>
-            <span className="chip border-line-strong bg-surface-2 text-fg">Firma / Betrag / Datum</span>
-          </div>
+          <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-subtle" aria-label="Legende der Markierungen">
+            {LEGEND.map(({ tone, label }) => (
+              <li key={label} className="flex items-center gap-1.5">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-[3px]"
+                  style={{ ...MARK_VARS[tone], background: "var(--mark-fg)", opacity: 0.75 }}
+                  aria-hidden="true"
+                />
+                {label}
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="min-w-0">
           <Tabs<InspectorTab>

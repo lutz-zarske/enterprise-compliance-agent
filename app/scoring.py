@@ -228,7 +228,7 @@ def _formal_tile(
     title = "Formelle Gültigkeit (§ 14 UStG & EN 16931)"
     if extraction.doc_type is not DocType.INVOICE or not enforce:
         reason = (
-            "Keine Rechnung - Pflichtangaben nach § 14 Abs. 4 UStG nicht einschlägig."
+            "Keine Rechnung – Pflichtangaben nach § 14 Abs. 4 UStG nicht einschlägig."
             if enforce
             else "§ 14-UStG-Prüfung in den Einstellungen deaktiviert."
         )
@@ -269,7 +269,7 @@ def _formal_tile(
                 bool(extraction.sender_tax_number or extraction.sender_vat_id), facts.vat_id or facts.tax_number
             ),
             required=not small, na_detail=na_small,
-            missing_detail="Weder Steuernummer noch USt-IdNr. angegeben - kein Vorsteuerabzug (§ 15 UStG).",
+            missing_detail="Weder Steuernummer noch USt-IdNr. angegeben – kein Vorsteuerabzug (§ 15 UStG).",
         ),
         _check(
             "ustg_3_date", "Ausstellungsdatum", "§ 14 Abs. 4 Satz 1 Nr. 3 UStG",
@@ -376,7 +376,7 @@ def _math_tile(extraction: ExtractionResult, facts: TextFacts) -> ScoreTile:
                 legal_reference="ISO 13616",
                 status=CheckStatus.PASS if valid else CheckStatus.FAIL,
                 deduction=0 if valid else 15,
-                detail=None if valid else "Prüfziffer ungültig - Zahlungsziel nicht verifizierbar (Betrugsrisiko).",
+                detail=None if valid else "Prüfziffer ungültig – Zahlungsziel nicht verifizierbar (Betrugsrisiko).",
                 evidence_source="rule_based",
             )
         )
@@ -467,7 +467,7 @@ def _regulatory_tile(compliance: ComplianceAudit, facts: TextFacts) -> tuple[Sco
         if facts.conformity_evidence:
             check = ScoreCheck(id="ai_act", label="Hochrisiko-KI-System", legal_reference="Art. 6 Abs. 2 " + ref,
                                status=CheckStatus.WARN, deduction=10,
-                               detail=f"{where}. Hinweis auf Konformitätsbewertung vorhanden - Nachweis prüfen (Art. 43).")
+                               detail=f"{where}. Hinweis auf Konformitätsbewertung vorhanden – Nachweis prüfen (Art. 43).")
         else:
             check = ScoreCheck(id="ai_act", label="Hochrisiko-KI-System", legal_reference="Art. 6 Abs. 2 " + ref,
                                status=CheckStatus.FAIL, deduction=25,

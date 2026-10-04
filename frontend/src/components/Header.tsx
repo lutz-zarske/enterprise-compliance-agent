@@ -4,7 +4,7 @@ import React from "react";
 import type { HealthResponse, RuntimeSettings } from "../types/api";
 import { cx, formatModel, PROVIDER_SHORT } from "../lib/format";
 import { useTheme } from "./ThemeProvider";
-import { Database, Lock, Moon, RefreshCw, Settings, ShieldCheck, Sparkles, Sun } from "./icons";
+import { Database, Layers, Lock, Moon, RefreshCw, Settings, ShieldCheck, Sun } from "./icons";
 import { Spinner } from "./ui";
 
 interface HeaderProps {
@@ -44,7 +44,7 @@ export function Header({ health, offline, apiBase, settings, seeding, onSeed, on
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent-line bg-accent-soft text-accent">
-            <ShieldCheck size={18} />
+            <ShieldCheck size={18} aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -75,16 +75,22 @@ export function Header({ health, offline, apiBase, settings, seeding, onSeed, on
               )}
               title={mode === "local" ? "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner" : "Cloud-Inferenz über Privacy Gateway (Pseudonymisierung)"}
             >
-              {mode === "local" ? <Database size={11} /> : <Lock size={11} />}
+              {mode === "local" ? <Database size={11} aria-hidden="true" /> : <Lock size={11} aria-hidden="true" />}
               {PROVIDER_SHORT[mode]} ({formatModel(model)})
             </span>
           )}
 
           <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
-          <button className="btn" onClick={onSeed} disabled={offline || seeding}>
-            {seeding ? <Spinner size={13} /> : <Sparkles size={14} />}
-            <span className="hidden md:inline">Demo-Daten laden</span>
+          <button
+            className="btn"
+            onClick={onSeed}
+            disabled={offline || seeding}
+            aria-label="Musterdaten laden"
+            title="Drei geprüfte Musterdokumente laden – funktioniert ohne KI-Modell"
+          >
+            {seeding ? <Spinner size={13} /> : <Layers size={14} aria-hidden="true" />}
+            <span className="hidden md:inline">Musterdaten laden</span>
           </button>
           <button className="btn btn-icon" onClick={onRefresh} aria-label="Aktualisieren" title="Aktualisieren">
             <RefreshCw size={15} />

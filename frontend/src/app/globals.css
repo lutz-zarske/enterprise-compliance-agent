@@ -199,6 +199,23 @@ body {
     white-space: nowrap;
   }
 
+  /* PII-Markierung: Ring statt Rahmen, damit die Monospace-Spalten fluchten. */
+  .pii-mark {
+    border-radius: 3px;
+    padding: 0 1px;
+    box-shadow: inset 0 0 0 1px var(--mark-line);
+    background: var(--mark-bg);
+    color: var(--mark-fg);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    transition: box-shadow 150ms;
+  }
+  .pii-mark[data-active="true"],
+  .pii-mark:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--mark-fg);
+    outline: none;
+  }
+
   .label-caps {
     font-size: 0.6875rem;
     font-weight: 600;
@@ -206,6 +223,43 @@ body {
     text-transform: uppercase;
     color: var(--fg-subtle);
   }
+}
+
+/* Browser-Oberflaechen aus der Palette statt Systemvorgaben. */
+::selection {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+input,
+textarea {
+  caret-color: var(--accent);
+}
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Zahlen, Betraege, Hashes und Normzitate: gleich breite Ziffern. */
+.font-mono,
+.tabular {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 100;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: 0.75rem;
 }
 
 /* Fokus sichtbar halten (Tastaturbedienung, WCAG 2.4.7). */

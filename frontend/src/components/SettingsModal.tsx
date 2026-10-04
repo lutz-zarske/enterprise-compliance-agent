@@ -10,7 +10,7 @@ import { Modal, Segmented, Spinner, Tabs, Toggle } from "./ui";
 type Tab = "inference" | "compliance" | "connection";
 
 const PROVIDERS: { mode: InferenceMode; title: string; text: string; dot: string }[] = [
-  { mode: "local", title: "Lokal: Ollama (Qwen 2.5 14B)", text: "Zero-Data-Leakage – kein Byte verlässt den Rechner.", dot: "bg-ok" },
+  { mode: "local", title: "Lokal: Ollama (Qwen 2.5 14B)", text: "Zero Data Leakage – kein Dokumentinhalt verlässt den Rechner.", dot: "bg-ok" },
   { mode: "gemini", title: "Google Gemini (2.5 Pro / Flash)", text: "Hohe Geschwindigkeit, großer Kontext.", dot: "bg-sky-500" },
   { mode: "anthropic", title: "Anthropic Claude", text: "Tiefe Begründungen, präzise Rechtsprüfung.", dot: "bg-violet-500" },
   { mode: "openai", title: "OpenAI (GPT-4o)", text: "Breit verfügbar, JSON-Mode.", dot: "bg-orange-500" },
@@ -140,9 +140,10 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
             <div className="flex gap-2 rounded-lg border border-pii-line bg-pii-soft p-3 text-xs text-pii">
               <Lock size={14} className="mt-0.5 shrink-0" />
               <p>
-                <strong>Privacy Gateway:</strong> Namen, Firmen, IBANs, Steuer-IDs, Adressen, Kontaktdaten und Beträge werden vor dem
-                Versand durch Platzhalter ersetzt und lokal re-identifiziert. Pseudonymisierte Daten bleiben personenbezogen
-                (Art. 4 Nr. 5 DSGVO) – AV-Vertrag und Transfergrundlage mit dem Anbieter bleiben erforderlich.
+                <strong>Privacy Gateway:</strong> Die Pseudonymisierung (Art. 4 Nr. 5 DSGVO) läuft lokal im Backend (Python), bevor
+                Daten den Server verlassen – ein lokales Ollama ist dafür nicht nötig. Erkannte Namen mit Anrede oder Rolle, Firmen,
+                IBANs, Steuer-IDs, Adressen, Kontaktdaten und Beträge gehen nur als Platzhalter an den Anbieter und werden lokal
+                re-identifiziert. Pseudonymisierte Daten bleiben personenbezogen: AV-Vertrag und Transfergrundlage bleiben erforderlich.
               </p>
             </div>
           )}
@@ -150,7 +151,15 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="label-caps">Modell</span>
-              <input className="input mt-1 font-mono" list={`models-${mode}`} value={model} onChange={(e) => setModel(e.target.value)} />
+              <input
+                className="input mt-1 font-mono"
+                name="model"
+                list={`models-${mode}`}
+                value={model}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setModel(e.target.value)}
+              />
               <datalist id={`models-${mode}`}>
                 {settings.suggested_models[mode]?.map((name) => <option key={name} value={name} />)}
               </datalist>
@@ -162,9 +171,11 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
                   <input
                     className="input pr-9 font-mono"
                     type={showKey ? "text" : "password"}
+                    name={`${mode}-api-key`}
                     value={apiKey}
                     autoComplete="off"
-                    placeholder={hasKey ? "Neuen Key eingeben, um ihn zu ersetzen" : "Key eingeben"}
+                    spellCheck={false}
+                    placeholder={hasKey ? "Neuen Key eingeben, um ihn zu ersetzen…" : "Key eingeben…"}
                     onChange={(e) => setApiKey(e.target.value)}
                   />
                   <button
@@ -240,8 +251,10 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
               type="password"
               value={accessKey}
               onChange={(e) => setAccessKeyState(e.target.value)}
-              placeholder="Nur nötig, wenn API_KEY im Backend gesetzt ist"
+              placeholder="Nur nötig, wenn API_KEY im Backend gesetzt ist…"
+              name="access-key"
               autoComplete="off"
+              spellCheck={false}
             />
           </label>
           <div className="flex justify-end">

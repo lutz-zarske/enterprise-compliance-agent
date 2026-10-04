@@ -45,7 +45,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 pt-[8vh] no-print">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/50 p-4 pt-[8vh] no-print">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}
@@ -227,4 +227,35 @@ export function Spinner({ size = 14 }: { size?: number }) {
       aria-hidden="true"
     />
   );
+}
+
+/**
+ * Tooltip ohne JavaScript: erscheint bei Hover und bei Tastaturfokus im
+ * Ausloeser (WCAG 1.4.13: per Fokus erreichbar, ohne Zeigergeraet bedienbar).
+ */
+export function Tooltip({ content, children, align = "left", className }: {
+  content: React.ReactNode;
+  children: React.ReactNode;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  if (!content) return <>{children}</>;
+  return (
+    <span className={cx("group/tt relative inline-flex", className)}>
+      {children}
+      <span
+        role="tooltip"
+        className={cx(
+          "pointer-events-none absolute bottom-full z-30 mb-1.5 hidden w-max max-w-[300px] rounded-md border border-line bg-surface-solid px-2.5 py-2 text-left font-sans text-[11.5px] font-normal leading-snug text-fg shadow-lg group-hover/tt:block group-focus-within/tt:block",
+          align === "left" ? "left-0" : "right-0",
+        )}
+      >
+        {content}
+      </span>
+    </span>
+  );
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cx("rounded-md bg-surface-2", className)} aria-hidden="true" />;
 }

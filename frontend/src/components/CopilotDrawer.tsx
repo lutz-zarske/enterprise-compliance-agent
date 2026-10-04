@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { CopilotTurn, DocumentDetail } from "../types/api";
 import { cx, formatModel } from "../lib/format";
-import { MessageSquare, Send, Sparkles, X } from "./icons";
+import { MessageSquare, Send, X } from "./icons";
 import { Spinner } from "./ui";
 
 const SUGGESTIONS = [
@@ -16,7 +16,12 @@ const SUGGESTIONS = [
 interface Message extends CopilotTurn {
   meta?: string;
   error?: boolean;
+  notice?: boolean;
+  reference?: boolean;
 }
+
+/** Fehler, die nur bedeuten: Es laeuft gerade kein Sprachmodell. */
+const NO_MODEL_CODES = new Set(["ollama_unavailable", "model_not_found", "provider_not_configured", "provider_unavailable", "network"]);
 
 /** Hebt Zeilenverweise "[Z. 4]" und Normzitate optisch hervor. */
 function renderAnswer(text: string): React.ReactNode[] {
@@ -42,6 +47,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const messages = document ? threads[document.id] ?? [] : [];
+  const isReference = document?.provider === "reference";
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -52,7 +58,9 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
   async function ask(question: string) {
     if (!document || !question.trim() || busy) return;
     const id = document.id;
-    const history: CopilotTurn[] = (threads[id] ?? []).filter((m) => !m.error).map(({ role, content }) => ({ role, content }));
+    const history: CopilotTurn[] = (threads[id] ?? [])
+      .filter((m) => !m.error && !m.notice)
+      .map(({ role, content }) => ({ role, content }));
     setThreads((all) => ({ ...all, [id]: [...(all[id] ?? []), { role: "user", content: question.trim() }] }));
     setInput("");
     setBusy(true);
@@ -63,12 +71,27 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
         [id]: [...(all[id] ?? []), {
           role: "assistant",
           content: response.answer,
-          meta: `${formatModel(response.model)} · ${(response.duration_ms / 1000).toFixed(1)} s`,
+          reference: response.reference,
+          meta: response.reference
+            ? "Musterantwort · ohne KI-Modell"
+            : `${formatModel(response.model)} · ${(response.duration_ms / 1000).toFixed(1)} s`,
         }],
       }));
     } catch (err) {
-      const message = err instanceof ApiError ? `${err.message}${err.hint ? ` – ${err.hint}` : ""}` : String(err);
-      setThreads((all) => ({ ...all, [id]: [...(all[id] ?? []), { role: "assistant", content: message, error: true }] }));
+      const message =
+        err instanceof ApiError && NO_MODEL_CODES.has(err.code)
+          ? "Für freie Fragen wird ein Sprachmodell benötigt: lokal mit „ollama serve“ oder über einen Cloud-Key in den Einstellungen. " +
+            (isReference
+              ? "Die drei Standardfragen oben beantwortet der Copilot bei Musterdaten auch ohne Modell."
+              : `(${err.message})`)
+          : err instanceof ApiError
+            ? `${err.message}${err.hint ? ` – ${err.hint}` : ""}`
+            : String(err);
+      const notice = err instanceof ApiError && NO_MODEL_CODES.has(err.code);
+      setThreads((all) => ({
+        ...all,
+        [id]: [...(all[id] ?? []), { role: "assistant", content: message, error: !notice, notice }],
+      }));
     } finally {
       setBusy(false);
     }
@@ -76,12 +99,12 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[440px] flex-col border-l border-line bg-surface-solid shadow-2xl no-print"
+      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[440px] flex-col overscroll-contain border-l border-line bg-surface-solid shadow-2xl no-print"
       aria-label="Compliance Copilot"
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="rounded-lg border border-accent-line bg-accent-soft p-1.5 text-accent"><Sparkles size={15} /></div>
+          <div className="rounded-lg border border-line bg-surface-2 p-1.5 text-accent"><MessageSquare size={15} aria-hidden="true" /></div>
           <div>
             <p className="text-sm font-semibold text-fg">Compliance Copilot</p>
             <p className="font-mono text-[10.5px] text-subtle">{modelLabel}</p>
@@ -97,6 +120,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
             <p className="text-xs text-subtle">
               Fragen zu <span className="font-medium text-fg">{document.filename}</span>. Antworten stützen sich ausschließlich auf den
               Dokumenttext und das Prüfergebnis und verweisen auf Zeilen ([Z. n]) und Normen.
+              {isReference && " Bei Musterdaten beantwortet der Copilot die drei Standardfragen auch ohne Modell mit hinterlegten, gekennzeichneten Antworten."}
             </p>
             {SUGGESTIONS.map((suggestion) => (
               <button
@@ -115,20 +139,42 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
               className={cx(
                 "max-w-[90%] rounded-lg border px-3 py-2 text-[13px] leading-relaxed",
                 message.role === "user" && "border-accent-line bg-accent-soft text-fg",
-                message.role === "assistant" && !message.error && "border-line bg-surface-2 text-fg",
+                message.role === "assistant" && !message.error && !message.notice && "border-line bg-surface-2 text-fg",
+                message.notice && "border-warn-line bg-warn-soft text-fg",
                 message.error && "border-bad-line bg-bad-soft text-bad",
               )}
             >
               <div className="whitespace-pre-wrap break-words">{message.role === "assistant" ? renderAnswer(message.content) : message.content}</div>
-              {message.meta && <p className="mt-1.5 font-mono text-[10px] text-subtle">{message.meta}</p>}
+              {message.meta && (
+                <p className={cx("mt-1.5 text-[10.5px]", message.reference ? "font-medium text-muted" : "font-mono text-subtle")}>{message.meta}</p>
+              )}
             </div>
           </div>
         ))}
         {busy && (
-          <div className="flex items-center gap-2 text-xs text-subtle"><Spinner size={12} /> Copilot analysiert das Dokument …</div>
+          <div className="flex items-center gap-2 text-xs text-subtle" role="status"><Spinner size={12} /> Copilot analysiert das Dokument…</div>
         )}
         <div ref={endRef} />
       </div>
+
+      {document && isReference && messages.length > 0 && (
+        <div className="border-t border-line px-3 pt-2.5" aria-label="Standardfragen">
+          <p className="mb-1.5 text-[11px] text-subtle">Standardfragen – bei Musterdaten auch ohne Modell:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {SUGGESTIONS.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => ask(suggestion)}
+                disabled={busy}
+                className="rounded-md border border-line px-2 py-1 text-left text-[11.5px] text-muted transition-colors duration-150 hover:border-line-strong hover:text-fg disabled:opacity-50"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form
         className="border-t border-line p-3"
@@ -143,7 +189,10 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
             rows={2}
             value={input}
             disabled={!document}
-            placeholder="Frage zum Dokument …"
+            placeholder="Frage zum Dokument…"
+            aria-label="Frage an den Copilot"
+            name="copilot-question"
+            autoComplete="off"
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {

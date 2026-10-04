@@ -64,10 +64,13 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
           <span className="font-mono text-[11px] text-subtle">{visible.length} / {documents.length}</span>
         </div>
         <div className="relative">
-          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-subtle" />
+          <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-subtle" />
           <input
             className="input pl-8"
-            placeholder="Dateiname, Absender oder Betrag"
+            placeholder="Dateiname, Absender oder Betrag…"
+            name="document-search"
+            type="search"
+            autoComplete="off"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             aria-label="Dokumente durchsuchen"
@@ -102,7 +105,7 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
         {visible.length === 0 && (
           <li>
             <EmptyState icon={<FileText size={18} />} title={documents.length ? "Keine Treffer" : "Noch keine Dokumente"}>
-              {documents.length ? "Filter oder Suchbegriff anpassen." : "PDF hochladen oder „Demo-Daten laden“ wählen."}
+              {documents.length ? "Filter oder Suchbegriff anpassen." : "PDF hochladen oder oben „Musterdaten laden“ wählen."}
             </EmptyState>
           </li>
         )}
@@ -112,59 +115,61 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
           return (
             <li key={doc.id}>
               <div
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelect(doc.id)}
-                onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && onSelect(doc.id)}
                 className={cx(
-                  "group flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors duration-150",
+                  "group flex items-center gap-1 pr-2 transition-colors duration-150",
                   selected ? "bg-accent-soft" : "hover:bg-surface-2",
                 )}
               >
-                <div
-                  className={cx(
-                    "flex h-10 w-11 shrink-0 flex-col items-center justify-center rounded-lg border font-mono",
-                    doc.compliance_score != null ? TONE_CLASSES[tone] : "border-line bg-surface-2 text-subtle",
-                  )}
-                  title={doc.compliance_score != null ? `Compliance-Score ${doc.compliance_score}/100` : "Noch nicht geprüft"}
-                >
-                  {extractingId === doc.id ? (
-                    <Spinner size={14} />
-                  ) : (
-                    <span className="text-sm font-semibold tabular-nums">{doc.compliance_score ?? "–"}</span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className="truncate text-[13px] font-medium text-fg">{doc.filename}</p>
-                    {doc.sealed && <Stamp size={12} className="shrink-0 text-ok" aria-label="Versiegelt" />}
-                  </div>
-                  <p className="truncate text-[11px] text-subtle">
-                    {doc.status === "extracted"
-                      ? `${DOC_TYPE_LABELS[doc.doc_type ?? "other"]} · ${doc.sender ?? "–"} · ${formatMoney(doc.total_amount, doc.currency)}`
-                      : doc.status === "failed"
-                        ? "Analyse fehlgeschlagen"
-                        : doc.status === "processing"
-                          ? "Analyse läuft …"
-                          : `Hochgeladen ${formatDate(doc.created_at)} · ${formatBytes(doc.size_bytes)}`}
-                  </p>
-                  {isHighRisk(doc) && (
-                    <span className="chip mt-1 border-bad-line bg-bad-soft text-[10px] text-bad">EU AI Act Anhang III</span>
-                  )}
-                </div>
                 <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onTogglePin(doc);
-                  }}
+                  type="button"
+                  onClick={() => onSelect(doc.id)}
+                  aria-current={selected ? "true" : undefined}
+                  className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 text-left"
+                >
+                  <span
+                    className={cx(
+                      "flex h-10 w-11 shrink-0 flex-col items-center justify-center rounded-lg border font-mono",
+                      doc.compliance_score != null ? TONE_CLASSES[tone] : "border-line bg-surface-2 text-subtle",
+                    )}
+                    aria-label={doc.compliance_score != null ? `Compliance-Score ${doc.compliance_score} von 100` : "Noch nicht geprüft"}
+                  >
+                    {extractingId === doc.id ? (
+                      <Spinner size={14} />
+                    ) : (
+                      <span className="text-sm font-semibold" aria-hidden="true">{doc.compliance_score ?? "–"}</span>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-[13px] font-medium text-fg">{doc.filename}</span>
+                      {doc.sealed && <Stamp size={12} className="shrink-0 text-ok" aria-label="Versiegelt" />}
+                    </span>
+                    <span className="block truncate text-[11px] text-subtle">
+                      {doc.status === "extracted"
+                        ? `${doc.provider === "reference" ? "Referenz · " : ""}${DOC_TYPE_LABELS[doc.doc_type ?? "other"]} · ${doc.sender ?? "–"} · ${formatMoney(doc.total_amount, doc.currency)}`
+                        : doc.status === "failed"
+                          ? "Analyse fehlgeschlagen"
+                          : doc.status === "processing"
+                            ? "Analyse läuft…"
+                            : `Hochgeladen ${formatDate(doc.created_at)} · ${formatBytes(doc.size_bytes)}`}
+                    </span>
+                    {isHighRisk(doc) && (
+                      <span className="chip mt-1 border-bad-line bg-bad-soft text-[10px] text-bad">EU AI Act Anhang III</span>
+                    )}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onTogglePin(doc)}
                   className={cx(
-                    "rounded-md p-1 transition-colors duration-150",
-                    doc.pinned ? "text-accent" : "text-subtle opacity-0 hover:text-fg group-hover:opacity-100 focus:opacity-100",
+                    "rounded-md p-1.5 transition-[color,opacity] duration-150",
+                    doc.pinned ? "text-accent" : "text-subtle opacity-0 hover:text-fg group-hover:opacity-100 focus-visible:opacity-100",
                   )}
-                  aria-label={doc.pinned ? "Lösen" : "Anpinnen"}
+                  aria-label={doc.pinned ? `${doc.filename} lösen` : `${doc.filename} anpinnen`}
+                  aria-pressed={doc.pinned}
                   title={doc.pinned ? "Lösen" : "Oben anpinnen"}
                 >
-                  <Pin size={14} />
+                  <Pin size={14} aria-hidden="true" />
                 </button>
               </div>
             </li>
