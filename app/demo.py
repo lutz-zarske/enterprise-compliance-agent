@@ -132,3 +132,248 @@ def demo_documents() -> list[tuple[str, bytes]]:
         ("Rechnung_Fehlerhaft_Steuerfalle.pdf", build_pdf([FAULTY_INVOICE_LINES])),
         ("KI_Recruiting_Dienstleistervertrag.pdf", recruiting),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Referenz-Audits: vorberechnete KI-Antworten fuer den Betrieb ohne Modell
+# ---------------------------------------------------------------------------
+#
+# Ersetzt wird ausschliesslich die *Modellantwort* (Extraktion + AI-Act-/
+# DSGVO-Audit).  Maskierungszwang, Regex-Zweitmeinung, Eskalationsregeln,
+# Scorecard und Ledger-Eintrag laufen ueber denselben Codepfad wie bei einer
+# echten Analyse.  Ergebnisse sind ueberall als Referenz-Audit gekennzeichnet
+# (``model="reference-fixture"``, ``provider="reference"``).
+
+#: Kennzeichnung in Datenbank, Ledger, UI und Zertifikat.
+REFERENCE_MODEL = "reference-fixture"
+REFERENCE_PROVIDER = "reference"
+
+#: Siegel der gueltigen Musterrechnung - ausdruecklich keine echte Pruefung.
+DEMO_AUDITOR = "Demo-Prüfer (Musterdaten)"
+DEMO_SEAL_NOTE = (
+    "Referenz-Siegel der Musterdaten. Es dokumentiert den Ablauf, nicht die "
+    "Prüfung durch eine reale Person."
+)
+
+_NO_AI = {
+    "describes_ai_system": False,
+    "overall_risk_level": "not_applicable",
+    "systems": [],
+    "reasoning": "Das Dokument ist eine Rechnung über Waren bzw. Dienstleistungen und beschreibt kein KI-System im Sinne von Art. 3 Nr. 1.",
+    "obligations": [],
+}
+
+REFERENCE_AUDITS: dict[str, dict[str, dict]] = {
+    "Rechnung_Gueltig_14UStG.pdf": {
+        "extraction": {
+            "doc_type": "invoice",
+            "sender": "Nordlicht IT-Services GmbH",
+            "sender_address": "Hafenstraße 12, 20457 Hamburg",
+            "recipient": "Brandt Maschinenbau AG",
+            "recipient_address": "Industrieweg 7, 70565 Stuttgart",
+            "sender_tax_number": "22/815/08150",
+            "sender_vat_id": "DE287654321",
+            "document_number": "RE-2025-0142",
+            "document_date": "2025-03-14",
+            "due_date": "2025-04-13",
+            "service_period": "01.02.2025 - 28.02.2025",
+            "items_description": "Managed-Security-Service (Pauschale Februar 2025) und 12 Stunden Incident-Response-Bereitschaft",
+            "net_amount": "6000.00",
+            "tax_rate": "19",
+            "tax_amount": "1140.00",
+            "total_amount": "7140.00",
+            "currency": "EUR",
+            "iban": "DE89370400440532013000",
+            "summary": "Rechnung der Nordlicht IT-Services GmbH über Managed-Security-Leistungen im Februar 2025. Alle Pflichtangaben sind vorhanden, die Beträge sind rechnerisch korrekt.",
+            "issues": [],
+        },
+        "audit": {
+            "ai_act": _NO_AI,
+            "gdpr": {
+                "contains_personal_data": False,
+                "findings": [],
+                "risk_level": "none",
+                "reasoning": "Das Dokument enthält ausschließlich Unternehmensdaten; die IBAN gehört einer juristischen Person.",
+                "recommendations": [],
+            },
+        },
+    },
+    "Rechnung_Fehlerhaft_Steuerfalle.pdf": {
+        "extraction": {
+            "doc_type": "invoice",
+            "sender": "Schnell & Billig Handels GmbH",
+            "sender_address": "Am Markt 3, 04109 Leipzig",
+            "recipient": "Brandt Maschinenbau AG",
+            "recipient_address": "Industrieweg 7, 70565 Stuttgart",
+            "document_number": "2025-77",
+            "document_date": "2025-05-02",
+            "items_description": "Büromöbel-Set Executive, 3 Stück",
+            "net_amount": "4500.00",
+            "tax_rate": "16",
+            "tax_amount": "720.00",
+            "total_amount": "5220.00",
+            "currency": "EUR",
+            "iban": "DE12345678901234567890",
+            "summary": "Rechnung über drei Büromöbel-Sets. Steuernummer bzw. USt-IdNr. und Leistungsdatum fehlen, der Steuersatz von 16 % ist unzulässig und die IBAN besteht die Prüfziffernkontrolle nicht.",
+            "issues": [
+                "Weder Steuernummer noch USt-IdNr. des Ausstellers angegeben.",
+                "Umsatzsteuersatz 16 % ist seit 01.01.2021 nicht mehr zulässig.",
+                "Kein Liefer- bzw. Leistungsdatum angegeben.",
+            ],
+        },
+        "audit": {
+            "ai_act": _NO_AI,
+            "gdpr": {
+                "contains_personal_data": False,
+                "findings": [],
+                "risk_level": "none",
+                "reasoning": "Keine personenbezogenen Daten erkannt.",
+                "recommendations": [],
+            },
+        },
+    },
+    "KI_Recruiting_Dienstleistervertrag.pdf": {
+        "extraction": {
+            "doc_type": "contract",
+            "sender": "TalentScreen AI GmbH",
+            "recipient": "Enterprise Corp SE",
+            "due_date": "2024-12-31",
+            "total_amount": "45000.00",
+            "currency": "EUR",
+            "iban": "DE89370400440532013000",
+            "summary": "Vertrag über das KI-System TalentAI, das Bewerberinnen und Bewerber automatisiert bewertet. Vergütung 45.000 EUR, fällig zum 31.12.2024.",
+            "issues": ["Kein Nachweis einer Konformitätsbewertung bzw. CE-Kennzeichnung für das KI-System."],
+        },
+        "audit": {
+            "ai_act": {
+                "describes_ai_system": True,
+                "overall_risk_level": "high",
+                "systems": [
+                    {
+                        "name": "TalentAI",
+                        "purpose": "Automatisierte Bewertung und Vorauswahl von Bewerberinnen und Bewerbern",
+                        "risk_level": "high",
+                        "annex_iii_categories": ["employment_and_worker_management"],
+                        "evidence": "Das System TalentAI bewertet Bewerber automatisiert",
+                        "confidence": 0.95,
+                    }
+                ],
+                "reasoning": (
+                    "TalentAI bewertet Bewerber automatisiert. Das fällt unter Anhang III Nr. 4 lit. a "
+                    "(Einstellung und Auswahl natürlicher Personen) und ist nach Art. 6 Abs. 2 ein "
+                    "Hochrisiko-KI-System. Die Ausnahme nach Art. 6 Abs. 3 greift nicht, weil eine "
+                    "Bewertung von Bewerbern ein Profiling natürlicher Personen ist."
+                ),
+                "obligations": [
+                    "Betreiberpflichten nach Art. 26: Einsatz gemäß Gebrauchsanweisung, menschliche Aufsicht, Aufbewahrung der Logs mindestens sechs Monate",
+                    "Information der Beschäftigtenvertretung vor Inbetriebnahme (Art. 26 Abs. 7)",
+                    "Nachweis der Konformitätsbewertung (Art. 43) und CE-Kennzeichnung (Art. 48) durch den Anbieter anfordern",
+                    "Datenschutz-Folgenabschätzung nach Art. 35 DSGVO",
+                ],
+            },
+            "gdpr": {
+                "contains_personal_data": True,
+                "findings": [
+                    {
+                        "category": "contact_data",
+                        "masked_value": "datenschutz@talentscreen-ai.de",
+                        "context": "Kontakt: datenschutz@talentscreen-ai.de",
+                        "confidence": 0.9,
+                    }
+                ],
+                "risk_level": "low",
+                "reasoning": "Im Dokument selbst nur eine Funktionsadresse; das beschriebene System verarbeitet jedoch Bewerberdaten.",
+                "recommendations": [
+                    "Datenschutz-Folgenabschätzung (Art. 35 DSGVO) vor Einsatz durchführen",
+                    "Auftragsverarbeitungsvertrag nach Art. 28 DSGVO mit dem Anbieter abschließen",
+                ],
+            },
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Musterantworten des Compliance Copilots (ohne Sprachmodell)
+# ---------------------------------------------------------------------------
+
+#: Die drei Standardfragen, die das Frontend als Vorschlag anbietet.
+STANDARD_QUESTIONS = (
+    "Welche Pflichtangaben fehlen in dieser Rechnung?",
+    "Warum stuft das System dieses PDF als Anhang III Nr. 4 ein?",
+    "Wie muss die Rechnung korrigiert werden, um vorsteuerabzugsberechtigt zu sein?",
+)
+
+REFERENCE_ANSWERS: dict[str, tuple[str, str, str]] = {
+    "Rechnung_Gueltig_14UStG.pdf": (
+        "Keine. Alle Pflichtangaben nach § 14 Abs. 4 Satz 1 UStG sind vorhanden:\n"
+        "- Name und Anschrift des Ausstellers [Z. 2] [Z. 3] und des Empfängers [Z. 5] [Z. 6] (Nr. 1)\n"
+        "- Steuernummer und USt-IdNr. [Z. 4] (Nr. 2)\n"
+        "- Ausstellungsdatum [Z. 8] und Rechnungsnummer [Z. 7] (Nr. 3 und 4)\n"
+        "- Art und Umfang der Leistung [Z. 10] [Z. 11] und Leistungszeitraum [Z. 9] (Nr. 5 und 6)\n"
+        "- Nettoentgelt, Steuersatz und Steuerbetrag [Z. 12] [Z. 13] (Nr. 7 und 8)\n"
+        "Hinweis: Es handelt sich um ein reines PDF. Im inländischen B2B-Verkehr ist das seit 01.01.2025 eine "
+        "„sonstige Rechnung“, die nur in der Übergangsfrist zulässig ist.",
+        "Gar nicht. Das Dokument ist eine Rechnung über IT-Sicherheitsleistungen und beschreibt kein KI-System "
+        "im Sinne von Art. 3 Nr. 1 VO (EU) 2024/1689. Eine Einstufung nach Anhang III Nr. 4 kommt deshalb nicht in Betracht.",
+        "Eine Korrektur ist nicht nötig. Die Rechnung erfüllt § 14 Abs. 4 UStG, der Steuerbetrag von 1.140,00 EUR "
+        "entspricht 19 % des Nettoentgelts [Z. 12] [Z. 13], und die IBAN besteht die Prüfziffernkontrolle [Z. 16]. "
+        "Der Vorsteuerabzug nach § 15 Abs. 1 UStG ist aus formeller Sicht möglich.",
+    ),
+    "Rechnung_Fehlerhaft_Steuerfalle.pdf": (
+        "Es fehlen zwei Pflichtangaben:\n"
+        "- Steuernummer oder USt-IdNr. des Ausstellers – im Kopf [Z. 2] [Z. 3] steht keine "
+        "(§ 14 Abs. 4 Satz 1 Nr. 2 UStG)\n"
+        "- Zeitpunkt der Lieferung bzw. Leistung – nur das Rechnungsdatum [Z. 7] ist angegeben "
+        "(§ 14 Abs. 4 Satz 1 Nr. 6 UStG)\n"
+        "Zusätzlich fehlerhaft: Der Steuersatz von 16 % [Z. 10] ist seit 01.01.2021 nicht mehr zulässig "
+        "(§ 12 Abs. 1 UStG), und die IBAN [Z. 12] besteht die Prüfziffernkontrolle (MOD-97) nicht.",
+        "Gar nicht. Das Dokument ist eine Warenrechnung über Büromöbel [Z. 8] und beschreibt kein KI-System. "
+        "Anhang III Nr. 4 VO (EU) 2024/1689 ist nicht einschlägig.",
+        "Der Lieferant muss eine berichtigte Rechnung ausstellen:\n"
+        "1. Steuernummer oder USt-IdNr. ergänzen (§ 14 Abs. 4 Satz 1 Nr. 2 UStG).\n"
+        "2. Liefer- bzw. Leistungsdatum ergänzen (Nr. 6); die Angabe „Lieferdatum entspricht Rechnungsdatum“ genügt.\n"
+        "3. Den Regelsteuersatz von 19 % ausweisen (§ 12 Abs. 1 UStG).\n"
+        "4. Die Bankverbindung korrigieren – die IBAN [Z. 12] ist ungültig; vor Zahlung beim Lieferanten auf "
+        "bekanntem Weg verifizieren.\n"
+        "Bis zur Berichtigung ist der Vorsteuerabzug nach § 15 Abs. 1 UStG gefährdet. Selbst danach gilt: "
+        "Ist zu wenig Steuer ausgewiesen, kann der Empfänger höchstens den ausgewiesenen Betrag (720,00 EUR [Z. 10]) "
+        "als Vorsteuer abziehen, während der Lieferant die gesetzliche Steuer aus dem Bruttobetrag schuldet "
+        "(19 % aus 5.220,00 EUR = 833,45 EUR). Keine Steuer- oder Rechtsberatung; im Zweifel Rücksprache mit der Steuerabteilung.",
+    ),
+    "KI_Recruiting_Dienstleistervertrag.pdf": (
+        "Das Dokument ist ein Vertrag, keine Rechnung [Z. 2]. Die Pflichtangaben nach § 14 Abs. 4 UStG sind "
+        "daher nicht einschlägig. Soll aus dem Vertrag abgerechnet werden, fehlen für eine ordnungsgemäße Rechnung "
+        "unter anderem Rechnungsnummer, Ausstellungsdatum, Steuernummer bzw. USt-IdNr., Nettoentgelt, "
+        "Steuersatz und Steuerbetrag; die Angabe „45000 EUR“ [Z. 5] ist kein ausreichender Steuerausweis.",
+        "Weil das System TalentAI Bewerber automatisiert bewertet [Z. 4]. Das ist ein Anwendungsfall nach "
+        "Anhang III Nr. 4 lit. a VO (EU) 2024/1689 (Einstellung und Auswahl natürlicher Personen) und damit "
+        "nach Art. 6 Abs. 2 hochriskant. Die Ausnahme nach Art. 6 Abs. 3 greift nicht, weil die Bewertung von "
+        "Bewerbern ein Profiling natürlicher Personen ist – solche Systeme gelten immer als hochriskant.\n"
+        "Folgen für den Käufer als Betreiber (Art. 26): menschliche Aufsicht, Logs mindestens sechs Monate "
+        "aufbewahren, Beschäftigtenvertretung vorab informieren. Vom Anbieter sind Konformitätsbewertung "
+        "(Art. 43) und CE-Kennzeichnung (Art. 48) nachzuweisen; im Vertrag fehlt dazu jeder Hinweis. "
+        "Die Hochrisiko-Pflichten nach Anhang III gelten seit der Änderung durch VO (EU) 2026/1744 ab dem 02.12.2027.",
+        "Das Dokument ist keine Rechnung, ein Vorsteuerabzug stützt sich erst auf die spätere Rechnung. Diese "
+        "muss alle Angaben nach § 14 Abs. 4 UStG enthalten, insbesondere Rechnungsnummer, Ausstellungsdatum, "
+        "Steuernummer bzw. USt-IdNr., Leistungszeitraum sowie Nettoentgelt, Steuersatz und Steuerbetrag "
+        "getrennt. Der Betrag „45000 EUR“ [Z. 5] lässt offen, ob es sich um einen Netto- oder Bruttobetrag handelt.",
+    ),
+}
+
+
+def normalize_question(question: str) -> str:
+    """Toleranter Vergleich: Gross-/Kleinschreibung, Leerzeichen und Satzzeichen egal."""
+    return "".join(char for char in question.casefold() if char.isalnum())
+
+
+_STANDARD_KEYS = {normalize_question(question): index for index, question in enumerate(STANDARD_QUESTIONS)}
+
+
+def reference_answer(filename: str, question: str) -> str | None:
+    """Musterantwort fuer eine Standardfrage zu einem Musterdokument (sonst ``None``)."""
+    index = _STANDARD_KEYS.get(normalize_question(question))
+    answers = REFERENCE_ANSWERS.get(filename)
+    if index is None or answers is None:
+        return None
+    return answers[index]

@@ -33,6 +33,12 @@ _RISK_LABELS = {
     "not_applicable": "Kein KI-System beschrieben",
 }
 
+#: Kennzeichnung vorberechneter Musterdaten-Audits in allen Ausgabeformaten.
+REFERENCE_NOTE = (
+    "Referenz-Audit der Musterdaten: Die Modellantwort ist vorberechnet (keine KI-Inferenz). "
+    "Score, Maskierung, Eskalationsregeln und Hash-Kette stammen aus dem regulären Regelwerk."
+)
+
 _SOURCE_LABELS = {"llm": "KI-Modell", "rule_based": "Regelwerk", "both": "KI + Regelwerk"}
 
 
@@ -119,6 +125,7 @@ def build_report(
             "provider": record.provider or (compliance.provider if compliance else None),
             "privacy_gateway": compliance.privacy_gateway if compliance else None,
             "audited_at": compliance.audited_at.isoformat() if compliance else None,
+            "reference_audit": record.provider == "reference",
         },
         "score": scorecard.model_dump(mode="json") if scorecard else None,
         "release_recommendation": scorecard.release_recommendation if scorecard else "Noch nicht analysiert",
@@ -207,6 +214,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"{'intakt' if report['ledger']['chain_valid'] else 'GEBROCHEN'}",
         "",
     ]
+    if report["inference"].get("reference_audit"):
+        lines += [f"> {REFERENCE_NOTE}", ""]
     if score.get("cap_applied"):
         lines += [f"> {score['cap_applied']}", ""]
 
@@ -319,6 +328,7 @@ h2 {{ font-size: 11.5pt; margin: 18px 0 6px; padding-bottom: 4px; border-bottom:
 .score b {{ font-size: 26pt; display: block; line-height: 1; }}
 .green {{ color: #047857; border-color: #059669; }} .amber {{ color: #b45309; border-color: #d97706; }} .red {{ color: #be123c; border-color: #e11d48; }}
 .verdict {{ margin: 14px 0; padding: 10px 12px; border-radius: 8px; font-weight: 600; }}
+.refnote {{ margin-top: 12px; padding: 8px 12px; border: 1px dashed #94a3b8; border-radius: 8px; font-size: 9pt; color: #334155; }}
 .verdict.ok {{ background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }}
 .verdict.bad {{ background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }}
 table {{ width: 100%; border-collapse: collapse; margin-top: 4px; }}
@@ -346,6 +356,7 @@ footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
   <div class="small">Audit-ID <span class="mono">{_e(report['audit_id'])}</span></div></div>
   <div class="score {_e(band)}"><b>{_e(score.get('score', '–'))}</b>/100<div class="small">{_e(score.get('band_label'))}</div></div>
 </div>
+{f'<div class="refnote">{_e(REFERENCE_NOTE)}</div>' if report['inference'].get('reference_audit') else ''}
 <div class="verdict {'bad' if report['release_blocked'] else 'ok'}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
 
 <h2>Dokument &amp; Prüfkette</h2>

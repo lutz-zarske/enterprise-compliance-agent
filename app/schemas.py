@@ -1030,6 +1030,9 @@ class CopilotResponse(ApiModel):
     model: str
     provider: str
     duration_ms: int
+    reference: bool = Field(
+        default=False, description="True bei hinterlegter Musterantwort (Musterdaten, ohne Sprachmodell)."
+    )
 
 
 class TextSpan(ApiModel):

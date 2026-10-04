@@ -28,7 +28,7 @@ import anyio.to_thread
 from app.audit_ledger import AuditEventType, AuditLedger, LedgerEntry
 from app.config import Settings
 from app.db import DocumentRecord, DocumentRepository, NewDocument, utcnow
-from app.llm import PROMPT_HASH, StructuredLLMClient
+from app.llm import PROMPT_HASH, ComplianceAuditPayload, StructuredLLMClient
 from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import VaultedClient
 from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
@@ -46,6 +46,7 @@ from app.schemas import (
     ExtractionResult,
     GDPRAssessment,
     PIICategory,
+    PIIFinding,
     RiskLevel,
     Scorecard,
     SignOff,
@@ -439,11 +440,52 @@ class DocumentService:
             progress.clear(record.id)
             raise
 
+        provider = getattr(client, "provider", "local")
+        vault_report = client.vault.report if isinstance(client, VaultedClient) else None
+        if isinstance(client, VaultedClient):
+            client.vault.clear()
+        return await self._finalize_analysis(
+            record,
+            extraction=extraction,
+            audit_payload=audit_payload,
+            rule_findings=rule_findings,
+            model=client.model,
+            provider=provider,
+            vault_report=vault_report,
+            duration_ms=extraction_ms + audit_ms,
+            audit_ms=audit_ms,
+            enforce_ustg=enforce_ustg,
+            escalate=escalate,
+        )
+
+    async def _finalize_analysis(
+        self,
+        record: DocumentRecord,
+        *,
+        extraction: ExtractionResult,
+        audit_payload: ComplianceAuditPayload,
+        rule_findings: list[PIIFinding],
+        model: str,
+        provider: str,
+        vault_report: dict[str, int] | None,
+        duration_ms: int,
+        audit_ms: int,
+        enforce_ustg: bool,
+        escalate: bool,
+        ledger_details: dict[str, object] | None = None,
+    ) -> ExtractionOutcome:
+        """Gemeinsamer Abschluss fuer Live- und Referenz-Audits.
+
+        Maskierungszwang, Regex-Zweitmeinung, Eskalationsregeln, Scorecard und
+        Ledger-Eintrag sind fuer beide Wege identisch - nur die Herkunft der
+        Modellantwort unterscheidet sich.
+        """
         # Deterministische Gegenprobe auf dem vollstaendigen Text.  Die
         # Maskierung laeuft vor dem Zusammenfuehren: nur so treffen sich ein
         # vom Modell im Klartext gemeldeter Wert und derselbe, vom
         # Regelscanner bereits maskierte Wert im selben Deduplizierungs-
         # schluessel und werden als ein Treffer (source="both") erkannt.
+        text = record.raw_text or ""
         llm_findings = enforce_masking(
             audit_payload.gdpr.findings, enabled=self._settings.mask_pii_in_storage
         )
@@ -460,19 +502,15 @@ class DocumentService:
         )
         ai_act = escalate_ai_act(audit_payload.ai_act) if escalate else audit_payload.ai_act
 
-        provider = getattr(client, "provider", "local")
-        vault_report = client.vault.report if isinstance(client, VaultedClient) else None
         compliance = ComplianceAudit(
             ai_act=ai_act,
             gdpr=gdpr,
-            model=client.model,
+            model=model,
             audited_at=utcnow(),
             duration_ms=audit_ms,
             provider=provider,
             privacy_gateway=vault_report,
         )
-        if isinstance(client, VaultedClient):
-            client.vault.clear()
 
         pdf_bytes = await anyio.to_thread.run_sync(self._read_pdf, record)
         scorecard = compute_scorecard(
@@ -481,7 +519,7 @@ class DocumentService:
 
         updated = await self._repository.save_results(
             record.id,
-            model=client.model,
+            model=model,
             extraction=extraction.model_dump(mode="json"),
             compliance=compliance.model_dump(mode="json"),
             scorecard=scorecard.model_dump(mode="json"),
@@ -494,7 +532,7 @@ class DocumentService:
                 event_type=AuditEventType.ANALYSIS,
                 document_id=record.id,
                 sha256_hash=record.sha256,
-                model_name=client.model,
+                model_name=model,
                 prompt_hash=PROMPT_HASH,
                 result_summary=f"{scorecard.release_recommendation} | {compliance.headline}",
                 compliance_score=scorecard.score,
@@ -506,10 +544,11 @@ class DocumentService:
                     "ruleset_version": scorecard.ruleset_version,
                     "pii_findings": len(masked),
                     "privacy_gateway": vault_report,
+                    **(ledger_details or {}),
                 },
             )
             entry_id = entry.entry_id
-        progress.clear(record.id)
+        self._progress.clear(record.id)
         logger.info(
             "Dokument %s ausgewertet: %s | Score %s | %s",
             record.id,
@@ -522,27 +561,79 @@ class DocumentService:
             record=updated,
             extraction=extraction,
             compliance=compliance,
-            duration_ms=extraction_ms + audit_ms,
+            duration_ms=duration_ms,
             scorecard=scorecard,
             provider=provider,
             audit_entry_id=entry_id,
         )
 
+    async def apply_reference_audit(self, record: DocumentRecord) -> ExtractionOutcome:
+        """Wendet das hinterlegte Referenz-Audit eines Musterdokuments an (ohne Inferenz)."""
+        from app.demo import REFERENCE_AUDITS, REFERENCE_MODEL, REFERENCE_PROVIDER
+
+        fixture = REFERENCE_AUDITS.get(record.original_filename)
+        if fixture is None:
+            raise ServiceError(f"Für '{record.original_filename}' ist kein Referenz-Audit hinterlegt.")
+        enforce_ustg, escalate = self._flags()
+        extraction = augment_extraction_issues(ExtractionResult.model_validate(fixture["extraction"]))
+        audit_payload = ComplianceAuditPayload.model_validate(fixture["audit"])
+        return await self._finalize_analysis(
+            record,
+            extraction=extraction,
+            audit_payload=audit_payload,
+            rule_findings=scan_text(record.raw_text or ""),
+            model=REFERENCE_MODEL,
+            provider=REFERENCE_PROVIDER,
+            vault_report=None,
+            duration_ms=0,
+            audit_ms=0,
+            enforce_ustg=enforce_ustg,
+            escalate=escalate,
+            ledger_details={
+                "reference_audit": True,
+                "note": "Vorberechnete Modellantwort (Musterdaten), keine Inferenz.",
+            },
+        )
+
     # --- Demo-Daten ---------------------------------------------------------
     async def seed_demo(self) -> list[dict[str, object]]:
-        """Legt die drei Referenzdokumente an (idempotent ueber die SHA-256)."""
-        from app.demo import demo_documents
+        """Legt die drei Musterdokumente an und versieht sie mit Referenz-Audits.
+
+        Funktioniert ohne laufendes Sprachmodell: Die Modellantwort stammt aus
+        ``app/demo.py``, Score, Maskierung und Ledger aus dem echten Regelwerk.
+        Idempotent ueber die SHA-256: Vorhandene Dokumente werden nur dann mit
+        dem Referenz-Audit versehen, wenn sie noch nicht analysiert sind - ein
+        spaeteres Live-Audit wird nie ueberschrieben.  Die gueltige Rechnung
+        erhaelt zusaetzlich ein ausdruecklich als Demo gekennzeichnetes Siegel.
+        """
+        from app.demo import DEMO_AUDITOR, DEMO_SEAL_NOTE, demo_documents
 
         results: list[dict[str, object]] = []
         for filename, data in demo_documents():
-            existing = await self._repository.get_by_sha256(compute_sha256(data))
-            if existing is not None:
-                results.append({"id": existing.id, "filename": existing.original_filename,
-                                "status": existing.status, "created": False})
-                continue
-            record, _ = await self.ingest(filename=filename, content_type="application/pdf", data=data)
-            results.append({"id": record.id, "filename": record.original_filename,
-                            "status": record.status, "created": True})
+            record = await self._repository.get_by_sha256(compute_sha256(data))
+            created = record is None
+            if record is None:
+                record, _ = await self.ingest(filename=filename, content_type="application/pdf", data=data)
+            audited = False
+            if record.status != DocumentStatus.EXTRACTED.value:
+                outcome = await self.apply_reference_audit(record)
+                record = outcome.record
+                audited = True
+                if filename == "Rechnung_Gueltig_14UStG.pdf":
+                    record = await self.sign_off(
+                        record,
+                        SignOffRequest(auditor_name=DEMO_AUDITOR, note=DEMO_SEAL_NOTE),
+                    )
+            results.append(
+                {
+                    "id": record.id,
+                    "filename": record.original_filename,
+                    "status": record.status,
+                    "created": created,
+                    "reference_audit": audited,
+                    "compliance_score": (record.scorecard or {}).get("score"),
+                }
+            )
         return results
 
     # --- Human Oversight (EU AI Act Art. 14) --------------------------------
@@ -610,6 +701,16 @@ class DocumentService:
         """Beantwortet eine Pruefer-Frage, geerdet auf Dokumenttext und Pruefergebnis."""
         if not record.raw_text:
             raise NoTextAvailableError(f"Zum Dokument {record.id} liegt kein Text vor.")
+
+        # Musterdokumente mit Referenz-Audit: Standardfragen ohne Sprachmodell.
+        from app.demo import REFERENCE_PROVIDER, reference_answer
+
+        if record.provider == REFERENCE_PROVIDER:
+            answer = reference_answer(record.original_filename, question)
+            if answer is not None:
+                return {"answer": answer, "model": "reference-answer", "provider": REFERENCE_PROVIDER,
+                        "duration_ms": 0, "reference": True}
+
         client = self._acquire_client()
         grounding = build_copilot_grounding(record, self._settings.max_prompt_chars)
         messages = [
@@ -624,7 +725,8 @@ class DocumentService:
         provider = getattr(client, "provider", "local")
         if isinstance(client, VaultedClient):
             client.vault.clear()
-        return {"answer": answer, "model": client.model, "provider": provider, "duration_ms": duration_ms}
+        return {"answer": answer, "model": client.model, "provider": provider, "duration_ms": duration_ms,
+                "reference": False}
 
     # --- Kennzahlen ---------------------------------------------------------
     async def kpis(self) -> dict[str, object]:

@@ -117,7 +117,7 @@ def _load_fernet(settings: Settings) -> Fernet:
         os.chmod(key_file, 0o600)
     except OSError:  # pragma: no cover - z. B. Windows ohne POSIX-Rechte
         pass
-    logger.info("Neuer Settings-Schluessel erzeugt (data/.settings.key).")
+    logger.info("Neuer Settings-Schluessel erzeugt (%s).", key_file.name)
     return Fernet(key)
 
 
