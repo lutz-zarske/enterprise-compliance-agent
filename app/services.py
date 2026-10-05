@@ -132,6 +132,14 @@ class InvalidEInvoiceUploadError(UploadValidationError):
     hint = "Erwartet wird eine XRechnung bzw. ein ZUGFeRD-/Factur-X-Datensatz (CII oder UBL)."
 
 
+class OriginalMissingError(ServiceError):
+    """Die Originaldatei fehlt im Ablageverzeichnis."""
+
+    code = "original_missing"
+    status_code = 410
+    hint = "Ablageverzeichnis (UPLOAD_DIR) und Datensicherung pruefen; das Dokument erneut hochladen."
+
+
 class NoTextAvailableError(ServiceError):
     """Zum Dokument liegt kein extrahierbarer Text vor."""
 
@@ -403,6 +411,28 @@ class DocumentService:
             return path.read_bytes()
         except OSError:
             return None
+
+    async def read_original(self, record: DocumentRecord) -> bytes:
+        """Originalbeleg bitgenau; die Pruefsumme muss zur Datenbank passen."""
+        data = await anyio.to_thread.run_sync(self._read_pdf, record)
+        if data is None:
+            raise OriginalMissingError(f"Originaldatei zu Dokument {record.id} nicht gefunden.")
+        if compute_sha256(data) != record.sha256:
+            raise OriginalMissingError(
+                f"Originaldatei zu Dokument {record.id} weicht von der gespeicherten SHA-256 ab."
+            )
+        return data
+
+    @staticmethod
+    def embedded_xml(record: DocumentRecord, original: bytes) -> tuple[str, bytes] | None:
+        """Eingebetteter E-Rechnungs-Datensatz einer hybriden Rechnung (fuer das Pruefpaket)."""
+        einvoice = parse_einvoice(record)
+        if einvoice is None or einvoice.source != "embedded":
+            return None
+        attachment = find_einvoice_attachment(original)
+        if attachment is None:
+            return None
+        return attachment.name, attachment.data
 
     # --- Ingestion ---------------------------------------------------------
     async def ingest(

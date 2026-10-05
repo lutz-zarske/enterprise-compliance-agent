@@ -17,7 +17,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Projektwurzel (…/enterprise-compliance-agent), unabhaengig vom CWD.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 APP_TITLE = "Enterprise KI-Compliance- & Dokumenten-Agent"
 
 

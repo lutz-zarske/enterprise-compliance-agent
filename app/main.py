@@ -9,11 +9,15 @@ konkretem Handlungshinweis.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import secrets
 import time
 import uuid
+from functools import partial
+from urllib.parse import quote
 
+import anyio.to_thread
 import httpx
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -30,6 +34,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.audit_ledger import AuditLedger
 from app.config import APP_TITLE, APP_VERSION, Settings, get_settings
 from app.db import build_repository, utcnow
+from app.gobd_export import build_gobd_package
 from app.inference import InferenceRouter
 from app.llm import LLMError, OllamaClient, OllamaUnavailableError
 from app.providers import (
@@ -42,6 +47,7 @@ from app.runtime_settings import CLOUD_PROVIDERS, InferenceMode, RuntimeSettings
 from app.logging_config import configure_logging, normalize_request_id, request_id_var
 from app.rate_limit import RateLimitExceededError, TokenBucketLimiter, rate_limit
 from app.pdf_reader import PdfReadError
+from app.signing import SystemSigner
 from app.schemas import (
     ComponentHealth,
     ConnectionTestRequest,
@@ -92,6 +98,10 @@ Institutionelles Backend zur automatisierten Pruefung von Geschaeftsdokumenten.
 * **DSGVO-Audit** mit Art.-9/10-Erkennung und drei Maskierungsstufen.
 * **Hash-verkettetes Pruefprotokoll** (EU AI Act Art. 12, GoBD) und
   **Human-Oversight-Siegel** (Art. 14) mit druckfertigem Pruefzertifikat.
+* **E-Rechnung (EN 16931)**: ZUGFeRD/Factur-X-Anhaenge und reine XRechnung (CII/UBL)
+  werden deterministisch gelesen; bei hybriden Rechnungen ist der XML-Teil massgeblich.
+* **Pruefdatenpaket (ZIP)** mit Originalbeleg, XML, Ledger-Auszug, Zertifikat und
+  Ed25519-signiertem Manifest.
 * **Multi-Provider-Inferenz**: lokal (Ollama, Default) oder Gemini / Claude / GPT -
   Cloud-Aufrufe ausschliesslich ueber das Privacy Gateway (Pseudonymisierung).
 
@@ -140,6 +150,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ledger = ledger
     app.state.runtime = runtime
     app.state.router = router
+    app.state.signer = SystemSigner(settings.data_dir / ".signing.key")
     app.state.service = DocumentService(
         settings, repository, router, ledger=ledger, runtime=runtime, progress=PROGRESS
     )
@@ -384,6 +395,12 @@ async def _read_upload(upload: UploadFile, max_bytes: int) -> bytes:
     return bytes(buffer)
 
 
+def _attachment_header(filename: str) -> str:
+    """Content-Disposition mit ASCII-Fallback und RFC-5987-Dateinamen (Umlaute)."""
+    fallback = filename.encode("ascii", "replace").decode("ascii").replace("?", "_").replace('"', "")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"
+
+
 def _register_routes(application: FastAPI) -> None:
     error_responses: dict[int | str, dict[str, object]] = {
         401: {"model": ErrorResponse, "description": "API-Key fehlt oder ist ungueltig"},
@@ -486,7 +503,7 @@ def _register_routes(application: FastAPI) -> None:
         response_model=UploadResponse,
         status_code=status.HTTP_201_CREATED,
         tags=["Dokumente"],
-        summary="PDF hochladen, validieren und Text extrahieren",
+        summary="PDF oder XML (E-Rechnung) hochladen, validieren und Text extrahieren",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("upload", "rate_limit_upload_per_minute")),
@@ -495,20 +512,21 @@ def _register_routes(application: FastAPI) -> None:
             **error_responses,
             413: {"model": ErrorResponse, "description": "Datei zu gross"},
             429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"},
-            415: {"model": ErrorResponse, "description": "Kein PDF"},
-            422: {"model": ErrorResponse, "description": "PDF ohne Textlayer oder beschaedigt"},
+            415: {"model": ErrorResponse, "description": "Weder PDF noch XML"},
+            422: {"model": ErrorResponse, "description": "PDF ohne Textlayer/beschaedigt oder XML keine EN-16931-Rechnung"},
         },
     )
     async def upload_document(
-        file: UploadFile = File(..., description="PDF-Datei (multipart/form-data)."),
+        file: UploadFile = File(..., description="PDF oder XRechnung/ZUGFeRD-XML (multipart/form-data)."),
         service: DocumentService = Depends(get_service),
         settings: Settings = Depends(get_app_settings),
     ) -> UploadResponse:
-        """Nimmt ein PDF entgegen, prueft es und legt es samt Text ab.
+        """Nimmt ein PDF oder eine XML-E-Rechnung entgegen, prueft sie und legt sie samt Text ab.
 
-        Geprueft werden Dateiendung, Content-Type, Groesse, die PDF-Signatur und
-        das Vorhandensein eines Textlayers. Erst danach wird gespeichert - ein
-        unlesbares Dokument landet nie in der Datenbank. Die Extraktion selbst
+        PDF: Dateiendung, Content-Type, Groesse, PDF-Signatur und Textlayer; ein
+        eingebetteter ZUGFeRD-/Factur-X-/XRechnung-Datensatz wird gelesen und mit
+        dem Bildteil abgeglichen. XML: EN-16931-Rechnung in CII- oder UBL-Syntax,
+        geparst ohne DTD und Entitaeten. Erst danach wird gespeichert. Die Analyse
         startet separat ueber ``POST /documents/{id}/extract``.
         """
         data = await _read_upload(file, settings.max_upload_bytes)
@@ -620,7 +638,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.post(
         "/documents/upload-batch",
         tags=["Dokumente"],
-        summary="Mehrere PDFs in einem multipart-Request hochladen",
+        summary="Mehrere PDFs bzw. XML-E-Rechnungen in einem multipart-Request hochladen",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("upload", "rate_limit_upload_per_minute")),
@@ -628,11 +646,11 @@ def _register_routes(application: FastAPI) -> None:
         responses={**error_responses, 429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"}},
     )
     async def upload_batch(
-        files: list[UploadFile] = File(..., description="Ein oder mehrere PDF-Dateien."),
+        files: list[UploadFile] = File(..., description="Eine oder mehrere PDF- bzw. XML-Dateien."),
         service: DocumentService = Depends(get_service),
         settings: Settings = Depends(get_app_settings),
     ) -> dict[str, object]:
-        """Jede Datei wird einzeln validiert; ein fehlerhaftes PDF bricht den Batch nicht ab."""
+        """Jede Datei wird einzeln validiert; eine fehlerhafte Datei bricht den Batch nicht ab."""
         if len(files) > settings.max_batch_files:
             raise UploadValidationError(
                 f"Maximal {settings.max_batch_files} Dateien pro Batch erlaubt ({len(files)} gesendet)."
@@ -653,6 +671,7 @@ def _register_routes(application: FastAPI) -> None:
                         "sha256": record.sha256,
                         "page_count": record.page_count,
                         "duplicate_of": duplicate_of,
+                        "einvoice_profile": (record.einvoice or {}).get("profile"),
                     }
                 )
             except (ServiceError, PdfReadError) as exc:
@@ -744,6 +763,62 @@ def _register_routes(application: FastAPI) -> None:
         return HTMLResponse(
             render_html(report),
             headers={"Content-Security-Policy": REPORT_CSP, "X-Content-Type-Options": "nosniff"},
+        )
+
+    @application.get(
+        "/api/documents/{document_id}/export/gobd",
+        tags=["Human Oversight"],
+        summary="Prüfdatenpaket als ZIP (Original, XML, Ledger, Zertifikat, signiertes Manifest)",
+        dependencies=[Depends(require_api_key)],
+        response_class=Response,
+        responses={
+            **error_responses,
+            200: {"content": {"application/zip": {}}, "description": "ZIP-Archiv"},
+            409: {"model": ErrorResponse, "description": "Noch nicht analysiert"},
+            410: {"model": ErrorResponse, "description": "Originaldatei fehlt oder weicht ab"},
+        },
+    )
+    async def export_gobd(
+        request: Request,
+        document_id: str = Path(...),
+        service: DocumentService = Depends(get_service),
+    ) -> Response:
+        """GoBD-orientiertes Einzelbeleg-Paket (Rz. 58 ff.: Nachvollziehbarkeit, Unveraenderbarkeit).
+
+        Das Manifest traegt SHA-256 je Datei und eine Ed25519-Signatur dieser
+        Installation; den Fingerabdruck liefert ``GET /api/audit/signing-key``.
+        Kein Datentraeger nach dem Beschreibungsstandard (index.xml) und kein
+        qualifiziertes Siegel nach eIDAS.
+        """
+        record = await service.require_document(document_id)
+        if not record.scorecard:
+            raise DocumentNotAnalyzedError(f"Dokument {document_id} ist noch nicht analysiert.")
+        ledger: AuditLedger = request.app.state.ledger
+        entries = await ledger.list(document_id=document_id, limit=1000)
+        verification = await ledger.verify_chain()
+        original = await service.read_original(record)
+        certificate = render_html(build_report(record, entries[:50], verification))
+        data, _ = await anyio.to_thread.run_sync(
+            partial(
+                build_gobd_package,
+                record,
+                original=original,
+                embedded_xml=service.embedded_xml(record, original),
+                entries=entries,
+                verification=verification,
+                certificate_html=certificate,
+                signer=request.app.state.signer,
+            )
+        )
+        stem = record.original_filename.rsplit(".", 1)[0]
+        logger.info("Pruefdatenpaket fuer %s erzeugt (%s Bytes).", record.id, len(data))
+        return Response(
+            data,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": _attachment_header(f"Pruefdatenpaket_{stem}.zip"),
+                "X-Content-SHA256": hashlib.sha256(data).hexdigest(),
+            },
         )
 
     @application.post(
@@ -897,6 +972,18 @@ def _register_routes(application: FastAPI) -> None:
         ledger: AuditLedger = request.app.state.ledger
         head_hash, seq = await ledger.head()
         return {"head_hash": head_hash, "seq": seq, "timestamp": utcnow().isoformat()}
+
+    @application.get(
+        "/api/audit/signing-key",
+        tags=["Audit-Ledger"],
+        summary="Oeffentlicher Schluessel der System-Signatur (Ed25519)",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def signing_key(request: Request) -> dict[str, str]:
+        """Den Fingerabdruck in der Verfahrensdokumentation hinterlegen - nur dann belegt
+        die Signatur eines Pruefdatenpakets die Herkunft aus dieser Installation."""
+        signer: SystemSigner = request.app.state.signer
+        return await anyio.to_thread.run_sync(signer.public_info)
 
 
 # Modul-Level-Instanz fuer "uvicorn app.main:app".

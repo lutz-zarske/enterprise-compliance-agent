@@ -20,7 +20,14 @@ from app.config import APP_TITLE, APP_VERSION
 from app.db import DocumentRecord, utcnow
 from app.redaction import mask_value
 from app.schemas import ANNEX_III_LABELS, AnnexIIICategory
-from app.services import parse_compliance, parse_extraction, parse_scorecard, parse_sign_off
+from app.services import (
+    STRUCTURED_PROVIDER,
+    parse_compliance,
+    parse_einvoice,
+    parse_extraction,
+    parse_scorecard,
+    parse_sign_off,
+)
 
 #: CSP für die HTML-Ausgabe: keine Skripte, keine externen Ressourcen.
 REPORT_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
@@ -39,7 +46,21 @@ REFERENCE_NOTE = (
     "Score, Maskierung, Eskalationsregeln und Hash-Kette stammen aus dem regulären Regelwerk."
 )
 
-_SOURCE_LABELS = {"llm": "KI-Modell", "rule_based": "Regelwerk", "both": "KI + Regelwerk"}
+#: Kennzeichnung des deterministischen E-Rechnungs-Pfads.
+STRUCTURED_NOTE = (
+    "Strukturierte E-Rechnung: Rechnungsdaten deterministisch aus dem EN-16931-Datensatz gelesen, "
+    "keine KI-Inferenz. Bei hybriden Rechnungen ist der XML-Teil maßgeblich (BMF-Schreiben vom 15.10.2024, Rz. 36)."
+)
+
+_SOURCE_LABELS = {
+    "llm": "KI-Modell",
+    "rule_based": "Regelwerk",
+    "both": "KI + Regelwerk",
+    "xml": "XML-Datensatz",
+    "xml_rule": "XML + Regelwerk",
+}
+
+_VISUAL_LABELS = {"match": "übereinstimmend", "mismatch": "ABWEICHUNG", "not_found": "im Bildteil nicht gefunden"}
 
 
 def _fmt_ts(value: Any) -> str:
@@ -82,6 +103,7 @@ def build_report(
     compliance = parse_compliance(record)
     scorecard = parse_scorecard(record)
     sign_off = parse_sign_off(record)
+    einvoice = parse_einvoice(record)
     analysis = next((e for e in entries if e.event_type == AuditEventType.ANALYSIS), None)
 
     tiles = {tile.key: tile for tile in scorecard.tiles} if scorecard else {}
@@ -126,7 +148,27 @@ def build_report(
             "privacy_gateway": compliance.privacy_gateway if compliance else None,
             "audited_at": compliance.audited_at.isoformat() if compliance else None,
             "reference_audit": record.provider == "reference",
+            "structured": record.provider == STRUCTURED_PROVIDER,
         },
+        "einvoice": (
+            {
+                "source": einvoice.source,
+                "attachment_name": einvoice.attachment_name,
+                "error": einvoice.error,
+                "syntax": einvoice.syntax,
+                "profile": einvoice.profile,
+                "specification_id": einvoice.specification_id,
+                "is_einvoice": einvoice.is_einvoice,
+                "xml_sha256": einvoice.xml_sha256,
+                "business_terms": [field.model_dump(mode="json") for field in einvoice.business_terms],
+                "visual_check": [check.model_dump(mode="json") for check in einvoice.visual_check],
+                "rule_violations": einvoice.rule_violations,
+                "public_buyer": einvoice.public_buyer_reason,
+                "leitweg": einvoice.leitweg.model_dump(mode="json") if einvoice.leitweg else None,
+            }
+            if einvoice
+            else None
+        ),
         "score": scorecard.model_dump(mode="json") if scorecard else None,
         "release_recommendation": scorecard.release_recommendation if scorecard else "Noch nicht analysiert",
         "release_blocked": scorecard.release_blocked if scorecard else True,
@@ -216,6 +258,8 @@ def render_markdown(report: dict[str, Any]) -> str:
     ]
     if report["inference"].get("reference_audit"):
         lines += [f"> {REFERENCE_NOTE}", ""]
+    if report["inference"].get("structured"):
+        lines += [f"> {STRUCTURED_NOTE}", ""]
     if score.get("cap_applied"):
         lines += [f"> {score['cap_applied']}", ""]
 
@@ -226,6 +270,23 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"{_STATUS_LABELS.get(check['status'], check['status'])} | {_md(check.get('detail'))}"
             f"{(' ' + _md(check['risk_note'])) if check.get('risk_note') else ''} |"
         )
+    einvoice = report.get("einvoice")
+    if einvoice and not einvoice.get("error"):
+        lines += [
+            "",
+            f"## E-Rechnung (EN 16931) – {_md(einvoice['profile'])} · {_md(einvoice['syntax'])}",
+            "",
+            "| BT | Business Term | Wert |",
+            "|---|---|---|",
+        ]
+        lines += [f"| {f['bt']} | {_md(f['label'])} | {_md(f['value'])} |" for f in einvoice["business_terms"]]
+        if einvoice["visual_check"]:
+            lines += ["", "**Abgleich XML ↔ PDF-Bildteil:**"]
+            lines += [
+                f"- {c['bt']} {_md(c['label'])}: {_VISUAL_LABELS[c['status']]}"
+                + (f" (XML {_md(c['xml_value'])}, PDF {_md(c['visual_value'])})" if c["status"] == "mismatch" else "")
+                for c in einvoice["visual_check"]
+            ]
     ai = report["ai_act"]
     lines += [
         "",
@@ -301,6 +362,30 @@ def render_html(report: dict[str, Any]) -> str:
         for f in report["gdpr"]["findings"][:25]
     ) or "<tr><td colspan='4'>Keine personenbezogenen Daten erkannt.</td></tr>"
 
+    einvoice = report.get("einvoice")
+    einvoice_block = ""
+    if einvoice and not einvoice.get("error"):
+        terms = "".join(
+            f"<tr><td class='mono'>{_e(f['bt'])}</td><td>{_e(f['label'])}</td><td class='mono'>{_e(f['value'])}</td></tr>"
+            for f in einvoice["business_terms"]
+        )
+        visual = "".join(
+            f"<tr><td class='mono'>{_e(c['bt'])}</td><td>{_e(c['label'])}</td>"
+            f"<td><span class='st st-{'pass' if c['status'] == 'match' else 'warn' if c['status'] == 'not_found' else 'fail'}'>"
+            f"{_e(_VISUAL_LABELS[c['status']])}</span></td>"
+            f"<td class='mono'>{_e(c['xml_value'])}{(' / PDF ' + _e(c['visual_value'])) if c.get('visual_value') else ''}</td></tr>"
+            for c in einvoice["visual_check"]
+        )
+        container = (
+            f"eingebettet als {_e(einvoice['attachment_name'])}" if einvoice["source"] == "embedded" else "reines XML"
+        )
+        einvoice_block = f"""<h2>E-Rechnung (EN 16931)</h2>
+<p><strong>{_e(einvoice['profile'])}</strong> · Syntax {_e(einvoice['syntax'])} · {container}</p>
+<div class="grid small"><div>SHA-256 XML-Datensatz</div><div class="mono">{_e(einvoice['xml_sha256'])}</div>
+<div>Spezifikation (BT-24)</div><div class="mono">{_e(einvoice['specification_id'])}</div></div>
+<table><thead><tr><th style="width:12%">BT</th><th style="width:38%">Business Term</th><th>Wert</th></tr></thead><tbody>{terms}</tbody></table>
+{f'<table><thead><tr><th style="width:12%">BT</th><th style="width:30%">Abgleich XML ↔ Bildteil</th><th style="width:20%">Ergebnis</th><th>Wert</th></tr></thead><tbody>{visual}</tbody></table>' if visual else ''}"""
+
     seal_block = (
         f"""<div class="sealbox {'ok' if approved else 'bad'}">{_SEAL_SVG}
         <div><div class="sealtitle">{'GEPRÜFT &amp; FREIGEGEBEN' if approved else 'GEPRÜFT – FREIGABE VERWEIGERT'}</div>
@@ -367,6 +452,7 @@ footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
   <div class="score {_e(band)}"><b>{_e(score.get('score', '–'))}</b>/100<div class="small">{_e(score.get('band_label'))}</div></div>
 </div>
 {f'<div class="refnote">{_e(REFERENCE_NOTE)}</div>' if report['inference'].get('reference_audit') else ''}
+{f'<div class="refnote">{_e(STRUCTURED_NOTE)}</div>' if report['inference'].get('structured') else ''}
 <div class="verdict {'bad' if report['release_blocked'] else 'ok'}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
 
 <h2>Dokument &amp; Prüfkette</h2>
@@ -380,6 +466,8 @@ footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
 <div>Modell / Provider</div><div>{_e(report['inference']['model'])} / {_e(report['inference']['provider'])}</div>
 <div>Regelwerk</div><div>{_e(score.get('ruleset_version'))}</div>
 </div>
+
+{einvoice_block}
 
 <h2>§ 14 Abs. 4 UStG – Pflichtangaben</h2>
 <table><thead><tr><th style="width:30%">Merkmal</th><th style="width:24%">Norm</th><th style="width:11%">Status</th><th>Hinweis</th></tr></thead><tbody>{rows(report['ustg_matrix'])}</tbody></table>

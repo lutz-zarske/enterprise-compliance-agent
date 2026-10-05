@@ -78,13 +78,30 @@ _IBAN_PATTERN = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b")
 _EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b")
 _PHONE_PATTERN = re.compile(r"(?:\+49|0049|\(0\)|\b0)[\s/.-]?\d{2,5}[\s/.-]?\d{3,}\b")
 _LONG_DIGITS_PATTERN = re.compile(r"\b\d{8,}\b")
+#: Leitweg-IDs oeffentlicher Auftraggeber (z. B. 04011000-1234512345-06) sind
+#: Behoerdenkennungen, keine Telefonnummern - erkannt am gueltigen Pruefziffernpaar.
+_LEITWEG_CANDIDATE = re.compile(r"\b\d{2,12}(?:-[A-Za-z0-9]{1,30})?-\d{2}\b")
+
+
+def _leitweg_spans(text: str) -> list[tuple[int, int]]:
+    from app.extractors.einvoice import validate_leitweg_id
+
+    return [match.span() for match in _LEITWEG_CANDIDATE.finditer(text) if validate_leitweg_id(match.group(0)).valid]
+
+
+def _overlaps(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
+    start, end = span
+    return any(start < other_end and other_start < end for other_start, other_end in spans)
 
 
 def redact_text(value: str, *, limit: int | None = None) -> str:
     """Entfernt offensichtliche Identifikatoren aus einem Freitext-Schnipsel."""
     redacted = _IBAN_PATTERN.sub(lambda m: mask_value(m.group(0).replace(" ", "")), value)
     redacted = _EMAIL_PATTERN.sub(lambda m: mask_email(m.group(0)), redacted)
-    redacted = _PHONE_PATTERN.sub("[TEL-MASKIERT]", redacted)
+    leitweg = _leitweg_spans(redacted)
+    redacted = _PHONE_PATTERN.sub(
+        lambda m: m.group(0) if _overlaps(m.span(), leitweg) else "[TEL-MASKIERT]", redacted
+    )
     redacted = _LONG_DIGITS_PATTERN.sub(lambda m: mask_value(m.group(0)), redacted)
     redacted = " ".join(redacted.split())
     if limit is not None and len(redacted) > limit:
@@ -163,6 +180,23 @@ KEYWORD_RULES: dict[PIICategory, tuple[str, ...]] = {
     ),
 }
 
+#: Kurze Schluesselwoerter nur am Wortanfang: sonst trifft "reha" in
+#: "Softwarehaus".  Laengere Begriffe bleiben Teilstrings (deutsche Komposita
+#: wie "Arztattest" oder "Universitaetsklinik").
+_SHORT_KEYWORD = 5
+_KEYWORD_OVERRIDES = {"rezept": r"rezept(?!ion)"}  # "Rezeption" ist kein Gesundheitsdatum
+
+
+def _keyword_pattern(keyword: str) -> re.Pattern[str]:
+    body = _KEYWORD_OVERRIDES.get(keyword, re.escape(keyword))
+    prefix = r"(?<![a-zäöüß])" if len(keyword) <= _SHORT_KEYWORD else ""
+    return re.compile(prefix + body)
+
+
+_KEYWORD_PATTERNS: dict[str, re.Pattern[str]] = {
+    keyword: _keyword_pattern(keyword) for keywords in KEYWORD_RULES.values() for keyword in keywords
+}
+
 #: Muster fuer schluesselwortverankerte Identifikatoren.
 _ANCHORED_PATTERNS: tuple[tuple[PIICategory, re.Pattern[str]], ...] = (
     (
@@ -239,10 +273,10 @@ def scan_text(text: str) -> list[PIIFinding]:
     for match in _EMAIL_PATTERN.finditer(text):
         add(PIICategory.CONTACT_DATA, mask_email(match.group(0)), *match.span(), 0.95)
 
+    leitweg_spans = _leitweg_spans(text)
     for match in _PHONE_PATTERN.finditer(text):
-        start, end = match.span()
-        if any(start < iban_end and iban_start < end for iban_start, iban_end in iban_spans):
-            continue  # Ziffernbloecke einer IBAN sind keine Telefonnummer.
+        if _overlaps(match.span(), iban_spans) or _overlaps(match.span(), leitweg_spans):
+            continue  # Ziffernbloecke einer IBAN oder Leitweg-ID sind keine Telefonnummer.
         digits = re.sub(r"\D", "", match.group(0))
         if len(digits) >= 7:
             add(PIICategory.CONTACT_DATA, mask_value(match.group(0).strip()), *match.span(), 0.7)
@@ -255,14 +289,14 @@ def scan_text(text: str) -> list[PIIFinding]:
     # --- Besondere Kategorien nach Art. 9/10 DSGVO -------------------------
     for category, keywords in KEYWORD_RULES.items():
         for keyword in keywords:
-            index = lowered.find(keyword)
-            if index == -1:
+            match = _KEYWORD_PATTERNS[keyword].search(lowered)
+            if match is None:
                 continue
             add(
                 category,
                 f"Schluesselwort: {keyword}",
-                index,
-                index + len(keyword),
+                match.start(),
+                match.end(),
                 0.6,
             )
 
