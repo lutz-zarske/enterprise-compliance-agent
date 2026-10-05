@@ -21,8 +21,10 @@ in ``tests/conftest.py``).
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date
 from decimal import Decimal
+from functools import cache
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -614,12 +616,38 @@ REFERENCE_ANSWERS: dict[str, tuple[str, str, str]] = {
 }
 
 
+REFERENCE_ANSWERS[HYBRID_FILENAME] = (
+    "Keine. Maßgeblich ist der eingebettete XML-Datensatz factur-x.xml [Z. 18] (BMF-Schreiben vom 15.10.2024, "
+    "Rz. 36); er enthält alle Pflichtangaben nach § 14 Abs. 4 Satz 1 UStG:\n"
+    "- Name und Anschrift von Leistendem [Z. 2] [Z. 3] und Empfänger [Z. 5] [Z. 6] (Nr. 1)\n"
+    "- Steuernummer und USt-IdNr. [Z. 4] (Nr. 2; BT-31 im XML)\n"
+    "- Rechnungsdatum [Z. 9] und Rechnungsnummer [Z. 8] (Nr. 3 und 4)\n"
+    "- Leistungen [Z. 11] [Z. 12] und Leistungszeitraum [Z. 10] (Nr. 5 und 6)\n"
+    "- Nettoentgelt, Steuersatz und Steuerbetrag [Z. 13] [Z. 14] (Nr. 7 und 8)\n"
+    "Alle acht Kernwerte des XML stimmen mit dem Bildteil überein. Da der Käufer eine Behörde ist, ist "
+    "zusätzlich die Leitweg-ID [Z. 7] nötig; Aufbau und Prüfziffer sind gültig.",
+    "Gar nicht. Das Dokument ist eine Rechnung über Hosting und Betriebsunterstützung [Z. 11] [Z. 12] und "
+    "beschreibt kein KI-System im Sinne von Art. 3 Nr. 1 VO (EU) 2024/1689. Anhang III Nr. 4 ist nicht "
+    "einschlägig; die Prüfung lief deterministisch über den XML-Datensatz, ohne KI-Modell.",
+    "Eine Korrektur ist nicht nötig. Der XML-Datensatz ist vollständig, die Summen sind stimmig "
+    "(4.800,00 EUR + 912,00 EUR = 5.712,00 EUR [Z. 13] [Z. 14] [Z. 15]), die IBAN besteht die Prüfziffernkontrolle "
+    "[Z. 16], und der Bildteil weicht nicht vom XML ab. Wichtig für die Archivierung: Aufzubewahren ist die "
+    "Datei so, wie sie empfangen wurde – einschließlich des XML-Datensatzes (§ 14b UStG, § 147 AO).",
+)
+
+
 def normalize_question(question: str) -> str:
     """Toleranter Vergleich: Gross-/Kleinschreibung, Leerzeichen und Satzzeichen egal."""
     return "".join(char for char in question.casefold() if char.isalnum())
 
 
 _STANDARD_KEYS = {normalize_question(question): index for index, question in enumerate(STANDARD_QUESTIONS)}
+
+
+@cache
+def hybrid_demo_sha256() -> str:
+    """SHA-256 der hybriden Musterrechnung - Musterantworten gelten nur fuer exakt diese Datei."""
+    return hashlib.sha256(build_hybrid_pdf(HYBRID_INVOICE)).hexdigest()
 
 
 def reference_answer(filename: str, question: str) -> str | None:

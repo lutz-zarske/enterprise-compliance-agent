@@ -264,3 +264,27 @@ def test_musterdaten_enthalten_zugferd_hybrid(full_client: TestClient, fake_olla
     assert (detail["scorecard"]["score"], detail["scorecard"]["band"]) == (100, "green")
     assert detail["provider"] == "structured"
     assert detail["einvoice"]["profile"] == "EN 16931 (COMFORT)"
+
+
+def test_copilot_musterantwort_fuer_hybride_musterrechnung(full_client: TestClient, fake_ollama: FakeOllama) -> None:
+    fake_ollama.offline = True
+    items = {item["filename"]: item for item in full_client.post("/api/demo/seed").json()["items"]}
+    document_id = items["Rechnung_ZUGFeRD_Hybrid.pdf"]["id"]
+    response = full_client.post(
+        f"/documents/{document_id}/copilot", json={"question": "Welche Pflichtangaben fehlen in dieser Rechnung?"}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["reference"] is True and "factur-x.xml [Z. 18]" in body["answer"]
+
+
+def test_copilot_ohne_musterantwort_fuer_fremde_e_rechnung(client: TestClient, fake_ollama: FakeOllama) -> None:
+    # Gleicher Dateiname, anderer Inhalt: keine Musterantwort, sondern das Modell.
+    pdf = build_hybrid_pdf(HYBRID_INVOICE, visual_override={"grand": Decimal("5812.00")})
+    response = _upload(client, pdf, "Rechnung_ZUGFeRD_Hybrid.pdf", "application/pdf")
+    document_id = response.json()["id"]
+    client.post(f"/documents/{document_id}/extract")
+    answer = client.post(
+        f"/documents/{document_id}/copilot", json={"question": "Welche Pflichtangaben fehlen in dieser Rechnung?"}
+    ).json()
+    assert answer["reference"] is False

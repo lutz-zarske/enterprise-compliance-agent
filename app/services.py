@@ -912,9 +912,10 @@ class DocumentService:
             raise NoTextAvailableError(f"Zum Dokument {record.id} liegt kein Text vor.")
 
         # Musterdokumente mit Referenz-Audit: Standardfragen ohne Sprachmodell.
-        from app.demo import REFERENCE_PROVIDER, reference_answer
+        from app.demo import REFERENCE_PROVIDER, hybrid_demo_sha256, reference_answer
 
-        if record.provider == REFERENCE_PROVIDER:
+        is_demo_einvoice = record.provider == STRUCTURED_PROVIDER and record.sha256 == hybrid_demo_sha256()
+        if record.provider == REFERENCE_PROVIDER or is_demo_einvoice:
             answer = reference_answer(record.original_filename, question)
             if answer is not None:
                 return {"answer": answer, "model": "reference-answer", "provider": REFERENCE_PROVIDER,
