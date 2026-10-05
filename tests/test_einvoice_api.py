@@ -168,7 +168,8 @@ def test_paket_hybride_rechnung(client: TestClient) -> None:
 
     archive = _zip(response.content)
     assert archive.namelist() == [
-        "original/hybrid.pdf", "factur-x.xml", "ledger_audit_trail.json", "audit_certificate.html", "manifest.json"
+        "original/hybrid.pdf", "factur-x.xml", "ledger_audit_trail.json", "audit_certificate.html",
+        "verfahrensdokumentation.html", "manifest.json",
     ]
     assert archive.read("original/hybrid.pdf") == build_hybrid_pdf(HYBRID_INVOICE)
     manifest = json.loads(archive.read("manifest.json"))
@@ -194,7 +195,10 @@ def test_paket_reine_pdf_ohne_xml(client: TestClient, fake_ollama: FakeOllama) -
     assert client.post(f"/documents/{document_id}/extract").status_code == 200
     response = client.get(f"/api/documents/{document_id}/export/gobd")
     names = _zip(response.content).namelist()
-    assert names == ["original/Rechnung_März.pdf", "ledger_audit_trail.json", "audit_certificate.html", "manifest.json"]
+    assert names == [
+        "original/Rechnung_März.pdf", "ledger_audit_trail.json", "audit_certificate.html",
+        "verfahrensdokumentation.html", "manifest.json",
+    ]
     # Umlaut im Dateinamen: ASCII-Fallback plus RFC 5987
     assert "filename*=UTF-8''Pruefdatenpaket_Rechnung_M%C3%A4rz.zip" in response.headers["content-disposition"]
 

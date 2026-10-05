@@ -6,7 +6,8 @@ Inhalt
 2. ``<anhang>.xml``           eingebetteter E-Rechnungs-Datensatz (nur hybride PDFs)
 3. ``ledger_audit_trail.json`` alle Ledger-Eintraege des Dokuments + Kettenpruefung
 4. ``audit_certificate.html``  druckfertiges A4-Pruefzertifikat
-5. ``manifest.json``           SHA-256 je Datei, Pruefzeitstempel, System-Signatur
+5. ``verfahrensdokumentation.html`` GoBD-Verfahrensdokumentation (Entwurf) mit Belegbezug
+6. ``manifest.json``           SHA-256 je Datei, Pruefzeitstempel, System-Signatur
 
 Einordnung
 ----------
@@ -40,6 +41,7 @@ PACKAGE_FORMAT = "eca-pruefdatenpaket/1.0"
 
 LEDGER_FILE = "ledger_audit_trail.json"
 CERTIFICATE_FILE = "audit_certificate.html"
+PROCEDURAL_DOC_FILE = "verfahrensdokumentation.html"
 MANIFEST_FILE = "manifest.json"
 
 
@@ -79,6 +81,7 @@ def build_gobd_package(
     certificate_html: str,
     signer: SystemSigner,
     created_at: datetime | None = None,
+    procedural_doc_html: str | None = None,
 ) -> tuple[bytes, dict[str, Any]]:
     """Erzeugt das ZIP und liefert (ZIP-Bytes, Manifest)."""
     created = created_at or utcnow()
@@ -92,6 +95,14 @@ def build_gobd_package(
     ledger = build_ledger_document(record, entries, verification)
     files.append((LEDGER_FILE, _json_bytes(ledger), "Prüfprotokoll des Dokuments mit SHA-256-Hash-Kette"))
     files.append((CERTIFICATE_FILE, certificate_html.encode("utf-8"), "Druckfertiges A4-Prüfzertifikat"))
+    if procedural_doc_html is not None:
+        files.append(
+            (
+                PROCEDURAL_DOC_FILE,
+                procedural_doc_html.encode("utf-8"),
+                "GoBD-Verfahrensdokumentation (Entwurf) mit Prüfpfad dieses Belegs; aufzubewahren 10 Jahre",
+            )
+        )
 
     scorecard = record.scorecard or {}
     sign_off = record.sign_off or {}

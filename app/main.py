@@ -35,6 +35,9 @@ from app.audit_ledger import AuditLedger
 from app.config import APP_TITLE, APP_VERSION, Settings, get_settings
 from app.db import build_repository, utcnow
 from app.gobd_export import build_gobd_package
+from app.procedural_doc import build_procedural_doc
+from app.procedural_doc import render_html as render_procedural_html
+from app.procedural_doc import render_markdown as render_procedural_markdown
 from app.inference import InferenceRouter
 from app.llm import LLMError, OllamaClient, OllamaUnavailableError
 from app.providers import (
@@ -53,6 +56,7 @@ from app.schemas import (
     ConnectionTestRequest,
     CopilotRequest,
     CopilotResponse,
+    OverrideRequest,
     DatabaseHealth,
     DocumentDetail,
     DocumentListResponse,
@@ -138,7 +142,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings,
         client=httpx.AsyncClient(transport=ollama_transport) if ollama_transport else None,
     )
-    ledger = AuditLedger(engine)
+    signer = SystemSigner(settings.data_dir / ".signing.key")
+    ledger = AuditLedger(engine, signer=signer)
     runtime = RuntimeSettingsStore(settings, engine)
     router = InferenceRouter(
         settings, runtime, llm, cloud_transport=getattr(app.state, "cloud_transport", None)
@@ -150,7 +155,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ledger = ledger
     app.state.runtime = runtime
     app.state.router = router
-    app.state.signer = SystemSigner(settings.data_dir / ".signing.key")
+    app.state.signer = signer
     app.state.service = DocumentService(
         settings, repository, router, ledger=ledger, runtime=runtime, progress=PROGRESS
     )
@@ -399,6 +404,30 @@ def _attachment_header(filename: str) -> str:
     """Content-Disposition mit ASCII-Fallback und RFC-5987-Dateinamen (Umlaute)."""
     fallback = filename.encode("ascii", "replace").decode("ascii").replace("?", "_").replace('"', "")
     return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"
+
+
+async def _procedural_doc(
+    request: Request,
+    record: object,
+    *,
+    entries: list | None = None,
+    verification: object | None = None,
+) -> dict[str, object]:
+    """Baut die Verfahrensdokumentation aus Settings, Laufzeitstand, Ledger und Schluessel."""
+    ledger: AuditLedger = request.app.state.ledger
+    if entries is None:
+        entries = await ledger.list(document_id=record.id, limit=1000)  # type: ignore[attr-defined]
+    if verification is None:
+        verification = await ledger.verify_chain()
+    signer: SystemSigner = request.app.state.signer
+    return build_procedural_doc(
+        settings=request.app.state.settings,
+        runtime=getattr(request.app.state, "runtime", None),
+        record=record,  # type: ignore[arg-type]
+        entries=entries,
+        verification=verification,  # type: ignore[arg-type]
+        signing_key=await anyio.to_thread.run_sync(signer.public_info),
+    )
 
 
 def _register_routes(application: FastAPI) -> None:
@@ -729,6 +758,64 @@ def _register_routes(application: FastAPI) -> None:
         return to_detail(updated, pii_level=service.pii_level)
 
     @application.get(
+        "/api/documents/{document_id}/export/procedural-doc",
+        tags=["Human Oversight"],
+        summary="GoBD-Verfahrensdokumentation (Entwurf) mit Prüfpfad des Belegs (html | markdown)",
+        dependencies=[Depends(require_api_key)],
+        responses=error_responses,
+    )
+    async def export_procedural_doc(
+        request: Request,
+        document_id: str = Path(...),
+        doc_format: Literal["html", "markdown"] = Query("html", alias="format"),
+        service: DocumentService = Depends(get_service),
+    ) -> Response:
+        """Vier Saeulen nach GoBD Rz. 153 aus dem aktuellen Systemzustand, plus Anhang zum Beleg.
+
+        Organisatorische Angaben, die das System nicht kennt, sind als
+        ``[vom Unternehmen zu ergaenzen]`` markiert. Aufbewahrung: 10 Jahre
+        (§ 147 Abs. 1 Nr. 1 AO).
+        """
+        record = await service.require_document(document_id)
+        doc = await _procedural_doc(request, record)
+        stem = record.original_filename.rsplit(".", 1)[0]
+        if doc_format == "markdown":
+            return PlainTextResponse(
+                render_procedural_markdown(doc),
+                media_type="text/markdown; charset=utf-8",
+                headers={"Content-Disposition": _attachment_header(f"Verfahrensdokumentation_{stem}.md")},
+            )
+        return HTMLResponse(
+            render_procedural_html(doc),
+            headers={"Content-Security-Policy": REPORT_CSP, "X-Content-Type-Options": "nosniff"},
+        )
+
+    @application.post(
+        "/api/documents/{document_id}/override",
+        response_model=DocumentDetail,
+        tags=["Human Oversight"],
+        summary="KI-Einstufung durch eine Pruefperson uebersteuern (Art. 14 Abs. 4 lit. d AI Act)",
+        dependencies=[Depends(require_api_key)],
+        responses={
+            **error_responses,
+            409: {"model": ErrorResponse, "description": "Noch nicht analysiert"},
+            422: {"model": ErrorResponse, "description": "Keine Aenderung oder Begruendung zu kurz"},
+        },
+    )
+    async def override_document(
+        body: OverrideRequest, document_id: str = Path(...), service: DocumentService = Depends(get_service)
+    ) -> DocumentDetail:
+        """Setzt die EU-AI-Act-Risikostufe neu und rechnet den Score deterministisch neu.
+
+        Schreibt einen Ed25519-signierten ``human_override``-Eintrag in den Ledger
+        (Person, Begruendung, Rechtsnorm, Score vorher/nachher). Ein bestehendes
+        Siegel wird aufgehoben, weil sich der Pruefgegenstand geaendert hat.
+        """
+        record = await service.require_document(document_id)
+        updated = await service.override(record, body)
+        return to_detail(updated, pii_level=service.pii_level)
+
+    @application.get(
         "/documents/{document_id}/report",
         tags=["Human Oversight"],
         summary="Revisionssicheres Audit-Zertifikat (html | markdown | json)",
@@ -798,6 +885,9 @@ def _register_routes(application: FastAPI) -> None:
         verification = await ledger.verify_chain()
         original = await service.read_original(record)
         certificate = render_html(build_report(record, entries[:50], verification))
+        procedural = render_procedural_html(
+            await _procedural_doc(request, record, entries=entries, verification=verification)
+        )
         data, _ = await anyio.to_thread.run_sync(
             partial(
                 build_gobd_package,
@@ -808,6 +898,7 @@ def _register_routes(application: FastAPI) -> None:
                 verification=verification,
                 certificate_html=certificate,
                 signer=request.app.state.signer,
+                procedural_doc_html=procedural,
             )
         )
         stem = record.original_filename.rsplit(".", 1)[0]
@@ -945,10 +1036,18 @@ def _register_routes(application: FastAPI) -> None:
         document_id: str | None = Query(None, description="Optional auf ein Dokument filtern."),
         limit: int = Query(100, ge=1, le=1000),
     ) -> dict[str, object]:
-        """Neueste Eintraege zuerst; jeder Eintrag traegt ``previous_hash`` und ``entry_hash``."""
+        """Neueste Eintraege zuerst; jeder Eintrag traegt ``previous_hash`` und ``entry_hash``.
+
+        ``signature_status`` (``valid`` | ``invalid`` | ``unsigned``) weist fuer
+        Pruefer-Eintraege die Ed25519-Signatur gegen den System-Schluessel aus.
+        """
         ledger: AuditLedger = request.app.state.ledger
         entries = await ledger.list(document_id=document_id, limit=limit)
-        return {"items": [entry.to_dict() for entry in entries], "count": len(entries)}
+        statuses = await ledger.signature_statuses(entries)
+        return {
+            "items": [{**entry.to_dict(), "signature_status": status} for entry, status in zip(entries, statuses)],
+            "count": len(entries),
+        }
 
     @application.get(
         "/api/audit/verify",

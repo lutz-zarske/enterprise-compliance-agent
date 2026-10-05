@@ -86,25 +86,40 @@ class SystemSigner:
     def sign(self, payload: dict[str, Any]) -> dict[str, str]:
         """Signiert die kanonische Form von ``payload`` (ohne das Feld ``signature``)."""
         unsigned = {key: value for key, value in payload.items() if key != "signature"}
-        signature = self._key().sign(canonical_bytes(unsigned))
+        return self.sign_bytes(canonical_bytes(unsigned))
+
+    def sign_bytes(self, data: bytes) -> dict[str, str]:
+        """Ed25519-Signatur ueber beliebige Bytes, samt oeffentlichem Schluessel und Fingerabdruck."""
+        signature = self._key().sign(data)
         return {**self.public_info(), "value": base64.b64encode(signature).decode("ascii")}
 
 
-def verify_signed_payload(payload: dict[str, Any], *, expected_fingerprint: str | None = None) -> tuple[bool, str]:
-    """Prueft die Signatur eines Manifests; optional gegen einen bekannten Fingerabdruck."""
-    signature = payload.get("signature") or {}
+def verify_signature(signature: dict[str, Any], data: bytes, *, expected_fingerprint: str | None = None) -> tuple[bool, str]:
+    """Prueft eine Signatur aus ``SystemSigner.sign_bytes`` ueber ``data``."""
     if signature.get("algorithm") != ALGORITHM:
         return False, "Signaturverfahren fehlt oder wird nicht unterstuetzt."
     try:
         public_raw = base64.b64decode(signature["public_key"])
         value = base64.b64decode(signature["value"])
-    except (KeyError, ValueError):
+    except (KeyError, ValueError, TypeError):
         return False, "Signaturfelder sind unvollstaendig."
     if expected_fingerprint and fingerprint(public_raw) != expected_fingerprint:
-        return False, "Fingerabdruck des Schluessels weicht vom erwarteten System-Schluessel ab."
-    unsigned = {key: item for key, item in payload.items() if key != "signature"}
+        return False, "Mit einem fremden Schluessel signiert (Fingerabdruck weicht vom System-Schluessel ab)."
     try:
-        Ed25519PublicKey.from_public_bytes(public_raw).verify(value, canonical_bytes(unsigned))
+        Ed25519PublicKey.from_public_bytes(public_raw).verify(value, data)
     except (InvalidSignature, ValueError):
-        return False, "Signatur ungueltig - das Manifest wurde veraendert."
+        return False, "Signatur ungueltig - der Inhalt wurde veraendert."
     return True, "Signatur gueltig."
+
+
+def verify_signed_payload(payload: dict[str, Any], *, expected_fingerprint: str | None = None) -> tuple[bool, str]:
+    """Prueft die Signatur eines Manifests; optional gegen einen bekannten Fingerabdruck."""
+    unsigned = {key: item for key, item in payload.items() if key != "signature"}
+    ok, message = verify_signature(
+        payload.get("signature") or {}, canonical_bytes(unsigned), expected_fingerprint=expected_fingerprint
+    )
+    if not ok and message.startswith("Signatur ungueltig"):
+        return False, "Signatur ungueltig - das Manifest wurde veraendert."
+    if not ok and message.startswith("Mit einem fremden"):
+        return False, "Fingerabdruck des Schluessels weicht vom erwarteten System-Schluessel ab."
+    return ok, message

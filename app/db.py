@@ -236,6 +236,10 @@ class DocumentRepository(Protocol):
 
     async def save_sign_off(self, document_id: str, sign_off: dict[str, Any]) -> DocumentRecord: ...
 
+    async def save_override(
+        self, document_id: str, *, compliance: dict[str, Any], scorecard: dict[str, Any]
+    ) -> DocumentRecord: ...
+
     async def set_pinned(self, document_id: str, pinned: bool) -> DocumentRecord: ...
 
     async def list_all(self) -> list[DocumentRecord]: ...
@@ -389,6 +393,15 @@ class SqlDocumentRepository:
 
     async def save_sign_off(self, document_id: str, sign_off: dict[str, Any]) -> DocumentRecord:
         return await self._update_and_get(document_id, {"sign_off": sign_off})
+
+    async def save_override(
+        self, document_id: str, *, compliance: dict[str, Any], scorecard: dict[str, Any]
+    ) -> DocumentRecord:
+        # Ein Override aendert das Pruefergebnis: ein bestehendes Siegel verliert
+        # seinen Gegenstand.  Analysezeitpunkt und Modell bleiben unveraendert.
+        return await self._update_and_get(
+            document_id, {"compliance": compliance, "scorecard": scorecard, "sign_off": None}
+        )
 
     async def set_pinned(self, document_id: str, pinned: bool) -> DocumentRecord:
         return await self._update_and_get(document_id, {"pinned": pinned})
