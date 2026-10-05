@@ -1,15 +1,19 @@
 """Referenzdokumente fuer Live-Praesentationen (``POST /api/demo/seed``).
 
-Drei bewusst konstruierte Faelle decken die drei Ampelfarben ab:
+Vier bewusst konstruierte Faelle decken Ampelfarben und E-Rechnung ab:
 
 1. ``Rechnung_Gueltig_14UStG.pdf`` - alle Pflichtangaben, korrekte Mathematik.
-   Erwartung: gruen, Score 100 (keine Abzuege nach Regelwerk 2026.1).
+   Erwartung: gruen, Score 100 (keine Abzuege nach Regelwerk 2026.2).
 2. ``Rechnung_Fehlerhaft_Steuerfalle.pdf`` - keine Steuernummer/USt-IdNr. (-20),
    unzulaessiger Steuersatz 16 % (-10), kein Leistungsdatum (-10), IBAN mit
    falscher Pruefziffer (-15).  Erwartung: rot, Score 45.
 3. ``KI_Recruiting_Dienstleistervertrag.pdf`` - KI-gestuetztes Bewerber-
    Screening (Anhang III Nr. 4) ohne Konformitaetsnachweis.  Erwartung: rot,
    Score gedeckelt auf 59.
+4. ``Rechnung_ZUGFeRD_Hybrid.pdf`` - hybride E-Rechnung (Profil EN 16931) mit
+   eingebettetem ``factur-x.xml`` an eine (fiktive) Kommune mit gueltiger
+   Leitweg-ID.  Erwartung: gruen, Score 100 - deterministisch aus dem XML,
+   ohne Sprachmodell und ohne Vorberechnung.
 
 Die Erwartungswerte gelten fuer eine vollstaendige Extraktion; da Stufe 3 der
 Pipeline ein LLM ist, kann ein schwaecheres Modell einzelne Felder verfehlen.
