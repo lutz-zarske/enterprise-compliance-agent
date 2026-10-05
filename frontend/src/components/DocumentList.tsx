@@ -42,6 +42,7 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
       const haystack = [
         doc.filename,
         doc.sender ?? "",
+        doc.einvoice_profile ?? "",
         amount !== null ? amount.toFixed(2) : "",
         amount !== null ? amount.toLocaleString("de-DE", { minimumFractionDigits: 2 }) : "",
       ].join(" ").toLowerCase();
@@ -67,7 +68,7 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
           <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-subtle" />
           <input
             className="input pl-8"
-            placeholder="Dateiname, Absender oder Betrag…"
+            placeholder="Dateiname, Absender, Betrag oder Profil…"
             name="document-search"
             type="search"
             autoComplete="off"
@@ -153,8 +154,17 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
                             ? "Analyse läuft…"
                             : `Hochgeladen ${formatDate(doc.created_at)} · ${formatBytes(doc.size_bytes)}`}
                     </span>
-                    {isHighRisk(doc) && (
-                      <span className="chip mt-1 border-bad-line bg-bad-soft text-[10px] text-bad">EU AI Act Anhang III</span>
+                    {(isHighRisk(doc) || doc.einvoice_profile) && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {isHighRisk(doc) && (
+                          <span className="chip border-bad-line bg-bad-soft text-[10px] text-bad">EU AI Act Anhang III</span>
+                        )}
+                        {doc.einvoice_profile && (
+                          <span className="chip border-accent-line bg-accent-soft font-mono text-[10px] text-accent">
+                            E-Rechnung · {doc.einvoice_profile}
+                          </span>
+                        )}
+                      </span>
                     )}
                   </span>
                 </button>

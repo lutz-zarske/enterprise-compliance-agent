@@ -1117,7 +1117,10 @@ class EInvoiceData(ApiModel):
     @property
     def business_terms(self) -> list[BusinessTermField]:
         def money(value: Decimal | None) -> str | None:
-            return None if value is None else f"{value:.2f} {self.currency or ''}".strip()
+            if value is None:
+                return None
+            text = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return f"{text} {self.currency or ''}".strip()
 
         def electronic(party: EInvoiceParty) -> str | None:
             if not party.electronic_address:
@@ -1128,7 +1131,7 @@ class EInvoiceData(ApiModel):
         return [
             BusinessTermField(bt="BT-1", label="Rechnungsnummer", value=self.invoice_number),
             BusinessTermField(
-                bt="BT-2", label="Rechnungsdatum", value=self.issue_date.isoformat() if self.issue_date else None
+                bt="BT-2", label="Rechnungsdatum", value=self.issue_date.strftime("%d.%m.%Y") if self.issue_date else None
             ),
             BusinessTermField(bt="BT-10", label="Käuferreferenz / Leitweg-ID", value=self.buyer_reference),
             BusinessTermField(bt="BT-27", label="Name des Verkäufers", value=self.seller.name),

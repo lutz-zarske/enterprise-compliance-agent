@@ -137,7 +137,7 @@ def test_zertifikat_enthaelt_e_rechnungs_abschnitt(client: TestClient) -> None:
     assert "E-Rechnung (EN 16931)" in html and "factur-x.xml" in html
     assert "keine KI-Inferenz" in html
     markdown = client.get(f"/documents/{document_id}/report", params={"format": "markdown"}).text
-    assert "| BT-112 | Rechnungsgesamtbetrag (brutto) | 5712.00 EUR |" in markdown
+    assert "| BT-112 | Rechnungsgesamtbetrag (brutto) | 5.712,00 EUR |" in markdown
     report = client.get(f"/documents/{document_id}/report", params={"format": "json"}).json()
     assert report["inference"]["structured"] is True
     assert report["einvoice"]["profile"] == "EN 16931 (COMFORT)"

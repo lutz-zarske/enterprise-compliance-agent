@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
-import type { HealthResponse, RuntimeSettings } from "../types/api";
+import type { HealthResponse, LedgerVerification, RuntimeSettings } from "../types/api";
 import { cx, formatModel, PROVIDER_SHORT } from "../lib/format";
 import { useTheme } from "./ThemeProvider";
-import { Database, FileText, Lock, Moon, RefreshCw, Settings, ShieldCheck, Sun } from "./icons";
+import { Database, FileText, Lock, Moon, RefreshCw, Settings, ShieldAlert, ShieldCheck, Sun } from "./icons";
 import { Spinner } from "./ui";
 
 interface HeaderProps {
@@ -12,13 +12,47 @@ interface HeaderProps {
   offline: boolean;
   apiBase: string;
   settings: RuntimeSettings | null;
+  ledger: LedgerVerification | null;
   seeding: boolean;
   onSeed: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
 }
 
-export function Header({ health, offline, apiBase, settings, seeding, onSeed, onRefresh, onOpenSettings }: HeaderProps) {
+/** Ergebnis von GET /api/audit/verify: Die Kette wird bei jedem Aktualisieren vollständig nachgerechnet. */
+function LedgerBadge({ ledger }: { ledger: LedgerVerification }) {
+  if (ledger.entries === 0) {
+    return (
+      <span className="chip border-line bg-surface-2 font-mono text-[10.5px] text-subtle" title="Noch keine Einträge im Prüfprotokoll">
+        <ShieldCheck size={11} aria-hidden="true" /> Ledger leer
+      </span>
+    );
+  }
+  if (!ledger.valid) {
+    return (
+      <span
+        role="status"
+        className="chip border-bad-line bg-bad-soft font-mono text-[10.5px] text-bad"
+        title={ledger.reason ?? "Hash-Kette gebrochen"}
+      >
+        <ShieldAlert size={11} aria-hidden="true" /> Hash-Kette gebrochen
+        {ledger.broken_at_seq != null && <span className="opacity-80">· #{ledger.broken_at_seq}</span>}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="chip border-ok-line bg-ok-soft font-mono text-[10.5px] text-ok"
+      title={`${ledger.entries} Einträge vollständig nachgerechnet · Kopf-Hash ${ledger.head_hash.slice(0, 16)}…`}
+    >
+      <ShieldCheck size={11} aria-hidden="true" />
+      <span className="md:hidden">Ledger intakt</span>
+      <span className="hidden md:inline">Ledger integer · Hash-Kette intakt</span>
+    </span>
+  );
+}
+
+export function Header({ health, offline, apiBase, settings, ledger, seeding, onSeed, onRefresh, onOpenSettings }: HeaderProps) {
   const { theme, toggle } = useTheme();
   let port = "";
   try {
@@ -67,6 +101,8 @@ export function Header({ health, offline, apiBase, settings, seeding, onSeed, on
             {port && <span className="opacity-70">| {port}</span>}
           </span>
 
+          {ledger && !offline && <LedgerBadge ledger={ledger} />}
+
           {model && (
             <span
               className={cx(
@@ -87,7 +123,7 @@ export function Header({ health, offline, apiBase, settings, seeding, onSeed, on
             onClick={onSeed}
             disabled={offline || seeding}
             aria-label="Musterdaten laden"
-            title="Standardisierte Prüfbelege laden (§ 14 UStG, Steuerfalle, EU AI Act) – funktioniert ohne KI-Modell"
+            title="Standardisierte Prüfbelege laden (§ 14 UStG, Steuerfalle, EU AI Act, ZUGFeRD-E-Rechnung) – funktioniert ohne KI-Modell"
           >
             {seeding ? <Spinner size={13} /> : <FileText size={14} aria-hidden="true" />}
             <span className="hidden md:inline">Musterdaten laden</span>

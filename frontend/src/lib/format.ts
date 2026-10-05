@@ -33,6 +33,7 @@ export function formatBytes(bytes: number): string {
 
 /** "qwen2.5:14b-instruct" -> "QWEN 2.5 14B", "claude-sonnet-5-5" -> "CLAUDE SONNET 5.5". */
 export function formatModel(model: string): string {
+  if (model === "en16931-parser") return "EN-16931-Parser (ohne KI)";
   if (/^gpt-/i.test(model)) return model.toUpperCase();
   const tokens = model
     .split(/[-:_]/)

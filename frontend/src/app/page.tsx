@@ -33,6 +33,7 @@ import type {
   DocumentSummary,
   HealthResponse,
   KpiResponse,
+  LedgerVerification,
   ProgressStage,
   RuntimeSettings,
   ScoreTile,
@@ -61,6 +62,7 @@ export default function DashboardPage() {
   const [offline, setOffline] = useState(false);
   const [settings, setSettings] = useState<RuntimeSettings | null>(null);
   const [kpis, setKpis] = useState<KpiResponse | null>(null);
+  const [ledger, setLedger] = useState<LedgerVerification | null>(null);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
@@ -103,9 +105,14 @@ export default function DashboardPage() {
   }, []);
 
   const refreshData = useCallback(async () => {
-    const [list, kpiData] = await Promise.all([api.documents(), api.kpis()]);
+    const [list, kpiData, chain] = await Promise.all([
+      api.documents(),
+      api.kpis(),
+      api.verifyLedger().catch(() => null),
+    ]);
     setDocuments(list.items);
     setKpis(kpiData);
+    setLedger(chain);
     return list.items;
   }, []);
 
@@ -192,11 +199,15 @@ export default function DashboardPage() {
       const result = await api.seed();
       await refreshData();
       const audited = result.items.filter((item) => item.reference_audit).length;
+      const structured = result.items.filter((item) => item.structured_audit).length;
       notify(
         "ok",
         "Musterdaten geladen",
-        audited
-          ? `${audited} Referenz-Audits ohne KI-Modell erstellt. Mit laufendem Modell lassen sie sich über „Neu prüfen“ live berechnen.`
+        audited || structured
+          ? [
+              audited ? `${audited} Referenz-Audits ohne KI-Modell erstellt` : "",
+              structured ? `${structured} E-Rechnung deterministisch aus dem XML geprüft` : "",
+            ].filter(Boolean).join(", ") + ". Mit laufendem Modell lassen sich die Referenz-Audits über „Live neu prüfen“ berechnen."
           : "Die Musterdokumente sind bereits vorhanden; bestehende Prüfergebnisse bleiben unverändert.",
       );
       const preferred =
@@ -243,6 +254,17 @@ export default function DashboardPage() {
   const isExtracting = detail !== null && extractingId === detail.id;
   const inferenceAvailable = !offline && !ollamaDown && !cloudUnconfigured;
   const isReference = detail?.provider === "reference";
+  // E-Rechnungen mit auswertbarem XML laufen deterministisch - ohne Sprachmodell.
+  const structuredReady = Boolean(
+    detail?.einvoice && !detail.einvoice.error && (detail.einvoice.source === "standalone" || detail.einvoice.is_einvoice),
+  );
+  const canAnalyze = !offline && (inferenceAvailable || structuredReady);
+  const isXml = detail?.content_type === "application/xml";
+
+  // Den XML-Tab nicht stehen lassen, wenn das neue Dokument keinen Datensatz hat.
+  useEffect(() => {
+    if (tab === "xml" && detail && !detail.einvoice) setTab("ustg");
+  }, [tab, detail]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -252,6 +274,7 @@ export default function DashboardPage() {
         offline={offline}
         apiBase={getApiBase()}
         settings={settings}
+        ledger={ledger}
         seeding={seeding}
         onSeed={handleSeed}
         onRefresh={() => void loadAll()}
@@ -322,12 +345,13 @@ export default function DashboardPage() {
                 <EmptyState icon={<ShieldCheck size={20} aria-hidden="true" />} title="Noch kein Dokument ausgewählt">
                   <p>
                     Mit den Musterdaten sehen Sie in Sekunden einen vollständigen Prüfdurchlauf – auch ohne KI-Modell:
-                    eine gültige Rechnung, eine Steuerfalle und einen KI-Recruiting-Vertrag nach Anhang III.
+                    eine gültige Rechnung, eine Steuerfalle, einen KI-Recruiting-Vertrag nach Anhang III und eine hybride
+                    ZUGFeRD-E-Rechnung an eine Kommune.
                   </p>
                   <button className="btn btn-primary mt-3" onClick={handleSeed} disabled={offline || seeding}>
                     {seeding ? <Spinner size={13} /> : <Layers size={14} aria-hidden="true" />} Musterdaten laden
                   </button>
-                  <p className="mt-3">Oder eigene PDFs links hochladen.</p>
+                  <p className="mt-3">Oder eigene PDFs und XRechnungen links hochladen.</p>
                 </EmptyState>
               </div>
             )}
@@ -355,9 +379,14 @@ export default function DashboardPage() {
                             <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">Referenz-Audit · ohne KI</span>
                           </Tooltip>
                         )}
+                        {detail.provider === "structured" && (
+                          <Tooltip content="Die Rechnungsdaten stammen deterministisch aus dem EN-16931-Datensatz. Bei hybriden Rechnungen ist der XML-Teil maßgeblich (BMF-Schreiben vom 15.10.2024, Rz. 36).">
+                            <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">XML-Prüfung · ohne KI</span>
+                          </Tooltip>
+                        )}
                       </div>
                       <p className="truncate font-mono text-[11px] text-subtle" title={detail.sha256}>
-                        SHA-256 {detail.sha256.slice(0, 16)}… · {detail.page_count ?? "?"} S. · {formatBytes(detail.size_bytes)}
+                        SHA-256 {detail.sha256.slice(0, 16)}… · {isXml ? "XML" : `${detail.page_count ?? "?"} S.`} · {formatBytes(detail.size_bytes)}
                         {detail.extracted_at && ` · geprüft ${formatDate(detail.extracted_at, true)}`}
                         {detail.model && !isReference && ` · ${formatModel(detail.model)}`}
                       </p>
@@ -367,15 +396,17 @@ export default function DashboardPage() {
                     <Tooltip
                       align="right"
                       content={
-                        inferenceAvailable
-                          ? undefined
+                        canAnalyze
+                          ? structuredReady && !inferenceAvailable
+                            ? "E-Rechnung: Die Prüfung läuft deterministisch über den XML-Datensatz und braucht kein Sprachmodell."
+                            : undefined
                           : "Für eine Live-Analyse wird ein Sprachmodell benötigt – Ollama starten oder einen Cloud-Provider in den Einstellungen wählen."
                       }
                     >
                       <button
                         className={cx("btn", detail.status !== "extracted" && "btn-primary")}
                         onClick={() => void runExtraction(detail.id, detail.filename)}
-                        disabled={!inferenceAvailable || extractingId !== null}
+                        disabled={!canAnalyze || extractingId !== null}
                       >
                         {isExtracting ? <Spinner size={13} /> : detail.status === "extracted" ? <RefreshCw size={14} aria-hidden="true" /> : <Zap size={14} aria-hidden="true" />}
                         {detail.status === "extracted" ? (isReference ? "Live neu prüfen" : "Neu prüfen") : "Audit starten"}
@@ -418,7 +449,7 @@ export default function DashboardPage() {
 
       <footer className="border-t border-line py-4 no-print">
         <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-1 px-4 text-[11px] text-subtle sm:flex-row sm:px-6">
-          <span>Enterprise Compliance Agent v{health?.version ?? "2.0.0"}</span>
+          <span>Enterprise Compliance Agent v{health?.version ?? "2.1.0"}</span>
           <span>VO (EU) 2024/1689 · § 14 UStG · DSGVO · GoBD-Hash-Kette</span>
           <span>{settings?.is_cloud ? "Cloud-Inferenz über Privacy Gateway" : "Lokale Inferenz · Zero Data Leakage"}</span>
         </div>

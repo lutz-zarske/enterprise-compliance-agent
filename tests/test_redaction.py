@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.redaction import (
+    build_text_view,
     enforce_masking,
     mask_email,
     mask_value,
@@ -128,3 +129,9 @@ def test_leitweg_id_ist_keine_telefonnummer() -> None:
     assert [finding.masked_value for finding in findings if finding.category is PIICategory.CONTACT_DATA] == [
         "0561****4567"
     ]
+
+
+def test_textansicht_markiert_leitweg_id_nicht() -> None:
+    view = build_text_view("Leitweg-ID: 04011000-1234512345-06\nTelefon: 0561 1234567", "standard")
+    assert "04011000-1234512345-06" in view["text"]
+    assert "0561 1234567" not in view["text"]

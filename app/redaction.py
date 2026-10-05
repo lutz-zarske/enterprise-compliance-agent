@@ -433,8 +433,12 @@ def _collect_view_spans(text: str) -> list[tuple[int, int, str, str]]:
     for match in _DATE_PATTERN.finditer(text):
         raw.append((*match.span(), "DATE", match.group(0)))
 
+    # Leitweg-IDs sind Behoerdenkennungen: weder markieren noch schwaerzen.
+    leitweg = _leitweg_spans(text)
     chosen: list[tuple[int, int, str, str]] = []
     for item in raw:
+        if _overlaps((item[0], item[1]), leitweg):
+            continue
         if any(item[0] < other[1] and other[0] < item[1] for other in chosen):
             continue
         chosen.append(item)

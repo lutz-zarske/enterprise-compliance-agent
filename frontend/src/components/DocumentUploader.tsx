@@ -13,36 +13,39 @@ interface Props {
   onError: (error: ApiError) => void;
 }
 
-/** Drag & Drop fuer ein oder mehrere PDFs (POST /documents/upload-batch). */
+/** Drag & Drop fuer beliebig viele PDFs und XML-E-Rechnungen (POST /documents/upload-batch). */
 export function DocumentUploader({ disabled, onUploaded, onError }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [dragCount, setDragCount] = useState<number | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
+  const dragging = dragCount !== null;
 
   async function upload(fileList: FileList | null) {
     const files = Array.from(fileList ?? []).filter((file) => file.size > 0);
     if (!files.length) return;
-    setBusy(true);
+    setBusy(files.length);
     try {
       onUploaded(await api.uploadBatch(files));
     } catch (err) {
       onError(err instanceof ApiError ? err : new ApiError(String(err), 0, "unknown"));
     } finally {
-      setBusy(false);
+      setBusy(null);
       if (inputRef.current) inputRef.current.value = "";
     }
   }
+
+  const fileCount = (count: number) => (count === 1 ? "1 Datei" : `${count} Dateien`);
 
   return (
     <div
       onDragOver={(event) => {
         event.preventDefault();
-        if (!disabled) setDragging(true);
+        if (!disabled) setDragCount(event.dataTransfer.items?.length ?? 0);
       }}
-      onDragLeave={() => setDragging(false)}
+      onDragLeave={() => setDragCount(null)}
       onDrop={(event) => {
         event.preventDefault();
-        setDragging(false);
+        setDragCount(null);
         if (!disabled) void upload(event.dataTransfer.files);
       }}
       className={cx(
@@ -52,21 +55,30 @@ export function DocumentUploader({ disabled, onUploaded, onError }: Props) {
       )}
     >
       <div className="rounded-lg border border-line bg-surface-2 p-2 text-accent">
-        {busy ? <Spinner size={16} /> : <UploadCloud size={18} />}
+        {busy !== null ? <Spinner size={16} /> : <UploadCloud size={18} />}
       </div>
-      <div>
-        <p className="text-sm font-medium text-fg">PDFs hier ablegen</p>
-        <p className="text-xs text-subtle">Mehrfachauswahl möglich · max. 20 MB je Datei · Textlayer erforderlich</p>
+      <div aria-live="polite">
+        <p className="text-sm font-medium text-fg">
+          {busy !== null
+            ? `${fileCount(busy)} werden geprüft…`
+            : dragging && dragCount
+              ? `${fileCount(dragCount)} loslassen`
+              : "PDFs oder E-Rechnungen hier ablegen"}
+        </p>
+        <p className="text-xs text-subtle">
+          PDF, ZUGFeRD/Factur-X oder XRechnung (.xml) · mehrere Dateien gleichzeitig · max. 20 MB je Datei
+        </p>
       </div>
-      <button className="btn" disabled={disabled || busy} onClick={() => inputRef.current?.click()}>
+      <button className="btn" disabled={disabled || busy !== null} onClick={() => inputRef.current?.click()}>
         Dateien auswählen
       </button>
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept="application/pdf,.pdf,application/xml,text/xml,.xml"
         multiple
         className="hidden"
+        aria-label="PDF- oder XML-Dateien auswählen"
         onChange={(event) => void upload(event.target.files)}
       />
     </div>

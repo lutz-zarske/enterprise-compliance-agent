@@ -819,7 +819,7 @@ class DocumentService:
             created = record is None
             if record is None:
                 record, _ = await self.ingest(filename=filename, content_type="application/pdf", data=data)
-            audited = False
+            audited = structured = False
             if record.status != DocumentStatus.EXTRACTED.value:
                 if filename in REFERENCE_AUDITS:
                     outcome = await self.apply_reference_audit(record)
@@ -827,6 +827,7 @@ class DocumentService:
                 else:
                     # E-Rechnung: echter, deterministischer Lauf ueber den XML-Datensatz.
                     outcome = await self.extract_and_audit(record)
+                    structured = outcome.provider == STRUCTURED_PROVIDER
                 record = outcome.record
                 if filename == "Rechnung_Gueltig_14UStG.pdf":
                     record = await self.sign_off(
@@ -840,6 +841,7 @@ class DocumentService:
                     "status": record.status,
                     "created": created,
                     "reference_audit": audited,
+                    "structured_audit": structured,
                     "compliance_score": (record.scorecard or {}).get("score"),
                 }
             )

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
 import type { DocumentDetail, SignOffDecision } from "../types/api";
 import { cx, formatDate } from "../lib/format";
-import { Check, Copy, Download, Printer, Stamp } from "./icons";
+import { Check, Copy, Download, Package, Printer, Stamp } from "./icons";
 import { Modal, Spinner } from "./ui";
 
 const AUDITOR_STORAGE = "eca-auditor-name";
@@ -77,7 +77,7 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
 
   if (!document) return null;
   const analyzed = Boolean(document.scorecard);
-  const stem = document.filename.replace(/\.pdf$/i, "");
+  const stem = document.filename.replace(/\.(pdf|xml)$/i, "");
 
   async function run(key: string, task: () => Promise<void>) {
     setBusy(key);
@@ -101,6 +101,21 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
         </p>
       )}
       <div className="space-y-2">
+        <Option
+          icon={<Package size={16} />}
+          title="GoBD-Prüfdatenpaket exportieren (ZIP)"
+          text={`Originalbeleg${document.einvoice && !document.einvoice.error ? ", XML-Datensatz" : ""}, Ledger-Auszug, A4-Zertifikat und Manifest mit SHA-256 und Ed25519-Systemsignatur.`}
+          action="ZIP"
+          busy={busy === "zip"}
+          disabled={!analyzed}
+          onClick={() =>
+            run("zip", async () => {
+              const { blob, filename } = await api.gobdPackage(document.id);
+              downloadBlob(blob, filename ?? `Pruefdatenpaket_${stem}.zip`, "application/zip");
+              notify("ok", "Prüfdatenpaket erstellt", "Prüfen mit: python scripts/verify_pruefpaket.py <paket.zip>");
+            })
+          }
+        />
         <Option
           icon={<Printer size={16} />}
           title="Compliance-Zertifikat drucken (PDF)"

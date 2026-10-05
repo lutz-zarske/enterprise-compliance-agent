@@ -69,13 +69,13 @@ def test_cii_bt_mapping() -> None:
     assert (invoice.syntax, invoice.profile, invoice.is_einvoice) == ("CII", "EN 16931 (COMFORT)", True)
     terms = _terms(invoice)
     assert terms["BT-1"] == "ECS-2026-0412"
-    assert terms["BT-2"] == "2026-09-15"
+    assert terms["BT-2"] == "15.09.2026"
     assert terms["BT-10"] == "05999000-VERGABE-24"
     assert terms["BT-27"] == "Elbtal Cloud Solutions GmbH"
     assert terms["BT-31"] == "DE312345678"
     assert terms["BT-34"] == "rechnung@elbtal-cloud.example (Schema EM)"
     assert terms["BT-49"] == "05999000-VERGABE-24 (Schema 0204)"
-    assert terms["BT-112"] == "5712.00 EUR"
+    assert terms["BT-112"] == "5.712,00 EUR"
     assert invoice.seller.tax_number == "203/118/02417"
     assert invoice.net_total == Decimal("4800.00") and invoice.tax_total == Decimal("912.00")
     assert [line.name for line in invoice.lines][0].startswith("Hosting")
@@ -93,7 +93,7 @@ def test_ubl_xrechnung_bt_mapping() -> None:
     assert terms["BT-27"] == "Softwarehaus Nordhessen GmbH"
     assert terms["BT-31"] == "DE298765432"
     assert terms["BT-34"] == "rechnung@softwarehaus.example (Schema EM)"
-    assert terms["BT-112"] == "1297.00 EUR"  # 1.000 x 19 % + 100 x 7 %
+    assert terms["BT-112"] == "1.297,00 EUR"  # 1.000 x 19 % + 100 x 7 %
     assert {(v.rate, v.tax_amount) for v in invoice.vat_breakdown} == {
         (Decimal("19"), Decimal("190.00")), (Decimal("7"), Decimal("7.00"))
     }
