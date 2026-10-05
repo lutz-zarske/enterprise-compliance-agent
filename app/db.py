@@ -64,6 +64,8 @@ documents_table: Table = Table(
     sa.Column("scorecard", sa.JSON, nullable=True),
     sa.Column("sign_off", sa.JSON, nullable=True),
     sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
+    # --- seit v2.1: EN-16931-Datensatz (ZUGFeRD/Factur-X/XRechnung) ---
+    sa.Column("einvoice", sa.JSON, nullable=True),
 )
 
 #: Append-only-Pruefprotokoll (siehe app/audit_ledger.py).
@@ -103,6 +105,7 @@ _MIGRATED_COLUMNS: dict[str, str] = {
     "scorecard": "JSON",
     "sign_off": "JSON",
     "pinned": "BOOLEAN NOT NULL DEFAULT FALSE",
+    "einvoice": "JSON",
 }
 
 
@@ -148,6 +151,7 @@ class DocumentRecord:
     scorecard: dict[str, Any] | None = None
     sign_off: dict[str, Any] | None = None
     pinned: bool = False
+    einvoice: dict[str, Any] | None = None
 
     @classmethod
     def from_row(cls, row: Row[Any]) -> DocumentRecord:
@@ -174,6 +178,7 @@ class DocumentRecord:
             scorecard=mapping["scorecard"],
             sign_off=mapping["sign_off"],
             pinned=bool(mapping["pinned"]),
+            einvoice=mapping["einvoice"],
         )
 
 
@@ -190,6 +195,7 @@ class NewDocument:
     char_count: int
     raw_text: str | None
     status: str = "uploaded"
+    einvoice: dict[str, Any] | None = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
@@ -275,6 +281,7 @@ class SqlDocumentRepository:
             "scorecard": None,
             "sign_off": None,
             "pinned": False,
+            "einvoice": document.einvoice,
         }
         with self._engine.begin() as connection:
             connection.execute(sa.insert(documents_table).values(**values))

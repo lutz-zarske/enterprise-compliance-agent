@@ -69,10 +69,16 @@ def test_gueltige_rechnung_traegt_gekennzeichnetes_demo_siegel(full_client: Test
 def test_ledger_kennzeichnet_referenz_audits_und_bleibt_valide(full_client: TestClient) -> None:
     _seed(full_client)
     trail = full_client.get("/api/audit/trail").json()["items"]
-    assert [entry["event_type"] for entry in reversed(trail)] == ["analysis", "sign_off", "analysis", "analysis"]
+    assert [entry["event_type"] for entry in reversed(trail)] == [
+        "analysis", "sign_off", "analysis", "analysis", "analysis"
+    ]
     analyses = [entry for entry in trail if entry["event_type"] == "analysis"]
-    assert all(entry["model_name"] == REFERENCE_MODEL for entry in analyses)
-    assert all(entry["details"]["reference_audit"] is True for entry in analyses)
+    reference = [entry for entry in analyses if entry["model_name"] == REFERENCE_MODEL]
+    assert len(reference) == 3
+    assert all(entry["details"]["reference_audit"] is True for entry in reference)
+    # Vierter Musterbeleg (ZUGFeRD): echter, deterministischer XML-Lauf - kein Referenz-Audit.
+    structured = [entry for entry in analyses if entry["model_name"] == "en16931-parser"]
+    assert len(structured) == 1 and structured[0]["details"]["structured_einvoice"] is True
     assert full_client.get("/api/audit/verify").json()["valid"] is True
 
 
@@ -93,8 +99,8 @@ def test_kpis_sofort_befuellt(full_client: TestClient, fake_ollama: FakeOllama) 
     fake_ollama.offline = True
     _seed(full_client)
     kpis = full_client.get("/api/dashboard/kpis").json()
-    assert kpis["documents_analyzed"] == 3
-    assert kpis["average_score"] == 68  # (100 + 45 + 59) / 3
+    assert kpis["documents_analyzed"] == 4
+    assert kpis["average_score"] == 76  # (100 + 45 + 59 + 100) / 4
     assert kpis["high_risk_count"] == 1
     assert kpis["sealed_count"] == 1
 

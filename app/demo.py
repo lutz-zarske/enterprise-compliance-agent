@@ -21,6 +21,11 @@ in ``tests/conftest.py``).
 
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+from typing import Any
+from xml.sax.saxutils import escape
+
 from app.config import BASE_DIR
 
 
@@ -29,13 +34,23 @@ def _escape_pdf_text(value: str) -> bytes:
     return escaped.encode("cp1252", errors="replace")
 
 
-def build_pdf(pages: list[list[str]]) -> bytes:
-    """Minimales, gueltiges PDF mit echtem Textlayer (Helvetica, WinAnsi)."""
+def build_pdf(
+    pages: list[list[str]],
+    *,
+    attachments: list[tuple[str, bytes, str]] | None = None,
+    xmp: bytes | None = None,
+) -> bytes:
+    """Minimales, gueltiges PDF mit echtem Textlayer (Helvetica, WinAnsi).
+
+    ``attachments`` bettet Dateien wie bei ZUGFeRD/Factur-X ein
+    (``/EmbeddedFiles`` + ``/AF`` mit ``/AFRelationship``); ``xmp`` setzt den
+    Metadatenstrom.  Das Ergebnis ist strukturell eine hybride Rechnung, aber
+    kein validiertes PDF/A-3 (Schriften nicht eingebettet, kein OutputIntent).
+    """
     page_count = len(pages)
     font_obj = 3 + 2 * page_count
     objects: dict[int, bytes] = {}
     kids = " ".join(f"{3 + 2 * index} 0 R" for index in range(page_count))
-    objects[1] = b"<< /Type /Catalog /Pages 2 0 R >>"
     objects[2] = f"<< /Type /Pages /Kids [{kids}] /Count {page_count} >>".encode("ascii")
 
     for index, lines in enumerate(pages):
@@ -53,7 +68,34 @@ def build_pdf(pages: list[list[str]]) -> bytes:
 
     objects[font_obj] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
 
-    out = bytearray(b"%PDF-1.4\n")
+    catalog = "<< /Type /Catalog /Pages 2 0 R"
+    next_obj = font_obj + 1
+    if attachments:
+        names: list[str] = []
+        specs: list[str] = []
+        for filename, data, relationship in attachments:
+            stream_obj, spec_obj = next_obj, next_obj + 1
+            next_obj += 2
+            subtype = "/Subtype /text#2Fxml " if filename.endswith(".xml") else ""
+            objects[stream_obj] = (
+                f"<< /Type /EmbeddedFile {subtype}/Length {len(data)} /Params << /Size {len(data)} >> >>\nstream\n"
+            ).encode("ascii") + data + b"\nendstream"
+            objects[spec_obj] = (
+                f"<< /Type /Filespec /F ({filename}) /UF ({filename}) /Desc (E-Rechnung {filename}) "
+                f"/AFRelationship /{relationship} /EF << /F {stream_obj} 0 R /UF {stream_obj} 0 R >> >>"
+            ).encode("ascii")
+            names.append(f"({filename}) {spec_obj} 0 R")
+            specs.append(f"{spec_obj} 0 R")
+        catalog += f" /Names << /EmbeddedFiles << /Names [{' '.join(names)}] >> >> /AF [{' '.join(specs)}]"
+    if xmp:
+        objects[next_obj] = (
+            f"<< /Type /Metadata /Subtype /XML /Length {len(xmp)} >>\nstream\n".encode("ascii") + xmp + b"\nendstream"
+        )
+        catalog += f" /Metadata {next_obj} 0 R"
+        next_obj += 1
+    objects[1] = (catalog + " >>").encode("ascii")
+
+    out = bytearray(b"%PDF-1.7\n" if attachments else b"%PDF-1.4\n")
     offsets: dict[int, int] = {}
     for number in sorted(objects):
         offsets[number] = len(out)
@@ -121,8 +163,217 @@ RECRUITING_FALLBACK_LINES = [
 SAMPLE_CONTRACT = BASE_DIR / "data" / "sample_talentai_contract.pdf"
 
 
+# ---------------------------------------------------------------------------
+# Hybride E-Rechnung (ZUGFeRD 2.3 / Factur-X, Profil EN 16931)
+# ---------------------------------------------------------------------------
+#
+# Eine Quelle fuer XML und Bildteil: Beide werden aus ``HYBRID_INVOICE``
+# erzeugt, damit der Abgleich XML <-> PDF in den Musterdaten deckungsgleich ist.
+# Kaeufer ist eine (fiktive) Kommune - so zeigt der Beleg auch die
+# B2G-Pruefung mit Leitweg-ID (Pruefziffer nach KoSIT-Spezifikation gueltig).
+
+HYBRID_FILENAME = "Rechnung_ZUGFeRD_Hybrid.pdf"
+
+HYBRID_INVOICE: dict[str, Any] = {
+    "specification_id": "urn:cen.eu:en16931:2017",
+    "number": "ECS-2026-0412",
+    "issue_date": date(2026, 9, 15),
+    "delivery_date": date(2026, 8, 31),
+    "period": (date(2026, 8, 1), date(2026, 8, 31)),
+    "due_date": date(2026, 10, 15),
+    "currency": "EUR",
+    "buyer_reference": "05999000-VERGABE-24",
+    "order_reference": "VG-2026-117",
+    "seller": {
+        "name": "Elbtal Cloud Solutions GmbH",
+        "street": "Königsbrücker Straße 96",
+        "postcode": "01099",
+        "city": "Dresden",
+        "country": "DE",
+        "vat_id": "DE312345678",
+        "tax_number": "203/118/02417",
+        "email": "rechnung@elbtal-cloud.example",
+    },
+    "buyer": {
+        "name": "Stadtverwaltung Musterstadt",
+        "street": "Rathausplatz 1",
+        "postcode": "59999",
+        "city": "Musterstadt",
+        "country": "DE",
+        "leitweg": "05999000-VERGABE-24",
+    },
+    "lines": [
+        ("1", "Hosting Fachverfahren Bürgerservice (August 2026)", Decimal("1"), "C62", Decimal("3200.00")),
+        ("2", "Betriebsunterstützung, Stunden", Decimal("16"), "HUR", Decimal("1600.00")),
+    ],
+    "rate": Decimal("19"),
+    "iban": "DE02120300000000202051",
+    "payment_terms": "Zahlbar innerhalb von 30 Tagen ohne Abzug.",
+}
+
+
+def _money(value: Decimal) -> str:
+    return f"{value:.2f}"
+
+
+def _de_money(value: Decimal) -> str:
+    return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _cii_date(value: date) -> str:
+    return f'<udt:DateTimeString format="102">{value:%Y%m%d}</udt:DateTimeString>'
+
+
+def build_cii_invoice(spec: dict[str, Any]) -> bytes:
+    """CII-Datensatz (ZUGFeRD 2.x / Factur-X) aus einer Rechnungsbeschreibung.
+
+    Reihenfolge der Elemente folgt dem CII-Schema D16B; die Summen werden aus
+    den Positionen berechnet, ``spec["override"]`` kann sie fuer Tests gezielt
+    verfaelschen.
+    """
+    e = escape
+    line_total = sum((line[4] for line in spec["lines"]), Decimal(0))
+    tax = (line_total * spec["rate"] / 100).quantize(Decimal("0.01"))
+    totals = {"line": line_total, "net": line_total, "tax": tax, "grand": line_total + tax}
+    totals.update(spec.get("override", {}))
+    seller, buyer = spec["seller"], spec["buyer"]
+
+    items = "".join(
+        f"""
+    <ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>{e(line_id)}</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct><ram:Name>{e(name)}</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>{_money(amount / quantity)}</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="{unit}">{quantity}</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>S</ram:CategoryCode><ram:RateApplicablePercent>{spec["rate"]}</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>{_money(amount)}</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>"""
+        for line_id, name, quantity, unit, amount in spec["lines"]
+    )
+    buyer_reference = (
+        f"<ram:BuyerReference>{e(spec['buyer_reference'])}</ram:BuyerReference>" if spec.get("buyer_reference") else ""
+    )
+    buyer_uri = (
+        f'<ram:URIUniversalCommunication><ram:URIID schemeID="0204">{e(buyer["leitweg"])}</ram:URIID></ram:URIUniversalCommunication>'
+        if buyer.get("leitweg")
+        else ""
+    )
+    start, end = spec["period"]
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+  <rsm:ExchangedDocumentContext>
+    <ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>{e(spec["specification_id"])}</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter>
+  </rsm:ExchangedDocumentContext>
+  <rsm:ExchangedDocument>
+    <ram:ID>{e(spec["number"])}</ram:ID>
+    <ram:TypeCode>380</ram:TypeCode>
+    <ram:IssueDateTime>{_cii_date(spec["issue_date"])}</ram:IssueDateTime>
+  </rsm:ExchangedDocument>
+  <rsm:SupplyChainTradeTransaction>{items}
+    <ram:ApplicableHeaderTradeAgreement>
+      {buyer_reference}
+      <ram:SellerTradeParty>
+        <ram:Name>{e(seller["name"])}</ram:Name>
+        <ram:PostalTradeAddress><ram:PostcodeCode>{seller["postcode"]}</ram:PostcodeCode><ram:LineOne>{e(seller["street"])}</ram:LineOne><ram:CityName>{e(seller["city"])}</ram:CityName><ram:CountryID>{seller["country"]}</ram:CountryID></ram:PostalTradeAddress>
+        <ram:URIUniversalCommunication><ram:URIID schemeID="EM">{e(seller["email"])}</ram:URIID></ram:URIUniversalCommunication>
+        <ram:SpecifiedTaxRegistration><ram:ID schemeID="FC">{e(seller["tax_number"])}</ram:ID></ram:SpecifiedTaxRegistration>
+        <ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">{e(seller["vat_id"])}</ram:ID></ram:SpecifiedTaxRegistration>
+      </ram:SellerTradeParty>
+      <ram:BuyerTradeParty>
+        <ram:Name>{e(buyer["name"])}</ram:Name>
+        <ram:PostalTradeAddress><ram:PostcodeCode>{buyer["postcode"]}</ram:PostcodeCode><ram:LineOne>{e(buyer["street"])}</ram:LineOne><ram:CityName>{e(buyer["city"])}</ram:CityName><ram:CountryID>{buyer["country"]}</ram:CountryID></ram:PostalTradeAddress>
+        {buyer_uri}
+      </ram:BuyerTradeParty>
+      <ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>{e(spec["order_reference"])}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>
+    </ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeDelivery>
+      <ram:ActualDeliverySupplyChainEvent><ram:OccurrenceDateTime>{_cii_date(spec["delivery_date"])}</ram:OccurrenceDateTime></ram:ActualDeliverySupplyChainEvent>
+    </ram:ApplicableHeaderTradeDelivery>
+    <ram:ApplicableHeaderTradeSettlement>
+      <ram:InvoiceCurrencyCode>{spec["currency"]}</ram:InvoiceCurrencyCode>
+      <ram:SpecifiedTradeSettlementPaymentMeans><ram:TypeCode>58</ram:TypeCode><ram:PayeePartyCreditorFinancialAccount><ram:IBANID>{spec["iban"]}</ram:IBANID></ram:PayeePartyCreditorFinancialAccount></ram:SpecifiedTradeSettlementPaymentMeans>
+      <ram:ApplicableTradeTax><ram:CalculatedAmount>{_money(totals["tax"])}</ram:CalculatedAmount><ram:TypeCode>VAT</ram:TypeCode><ram:BasisAmount>{_money(totals["net"])}</ram:BasisAmount><ram:CategoryCode>S</ram:CategoryCode><ram:RateApplicablePercent>{spec["rate"]}</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+      <ram:BillingSpecifiedPeriod><ram:StartDateTime>{_cii_date(start)}</ram:StartDateTime><ram:EndDateTime>{_cii_date(end)}</ram:EndDateTime></ram:BillingSpecifiedPeriod>
+      <ram:SpecifiedTradePaymentTerms><ram:Description>{e(spec["payment_terms"])}</ram:Description><ram:DueDateDateTime>{_cii_date(spec["due_date"])}</ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms>
+      <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+        <ram:LineTotalAmount>{_money(totals["line"])}</ram:LineTotalAmount>
+        <ram:ChargeTotalAmount>0.00</ram:ChargeTotalAmount>
+        <ram:AllowanceTotalAmount>0.00</ram:AllowanceTotalAmount>
+        <ram:TaxBasisTotalAmount>{_money(totals["net"])}</ram:TaxBasisTotalAmount>
+        <ram:TaxTotalAmount currencyID="{spec["currency"]}">{_money(totals["tax"])}</ram:TaxTotalAmount>
+        <ram:GrandTotalAmount>{_money(totals["grand"])}</ram:GrandTotalAmount>
+        <ram:DuePayableAmount>{_money(totals["grand"])}</ram:DuePayableAmount>
+      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+    </ram:ApplicableHeaderTradeSettlement>
+  </rsm:SupplyChainTradeTransaction>
+</rsm:CrossIndustryInvoice>
+"""
+    return xml.encode("utf-8")
+
+
+def hybrid_visual_lines(spec: dict[str, Any], *, visual_override: dict[str, Decimal] | None = None) -> list[str]:
+    """Bildteil der hybriden Rechnung; ``visual_override`` erzeugt gezielt Abweichungen (Tests)."""
+    net = sum((line[4] for line in spec["lines"]), Decimal(0))
+    tax = (net * spec["rate"] / 100).quantize(Decimal("0.01"))
+    values = {"net": net, "tax": tax, "grand": net + tax, **(visual_override or {})}
+    seller, buyer = spec["seller"], spec["buyer"]
+    start, end = spec["period"]
+    iban = " ".join(spec["iban"][i : i + 4] for i in range(0, len(spec["iban"]), 4))
+    lines = [
+        seller["name"],
+        f"{seller['street']}, {seller['postcode']} {seller['city']}",
+        f"Steuernummer: {seller['tax_number']}   USt-IdNr.: {seller['vat_id']}",
+        "",
+        f"An: {buyer['name']}",
+        f"{buyer['street']}, {buyer['postcode']} {buyer['city']}",
+    ]
+    if spec.get("buyer_reference"):
+        lines.append(f"Leitweg-ID: {spec['buyer_reference']}   Bestellnummer: {spec['order_reference']}")
+    lines += [
+        "",
+        f"RECHNUNG Nr. {spec['number']}",
+        f"Rechnungsdatum: {spec['issue_date']:%d.%m.%Y}",
+        f"Leistungszeitraum: {start:%d.%m.%Y} - {end:%d.%m.%Y}",
+        "",
+    ]
+    for line_id, name, quantity, unit, amount in spec["lines"]:
+        unit_label = "Std." if unit == "HUR" else "Stk."
+        lines.append(f"Pos. {line_id}  {quantity} {unit_label} {name}  {_de_money(amount)} EUR")
+    lines += [
+        "",
+        f"Summe netto: {_de_money(values['net'])} EUR",
+        f"zzgl. {spec['rate']} % USt: {_de_money(values['tax'])} EUR",
+        f"Gesamtbetrag: {_de_money(values['grand'])} EUR",
+        "",
+        f"Zahlbar bis {spec['due_date']:%d.%m.%Y} auf IBAN {iban}",
+        "Diese Rechnung ist eine hybride E-Rechnung (ZUGFeRD 2.3, Profil EN 16931).",
+        "Maßgeblich ist der eingebettete XML-Datensatz factur-x.xml.",
+    ]
+    return lines
+
+
+FACTURX_XMP = b"""<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
+<fx:DocumentType>INVOICE</fx:DocumentType><fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>
+<fx:Version>1.0</fx:Version><fx:ConformanceLevel>EN 16931</fx:ConformanceLevel>
+</rdf:Description></rdf:RDF></x:xmpmeta>
+<?xpacket end="w"?>"""
+
+
+def build_hybrid_pdf(spec: dict[str, Any], **visual: Any) -> bytes:
+    """Hybride Rechnung: Bildteil + eingebettetes ``factur-x.xml`` (AFRelationship /Alternative)."""
+    return build_pdf(
+        [hybrid_visual_lines(spec, **visual)],
+        attachments=[("factur-x.xml", build_cii_invoice(spec), "Alternative")],
+        xmp=FACTURX_XMP,
+    )
+
+
 def demo_documents() -> list[tuple[str, bytes]]:
-    """Liefert (Dateiname, PDF-Bytes) der drei Referenzdokumente."""
+    """Liefert (Dateiname, PDF-Bytes) der vier Referenzdokumente."""
     try:
         recruiting = SAMPLE_CONTRACT.read_bytes()
     except OSError:
@@ -131,6 +382,7 @@ def demo_documents() -> list[tuple[str, bytes]]:
         ("Rechnung_Gueltig_14UStG.pdf", build_pdf([VALID_INVOICE_LINES])),
         ("Rechnung_Fehlerhaft_Steuerfalle.pdf", build_pdf([FAULTY_INVOICE_LINES])),
         ("KI_Recruiting_Dienstleistervertrag.pdf", recruiting),
+        (HYBRID_FILENAME, build_hybrid_pdf(HYBRID_INVOICE)),
     ]
 
 

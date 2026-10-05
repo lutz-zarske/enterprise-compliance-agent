@@ -28,6 +28,15 @@ import anyio.to_thread
 from app.audit_ledger import AuditEventType, AuditLedger, LedgerEntry
 from app.config import Settings
 from app.db import DocumentRecord, DocumentRepository, NewDocument, utcnow
+from app.extractors import (
+    EInvoiceError,
+    compare_with_visual,
+    find_einvoice_attachment,
+    parse_einvoice_xml,
+    render_reading_text,
+    to_extraction,
+)
+from app.extractors.einvoice import looks_like_xml
 from app.llm import PROMPT_HASH, ComplianceAuditPayload, StructuredLLMClient
 from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import VaultedClient
@@ -43,6 +52,7 @@ from app.schemas import (
     DocumentDetail,
     DocumentStatus,
     DocumentSummary,
+    EInvoiceData,
     ExtractionResult,
     GDPRAssessment,
     PIICategory,
@@ -56,9 +66,14 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 
-#: Erlaubte Dateiendungen und MIME-Typen fuer den Upload.
+#: Erlaubte Dateiendungen und MIME-Typen fuer den Upload (je Endung).
 ALLOWED_CONTENT_TYPES = frozenset({"application/pdf", "application/x-pdf", "application/octet-stream"})
-ALLOWED_SUFFIXES = frozenset({".pdf"})
+XML_CONTENT_TYPES = frozenset({"application/xml", "text/xml", "application/octet-stream"})
+ALLOWED_SUFFIXES = frozenset({".pdf", ".xml"})
+
+#: Kennung des deterministischen E-Rechnungs-Pfads in Datenbank, Ledger und UI.
+STRUCTURED_MODEL = "en16931-parser"
+STRUCTURED_PROVIDER = "structured"
 
 #: Laenge der Textvorschau in der Detailansicht.
 TEXT_PREVIEW_CHARS = 1200
@@ -107,6 +122,14 @@ class DocumentNotAnalyzedError(ServiceError):
     code = "document_not_analyzed"
     status_code = 409
     hint = "Zuerst POST /documents/{id}/extract ausfuehren."
+
+
+class InvalidEInvoiceUploadError(UploadValidationError):
+    """Reiner XML-Upload ist keine auswertbare EN-16931-Rechnung."""
+
+    code = "invalid_einvoice"
+    status_code = 422
+    hint = "Erwartet wird eine XRechnung bzw. ein ZUGFeRD-/Factur-X-Datensatz (CII oder UBL)."
 
 
 class NoTextAvailableError(ServiceError):
@@ -238,6 +261,54 @@ def escalate_ai_act(assessment: AIActAssessment) -> AIActAssessment:
 
 
 # ---------------------------------------------------------------------------
+# E-Rechnung (EN 16931)
+# ---------------------------------------------------------------------------
+
+
+def read_embedded_einvoice(pdf_bytes: bytes, visual_text: str) -> EInvoiceData | None:
+    """Liest den eingebetteten XML-Datensatz einer hybriden Rechnung (falls vorhanden).
+
+    Ein defektes oder nicht unterstuetztes XML verhindert den Upload nicht: Es
+    wird mit ``error`` vermerkt, und das Dokument laeuft ueber die Textanalyse.
+    """
+    attachment = find_einvoice_attachment(pdf_bytes)
+    if attachment is None:
+        return None
+    try:
+        einvoice = parse_einvoice_xml(attachment.data, source="embedded", attachment_name=attachment.name)
+    except EInvoiceError as exc:
+        logger.warning("Eingebettetes XML %s nicht auswertbar: %s", attachment.name, exc)
+        return EInvoiceData(
+            source="embedded",
+            attachment_name=attachment.name,
+            error=str(exc),
+            xml_sha256=compute_sha256(attachment.data),
+            xml_size=len(attachment.data),
+        )
+    einvoice.visual_check = compare_with_visual(einvoice, visual_text)
+    return einvoice
+
+
+def parse_einvoice(record: DocumentRecord) -> EInvoiceData | None:
+    if not record.einvoice:
+        return None
+    try:
+        return EInvoiceData.model_validate(record.einvoice)
+    except Exception:  # noqa: BLE001 - alter Datenbestand darf die API nicht kippen
+        logger.warning("E-Rechnungsdaten von Dokument %s nicht lesbar.", record.id, exc_info=True)
+        return None
+
+
+def uses_structured_path(einvoice: EInvoiceData | None) -> bool:
+    """XML ist massgeblich, wenn es auswertbar ist und - bei hybriden Rechnungen - ein
+    E-Rechnungs-Profil traegt.  MINIMUM/BASIC WL sind keine E-Rechnungen: Dort ist
+    der Bildteil die Rechnung, und die Analyse laeuft ueber den Text."""
+    if einvoice is None or einvoice.error:
+        return False
+    return einvoice.source == "standalone" or einvoice.is_einvoice
+
+
+# ---------------------------------------------------------------------------
 # Fortschritt der Pipeline (fuer den Live-Audit-Stepper im Frontend)
 # ---------------------------------------------------------------------------
 
@@ -337,7 +408,11 @@ class DocumentService:
     async def ingest(
         self, *, filename: str, content_type: str | None, data: bytes
     ) -> tuple[DocumentRecord, str | None]:
-        """Validiert, parst und persistiert ein hochgeladenes PDF.
+        """Validiert, parst und persistiert ein hochgeladenes PDF oder XML.
+
+        PDFs werden auf einen eingebetteten E-Rechnungs-Datensatz (ZUGFeRD,
+        Factur-X, XRechnung) untersucht; reine XML-Dateien muessen eine
+        EN-16931-Rechnung in CII- oder UBL-Syntax sein.
 
         Returns:
             Das angelegte Dokument und - falls vorhanden - die ID eines bereits
@@ -348,11 +423,13 @@ class DocumentService:
 
         if suffix not in ALLOWED_SUFFIXES:
             raise UploadValidationError(
-                f"Nicht unterstuetzte Dateiendung '{suffix or '(keine)'}'. Erlaubt ist ausschliesslich .pdf."
+                f"Nicht unterstuetzte Dateiendung '{suffix or '(keine)'}'. Erlaubt sind .pdf und .xml."
             )
-        if content_type and content_type.split(";")[0].strip() not in ALLOWED_CONTENT_TYPES:
+        allowed_types = XML_CONTENT_TYPES if suffix == ".xml" else ALLOWED_CONTENT_TYPES
+        if content_type and content_type.split(";")[0].strip() not in allowed_types:
+            expected = "application/xml" if suffix == ".xml" else "application/pdf"
             raise UploadValidationError(
-                f"Nicht unterstuetzter Content-Type '{content_type}'. Erwartet wird application/pdf."
+                f"Nicht unterstuetzter Content-Type '{content_type}'. Erwartet wird {expected}."
             )
         if not data:
             raise UploadValidationError("Die hochgeladene Datei ist leer.")
@@ -362,9 +439,16 @@ class DocumentService:
                 f"{self._settings.max_upload_bytes / 1_048_576:.1f} MB."
             )
 
-        # Textextraktion vor dem Speichern: ein unlesbares PDF wird gar nicht
+        # Parsen vor dem Speichern: ein unlesbares Dokument wird gar nicht
         # erst persistiert.
-        parsed: PdfExtraction = await extract_text_async(data)
+        if suffix == ".xml":
+            einvoice, text, pages = await self._ingest_xml(data)
+            stored_type = "application/xml"
+        else:
+            parsed: PdfExtraction = await extract_text_async(data)
+            einvoice = await anyio.to_thread.run_sync(lambda: read_embedded_einvoice(data, parsed.text))
+            text, pages = parsed.text, parsed.page_count
+            stored_type = "application/pdf"
 
         sha256 = compute_sha256(data)
         duplicate = await self._repository.get_by_sha256(sha256)
@@ -372,27 +456,39 @@ class DocumentService:
         document = NewDocument(
             original_filename=safe_name,
             stored_filename="",  # wird nach der ID-Vergabe gesetzt
-            content_type="application/pdf",
+            content_type=stored_type,
             size_bytes=len(data),
             sha256=sha256,
-            page_count=parsed.page_count,
-            char_count=parsed.char_count,
-            raw_text=parsed.text,
+            page_count=pages,
+            char_count=len(text),
+            raw_text=text,
+            einvoice=einvoice.model_dump(mode="json") if einvoice else None,
         )
-        document.stored_filename = f"{document.id}.pdf"
+        document.stored_filename = f"{document.id}{suffix}"
 
         target = self._settings.upload_path / document.stored_filename
         await anyio.to_thread.run_sync(lambda: target.write_bytes(data))
 
         record = await self._repository.create(document)
         logger.info(
-            "Dokument %s aufgenommen (%s Seiten, %s Zeichen, %s Bytes)",
+            "Dokument %s aufgenommen (%s, %s Seiten, %s Zeichen, %s Bytes, E-Rechnung: %s)",
             record.id,
-            parsed.page_count,
-            parsed.char_count,
+            stored_type,
+            pages,
+            len(text),
             len(data),
+            einvoice.profile if einvoice and not einvoice.error else "nein",
         )
         return record, (duplicate.id if duplicate else None)
+
+    async def _ingest_xml(self, data: bytes) -> tuple[EInvoiceData, str, int]:
+        if not looks_like_xml(data):
+            raise InvalidEInvoiceUploadError("Die Datei beginnt nicht mit einem XML-Element.")
+        try:
+            einvoice = await anyio.to_thread.run_sync(lambda: parse_einvoice_xml(data, source="standalone"))
+        except EInvoiceError as exc:
+            raise InvalidEInvoiceUploadError(str(exc)) from exc
+        return einvoice, render_reading_text(einvoice), 0
 
     # --- Extraktion & Audit ------------------------------------------------
     async def extract_and_audit(self, record: DocumentRecord) -> ExtractionOutcome:
@@ -411,6 +507,10 @@ class DocumentService:
             raise NoTextAvailableError(
                 f"Zum Dokument {record.id} ist kein extrahierter Text gespeichert."
             )
+
+        einvoice = parse_einvoice(record)
+        if uses_structured_path(einvoice):
+            return await self._structured_analysis(record, einvoice)  # type: ignore[arg-type]
 
         prompt_text = _truncate_for_prompt(text, self._settings.max_prompt_chars)
         enforce_ustg, escalate = self._flags()
@@ -456,6 +556,71 @@ class DocumentService:
             audit_ms=audit_ms,
             enforce_ustg=enforce_ustg,
             escalate=escalate,
+            einvoice=einvoice,
+        )
+
+    async def _structured_analysis(self, record: DocumentRecord, einvoice: EInvoiceData) -> ExtractionOutcome:
+        """Deterministischer Pfad fuer E-Rechnungen: XML ist massgeblich, kein Sprachmodell.
+
+        Die Rechnungsdaten stammen vollstaendig aus dem EN-16931-Datensatz; der
+        DSGVO-Teil beruht auf dem Regex-Scanner.  Eine KI-Einstufung nach dem
+        AI Act findet nicht statt - eine Rechnung begruendet keine Anbieter-
+        oder Betreiberpflichten; massgeblich ist der zugrunde liegende Vertrag.
+        """
+        progress = self._progress
+        enforce_ustg, escalate = self._flags()
+        await self._repository.mark_processing(record.id)
+        try:
+            progress.set(record.id, "pii_scan")
+            rule_findings = scan_text(record.raw_text or "")
+            progress.set(record.id, "ustg_check")
+            extraction = augment_extraction_issues(to_extraction(einvoice))
+            progress.set(record.id, "ai_act")
+            audit_payload = ComplianceAuditPayload.model_validate(
+                {
+                    "ai_act": {
+                        "describes_ai_system": False,
+                        "overall_risk_level": "not_applicable",
+                        "systems": [],
+                        "reasoning": (
+                            "Strukturierte E-Rechnung, deterministisch aus dem EN-16931-Datensatz geprüft (keine "
+                            "KI-Inferenz). Eine Rechnung begründet keine Pflichten nach der VO (EU) 2024/1689; "
+                            "ein KI-Einsatz ist im zugrunde liegenden Vertrag zu prüfen."
+                        ),
+                        "obligations": [],
+                    },
+                    "gdpr": {
+                        "contains_personal_data": bool(rule_findings),
+                        "findings": [],
+                        "risk_level": "none",
+                        "reasoning": "Regelbasierter PII-Scan über den Rechnungstext (keine KI-Inferenz).",
+                        "recommendations": [],
+                    },
+                }
+            )
+        except Exception as exc:
+            await self._repository.mark_failed(record.id, f"{type(exc).__name__}: {exc}")
+            progress.clear(record.id)
+            raise
+        return await self._finalize_analysis(
+            record,
+            extraction=extraction,
+            audit_payload=audit_payload,
+            rule_findings=rule_findings,
+            model=STRUCTURED_MODEL,
+            provider=STRUCTURED_PROVIDER,
+            vault_report=None,
+            duration_ms=0,
+            audit_ms=0,
+            enforce_ustg=enforce_ustg,
+            escalate=escalate,
+            einvoice=einvoice,
+            ledger_details={
+                "structured_einvoice": True,
+                "einvoice_profile": einvoice.profile,
+                "einvoice_syntax": einvoice.syntax,
+                "xml_sha256": einvoice.xml_sha256,
+            },
         )
 
     async def _finalize_analysis(
@@ -473,6 +638,7 @@ class DocumentService:
         enforce_ustg: bool,
         escalate: bool,
         ledger_details: dict[str, object] | None = None,
+        einvoice: EInvoiceData | None = None,
     ) -> ExtractionOutcome:
         """Gemeinsamer Abschluss fuer Live- und Referenz-Audits.
 
@@ -514,7 +680,13 @@ class DocumentService:
 
         pdf_bytes = await anyio.to_thread.run_sync(self._read_pdf, record)
         scorecard = compute_scorecard(
-            extraction, compliance, text, enforce_ustg_check=enforce_ustg, pdf_bytes=pdf_bytes
+            extraction,
+            compliance,
+            text,
+            enforce_ustg_check=enforce_ustg,
+            pdf_bytes=pdf_bytes,
+            einvoice=einvoice,
+            structured=provider == STRUCTURED_PROVIDER,
         )
 
         updated = await self._repository.save_results(
@@ -589,6 +761,7 @@ class DocumentService:
             audit_ms=0,
             enforce_ustg=enforce_ustg,
             escalate=escalate,
+            einvoice=parse_einvoice(record),
             ledger_details={
                 "reference_audit": True,
                 "note": "Vorberechnete Modellantwort (Musterdaten), keine Inferenz.",
@@ -597,16 +770,18 @@ class DocumentService:
 
     # --- Demo-Daten ---------------------------------------------------------
     async def seed_demo(self) -> list[dict[str, object]]:
-        """Legt die drei Musterdokumente an und versieht sie mit Referenz-Audits.
+        """Legt die vier Musterdokumente an und analysiert sie ohne Sprachmodell.
 
-        Funktioniert ohne laufendes Sprachmodell: Die Modellantwort stammt aus
-        ``app/demo.py``, Score, Maskierung und Ledger aus dem echten Regelwerk.
-        Idempotent ueber die SHA-256: Vorhandene Dokumente werden nur dann mit
-        dem Referenz-Audit versehen, wenn sie noch nicht analysiert sind - ein
-        spaeteres Live-Audit wird nie ueberschrieben.  Die gueltige Rechnung
-        erhaelt zusaetzlich ein ausdruecklich als Demo gekennzeichnetes Siegel.
+        Die drei PDF-Musterdokumente erhalten Referenz-Audits (vorberechnete
+        Modellantwort aus ``app/demo.py``, Score, Maskierung und Ledger aus dem
+        echten Regelwerk).  Die hybride ZUGFeRD-Rechnung braucht keine
+        Vorberechnung: Sie laeuft ueber den deterministischen XML-Pfad.
+        Idempotent ueber die SHA-256: Vorhandene Dokumente werden nur
+        analysiert, wenn sie es noch nicht sind - ein spaeteres Live-Audit wird
+        nie ueberschrieben.  Die gueltige Rechnung erhaelt zusaetzlich ein
+        ausdruecklich als Demo gekennzeichnetes Siegel.
         """
-        from app.demo import DEMO_AUDITOR, DEMO_SEAL_NOTE, demo_documents
+        from app.demo import DEMO_AUDITOR, DEMO_SEAL_NOTE, REFERENCE_AUDITS, demo_documents
 
         results: list[dict[str, object]] = []
         for filename, data in demo_documents():
@@ -616,9 +791,13 @@ class DocumentService:
                 record, _ = await self.ingest(filename=filename, content_type="application/pdf", data=data)
             audited = False
             if record.status != DocumentStatus.EXTRACTED.value:
-                outcome = await self.apply_reference_audit(record)
+                if filename in REFERENCE_AUDITS:
+                    outcome = await self.apply_reference_audit(record)
+                    audited = True
+                else:
+                    # E-Rechnung: echter, deterministischer Lauf ueber den XML-Datensatz.
+                    outcome = await self.extract_and_audit(record)
                 record = outcome.record
-                audited = True
                 if filename == "Rechnung_Gueltig_14UStG.pdf":
                     record = await self.sign_off(
                         record,
@@ -892,6 +1071,7 @@ def to_summary(record: DocumentRecord) -> DocumentSummary:
         sealed=bool(record.sign_off),
         pinned=record.pinned,
         provider=record.provider,
+        einvoice_profile=(record.einvoice or {}).get("profile") if not (record.einvoice or {}).get("error") else None,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -951,6 +1131,7 @@ def to_detail(record: DocumentRecord, *, pii_level: str = "standard") -> Documen
         scorecard=parse_scorecard(record),
         sign_off=parse_sign_off(record),
         text_view=text_view,
+        einvoice=parse_einvoice(record),
         pinned=record.pinned,
         provider=record.provider,
         error=record.error,
