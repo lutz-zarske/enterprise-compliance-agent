@@ -340,3 +340,21 @@ def test_mischsteuersatz_wird_je_satz_geprueft() -> None:
     card = _structured_card(wrong, render_reading_text(wrong))
     assert _check(card, "sum_check").status.value == "fail"
     assert _check(card, "en16931").status.value == "warn"
+
+
+def test_kein_xml_vorrang_bei_minimum_profil() -> None:
+    spec = hybrid_spec(specification_id="urn:factur-x.eu:1p0:minimum")
+    pdf = build_pdf(
+        [hybrid_visual_lines(spec, visual_override={"grand": Decimal("5812.00")})],
+        attachments=[("factur-x.xml", build_cii_invoice(spec), "Data")],
+    )
+    text = extract_text(pdf).text
+    invoice = read_embedded_einvoice(pdf, text)
+    assert invoice.is_einvoice is False and uses_structured_path(invoice) is False
+    extraction = ExtractionResult.model_validate(
+        {"doc_type": "invoice", "sender": "Elbtal Cloud Solutions GmbH", "document_number": "ECS-2026-0412",
+         "document_date": "2026-09-15", "net_amount": 4800, "tax_rate": 19, "tax_amount": 912, "total_amount": 5812}
+    )
+    card = compute_scorecard(extraction, _no_findings(), text, einvoice=invoice, structured=False)
+    assert _check(card, "xml_primacy") is None
+    assert "MINIMUM" in _check(card, "en16931").detail

@@ -446,6 +446,8 @@ def _xml_primacy_check(einvoice: EInvoiceData | None) -> ScoreCheck | None:
     """Abgleich XML-Datensatz <-> visueller PDF-Teil (nur hybride Rechnungen)."""
     if einvoice is None or einvoice.error or einvoice.source != "embedded" or not einvoice.visual_check:
         return None
+    if not einvoice.is_einvoice:
+        return None  # MINIMUM/BASIC WL: Der Bildteil ist die Rechnung, das XML hat keinen Vorrang.
     label = "Abgleich XML-Datensatz ↔ PDF-Bildteil"
     ref = "BMF-Schreiben vom 15.10.2024, Rz. 36"
     mismatches = [c for c in einvoice.visual_check if c.status == "mismatch"]

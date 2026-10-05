@@ -14,7 +14,7 @@ dem Versand pseudonymisiert.
 | **Frontend** | Next.js 15 · React 19 · Tailwind CSS 4 · TypeScript (strict) |
 | **Inferenz** | Ollama `qwen2.5:14b-instruct` (Default) · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein LangChain |
 | **Persistenz** | SQLite (Default) · PostgreSQL über `DATABASE_URL` |
-| **Qualität** | 231 Pytest-Tests (ca. 13 s, ohne laufendes LLM) · ESLint · `next build` · CI für Backend, Frontend, Docker |
+| **Qualität** | 230 Pytest-Tests (ca. 13 s, ohne laufendes LLM) · ESLint · `next build` · CI für Backend, Frontend, Docker |
 | **Betrieb** | Ein-Klick-Start für Windows · Docker Compose (API `:8001`, Frontend `:3001`) · Non-Root-Container, Healthchecks |
 
 ![Dashboard: KI-Recruiting-Vertrag, EU AI Act Anhang III Nr. 4, Score auf 59 gedeckelt](docs/screenshots/dashboard-hochrisiko-dark.png)
@@ -485,7 +485,7 @@ Alembic dazu.
 ## Tests
 
 ```bash
-python -m pytest            # 231 Tests, ca. 13 s, kein LLM nötig
+python -m pytest            # 230 Tests, ca. 13 s, kein LLM nötig
 cd frontend && npm run lint && npm run build
 ```
 
@@ -499,7 +499,7 @@ nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault und Validierung laufen real.
 | `test_workflow.py` | 22 | Scorecard in der API, Zertifikat (inkl. XSS-Escaping), Siegel, Batch, Seed, KPIs, Pins, Fortschritt, Copilot, Schwärzungsstufen |
 | `test_privacy_and_providers.py` | 26 | Vault, Provider-Payloads, Fehlerabbildung, verschlüsselte Keys, Cloud-Pipeline ohne Klartext-PII |
 | `test_scoring.py` | 22 | Regelwerk, Demo-Scores, Kleinbetrag, Corona-Sätze, Deckelung, Risikoerklärungen, XML-Vorrang, § 14c-Hinweis |
-| `test_einvoice.py` | 37 | CII/UBL-Mapping, Profile, XXE/DTD-Abwehr, ZUGFeRD 1.0, Geschäftsregeln, Leitweg-ID (KoSIT-Beispiele), PDF-Anhang, Diskrepanzen, Mischsteuersatz, B2G/B2B |
+| `test_einvoice.py` | 38 | CII/UBL-Mapping, Profile, XXE/DTD-Abwehr, ZUGFeRD 1.0, Geschäftsregeln, Leitweg-ID (KoSIT-Beispiele), PDF-Anhang, Diskrepanzen, Mischsteuersatz, B2G/B2B |
 | `test_einvoice_api.py` | 18 | XML-Upload ohne Modell, hybride PDF, Batch mit PDF und XML, Zertifikat, ZIP-Paket inkl. Manipulations- und Fremdschlüsselnachweis, fehlende Originaldatei, Copilot-Musterantwort nur bei exakter SHA-256 |
 | `test_reference_demo.py` | 12 | Musterdaten ohne Modell (100/45/59 + ZUGFeRD 100), Demo-Siegel, Ledger-Kennzeichnung, kein Überschreiben von Live-Audits, Copilot-Musterantworten |
 | `test_observability.py` | 13 | JSON-Logs, PII-Filter, Request-ID, Token-Bucket, 429 |
