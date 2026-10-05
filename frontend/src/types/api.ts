@@ -1,10 +1,10 @@
-// Typen spiegeln die Pydantic-Modelle aus app/schemas.py (Backend v2.0).
+// Typen spiegeln die Pydantic-Modelle aus app/schemas.py (Backend v2.1).
 
 export type DocumentStatus = "uploaded" | "processing" | "extracted" | "failed";
 export type DocType = "invoice" | "contract" | "offer" | "reminder" | "other";
 export type AIActRiskLevel = "unacceptable" | "high" | "limited" | "minimal" | "not_applicable";
 export type RiskLevel = "none" | "low" | "medium" | "high";
-export type DetectionSource = "llm" | "rule_based" | "both";
+export type DetectionSource = "llm" | "rule_based" | "both" | "xml" | "xml_rule";
 export type CheckStatus = "pass" | "warn" | "fail" | "not_applicable";
 export type ScoreBand = "green" | "amber" | "red";
 export type InferenceMode = "local" | "gemini" | "anthropic" | "openai";
@@ -151,6 +151,81 @@ export interface TextView {
   truncated: boolean;
 }
 
+export interface EInvoiceParty {
+  name: string | null;
+  vat_id: string | null;
+  tax_number: string | null;
+  street: string | null;
+  postcode: string | null;
+  city: string | null;
+  country: string | null;
+  electronic_address: string | null;
+  electronic_address_scheme: string | null;
+  address: string | null;
+}
+
+export interface EInvoiceVat {
+  category: string | null;
+  rate: Money;
+  taxable_amount: Money;
+  tax_amount: Money;
+  exemption_reason: string | null;
+}
+
+export interface EInvoiceLine {
+  line_id: string | null;
+  name: string | null;
+  quantity: Money;
+  unit: string | null;
+  net_amount: Money;
+  vat_rate: Money;
+}
+
+export interface VisualCheck {
+  bt: string;
+  label: string;
+  xml_value: string;
+  status: "match" | "mismatch" | "not_found";
+  visual_value: string | null;
+}
+
+export interface BusinessTermField {
+  bt: string;
+  label: string;
+  value: string | null;
+}
+
+export interface EInvoiceData {
+  source: "embedded" | "standalone";
+  attachment_name: string | null;
+  error: string | null;
+  syntax: "CII" | "UBL" | null;
+  specification_id: string | null;
+  profile: string;
+  profile_key: string;
+  is_einvoice: boolean;
+  invoice_number: string | null;
+  issue_date: string | null;
+  currency: string | null;
+  buyer_reference: string | null;
+  seller: EInvoiceParty;
+  buyer: EInvoiceParty;
+  net_total: Money;
+  tax_total: Money;
+  grand_total: Money;
+  due_payable: Money;
+  vat_breakdown: EInvoiceVat[];
+  lines: EInvoiceLine[];
+  rule_violations: string[];
+  leitweg: { value: string; valid: boolean; reason: string | null } | null;
+  public_buyer: boolean;
+  public_buyer_reason: string | null;
+  visual_check: VisualCheck[];
+  xml_sha256: string | null;
+  xml_size: number | null;
+  business_terms: BusinessTermField[];
+}
+
 export interface DocumentSummary {
   id: string;
   filename: string;
@@ -171,6 +246,7 @@ export interface DocumentSummary {
   sealed: boolean;
   pinned: boolean;
   provider: string | null;
+  einvoice_profile: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -198,6 +274,7 @@ export interface DocumentDetail {
   scorecard: Scorecard | null;
   sign_off: SignOff | null;
   text_view: TextView | null;
+  einvoice: EInvoiceData | null;
   pinned: boolean;
   provider: string | null;
   error: string | null;
@@ -223,6 +300,7 @@ export interface BatchUploadItem {
   ok: boolean;
   id?: string;
   duplicate_of?: string | null;
+  einvoice_profile?: string | null;
   error?: { code: string; message: string };
 }
 
@@ -239,6 +317,7 @@ export interface SeedResponse {
     status: DocumentStatus;
     created: boolean;
     reference_audit: boolean;
+    structured_audit: boolean;
     compliance_score: number | null;
   }[];
   created: number;
@@ -315,6 +394,15 @@ export interface CopilotResponse {
   provider: string;
   duration_ms: number;
   reference: boolean;
+}
+
+export interface LedgerVerification {
+  valid: boolean;
+  entries: number;
+  head_hash: string;
+  broken_at_seq: number | null;
+  reason: string | null;
+  verified_at: string;
 }
 
 export interface HealthResponse {

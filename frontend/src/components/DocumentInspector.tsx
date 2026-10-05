@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import type { AIActRiskLevel, DocumentDetail, PIIFinding, ScoreCheck, TextSpan } from "../types/api";
+import type { AIActRiskLevel, DetectionSource, DocumentDetail, EInvoiceData, PIIFinding, ScoreCheck, TextSpan, VisualCheck } from "../types/api";
 import {
   cx,
   DOC_TYPE_LABELS,
@@ -13,10 +13,10 @@ import {
   toneForRisk,
   toneForStatus,
 } from "../lib/format";
-import { Check, FileText, Info, Lock } from "./icons";
+import { AlertTriangle, Check, CheckCircle, FileCode, FileText, Info, Lock, MinusCircle } from "./icons";
 import { Chip, EmptyState, StatusIcon, Tabs, Tooltip } from "./ui";
 
-export type InspectorTab = "ustg" | "aiact" | "pii" | "facts";
+export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml";
 
 // --- Farbcodierung der PII-Markierungen --------------------------------------
 // IBAN/Steuer-IDs cyan, Namen bernstein, Betraege smaragd, Kontakt/Adresse indigo,
@@ -74,6 +74,17 @@ const SOURCE_LABELS: Record<string, string> = {
   rule_based: "Regelwerk (Regex)",
   llm: "KI-Modell",
   both: "KI-Modell + Regelwerk",
+  xml: "XML-Datensatz",
+  xml_rule: "XML-Datensatz + Regelwerk",
+};
+
+/** Kurzform der Nachweisherkunft unter dem Status-Chip. */
+const SOURCE_SHORT: Record<DetectionSource, string> = {
+  llm: "KI",
+  rule_based: "Regex",
+  both: "KI + Regex",
+  xml: "XML",
+  xml_rule: "XML + Regex",
 };
 
 function TextViewer({ document, activeSpan, onSpanClick }: {
@@ -166,8 +177,8 @@ function CheckRow({ check }: { check: ScoreCheck }) {
       <div className="flex shrink-0 flex-col items-end gap-1">
         <Chip tone={toneForStatus(check.status)}>{STATUS_LABELS[check.status]}</Chip>
         {check.evidence_source && (
-          <span className="font-mono text-[10px] text-subtle" title="Herkunft des Nachweises">
-            {check.evidence_source === "both" ? "KI + Regex" : check.evidence_source === "llm" ? "KI" : "Regex"}
+          <span className="font-mono text-[10px] text-subtle" title={`Herkunft des Nachweises: ${SOURCE_LABELS[check.evidence_source]}`}>
+            {SOURCE_SHORT[check.evidence_source]}
           </span>
         )}
       </div>
@@ -390,6 +401,164 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
   );
 }
 
+
+// --- XML-Datensatz (EN 16931) ------------------------------------------------
+
+/** Namen in Proportionalschrift, Kennungen und Beträge in Monospace. */
+const NAME_TERMS = new Set(["BT-27", "BT-44"]);
+
+const VISUAL_LABELS: Record<VisualCheck["status"], string> = {
+  match: "Bildteil stimmt überein",
+  mismatch: "Abweichung im Bildteil",
+  not_found: "Im Bildteil nicht gefunden",
+};
+
+function VisualMark({ check }: { check: VisualCheck | undefined }) {
+  if (!check) return <span className="text-subtle">–</span>;
+  const label = check.status === "mismatch" && check.visual_value
+    ? `${VISUAL_LABELS.mismatch}: PDF zeigt ${check.visual_value}`
+    : VISUAL_LABELS[check.status];
+  return (
+    <Tooltip content={label}>
+      <span tabIndex={0} aria-label={label} className="inline-flex cursor-help">
+        {check.status === "match" ? (
+          <CheckCircle size={14} className="text-ok" />
+        ) : check.status === "mismatch" ? (
+          <AlertTriangle size={14} className="text-bad" />
+        ) : (
+          <MinusCircle size={14} className="text-subtle" />
+        )}
+      </span>
+    </Tooltip>
+  );
+}
+
+export function einvoiceLabel(einvoice: EInvoiceData): string {
+  return einvoice.syntax ? `${einvoice.profile} · ${einvoice.syntax}` : einvoice.profile;
+}
+
+function XmlPanel({ document }: { document: DocumentDetail }) {
+  const einvoice = document.einvoice;
+  if (!einvoice) return <EmptyState icon={<FileCode size={18} />} title="Kein XML-Datensatz" />;
+  if (einvoice.error) {
+    return (
+      <div className="rounded-lg border border-warn-line bg-warn-soft p-3 text-xs text-warn">
+        <p className="font-semibold">Eingebettetes XML ({einvoice.attachment_name ?? "unbenannt"}) nicht auswertbar</p>
+        <p className="mt-1 leading-relaxed">{einvoice.error}</p>
+        <p className="mt-1 leading-relaxed">Geprüft wird deshalb der Bildteil des PDFs.</p>
+      </div>
+    );
+  }
+  const embedded = einvoice.source === "embedded";
+  const visual = new Map(einvoice.visual_check.map((check) => [check.bt, check]));
+  const extraVisual = einvoice.visual_check.filter(
+    (check) => !einvoice.business_terms.some((term) => term.bt === check.bt),
+  );
+  const mismatches = einvoice.visual_check.filter((check) => check.status === "mismatch").length;
+  return (
+    <div className="space-y-4">
+      <h3 className="sr-only">XML-Datensatz (EN 16931)</h3>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Chip tone={einvoice.is_einvoice ? "accent" : "warn"}>{einvoiceLabel(einvoice)}</Chip>
+        <span className="text-subtle">
+          {embedded ? `eingebettet als ${einvoice.attachment_name}` : "reines XML"}
+          {embedded && " · maßgeblich vor dem Bildteil (BMF 15.10.2024, Rz. 36)"}
+        </span>
+      </div>
+      {!einvoice.is_einvoice && (
+        <p className="rounded-lg border border-warn-line bg-warn-soft p-3 text-xs leading-relaxed text-warn">
+          Dieses Profil erfüllt nicht die Anforderungen an eine E-Rechnung. Rechnung im Sinne des § 14 UStG ist der Bildteil.
+        </p>
+      )}
+      {embedded && mismatches > 0 && (
+        <p role="status" className="rounded-lg border border-bad-line bg-bad-soft p-3 text-xs leading-relaxed text-bad">
+          Diskrepanz zwischen visuellem PDF und maßgeblichem XML-Datensatz in {mismatches === 1 ? "einem Wert" : `${mismatches} Werten`}.
+          Es gilt das XML.
+        </p>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-line">
+        <table className="w-full text-left text-xs">
+          <caption className="sr-only">Business Terms nach EN 16931</caption>
+          <thead className="bg-surface-2 text-subtle">
+            <tr>
+              <th scope="col" className="px-3 py-2 font-medium">BT</th>
+              <th scope="col" className="px-3 py-2 font-medium">Business Term</th>
+              <th scope="col" className="px-3 py-2 font-medium">Wert (XML)</th>
+              {embedded && <th scope="col" className="px-3 py-2 text-center font-medium">PDF</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {einvoice.business_terms.map((term) => (
+              <tr key={term.bt}>
+                <td className="whitespace-nowrap px-3 py-2 align-top font-mono text-subtle">{term.bt}</td>
+                <td className="px-3 py-2 align-top text-muted">{term.label}</td>
+                <td
+                  className={cx(
+                    "px-3 py-2 align-top text-fg [overflow-wrap:anywhere]",
+                    NAME_TERMS.has(term.bt) ? "text-[12.5px]" : "font-mono tabular-nums",
+                  )}
+                >
+                  {term.value ?? "–"}
+                </td>
+                {embedded && <td className="px-3 py-2 text-center align-top"><VisualMark check={visual.get(term.bt)} /></td>}
+              </tr>
+            ))}
+            {embedded &&
+              extraVisual.map((check) => (
+                <tr key={check.bt}>
+                  <td className="whitespace-nowrap px-3 py-2 align-top font-mono text-subtle">{check.bt}</td>
+                  <td className="px-3 py-2 align-top text-muted">{check.label}</td>
+                  <td className="px-3 py-2 align-top font-mono tabular-nums text-fg [overflow-wrap:anywhere]">{check.xml_value}</td>
+                  <td className="px-3 py-2 text-center align-top"><VisualMark check={check} /></td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+
+      {einvoice.public_buyer && (
+        <div className="rounded-lg border border-line p-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip tone="neutral">Öffentlicher Auftraggeber (B2G)</Chip>
+            {einvoice.leitweg ? (
+              <Chip tone={einvoice.leitweg.valid ? "ok" : "bad"}>
+                Leitweg-ID {einvoice.leitweg.valid ? "gültig" : "ungültig"}
+              </Chip>
+            ) : (
+              <Chip tone="bad">Leitweg-ID fehlt</Chip>
+            )}
+          </div>
+          <p className="mt-2 leading-relaxed text-muted">{einvoice.public_buyer_reason}</p>
+          {einvoice.leitweg && !einvoice.leitweg.valid && (
+            <p className="mt-1 leading-relaxed text-bad">{einvoice.leitweg.reason}</p>
+          )}
+        </div>
+      )}
+
+      {einvoice.rule_violations.length > 0 && (
+        <div>
+          <p className="label-caps mb-1">EN-16931-Geschäftsregeln</p>
+          <ul className="list-disc space-y-1 pl-5 text-xs text-warn">
+            {einvoice.rule_violations.map((rule) => <li key={rule}>{rule}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-[11px] sm:grid-cols-[auto_1fr]">
+        <dt className="text-subtle">Spezifikation (BT-24)</dt>
+        <dd className="break-all font-mono text-muted">{einvoice.specification_id ?? "–"}</dd>
+        <dt className="text-subtle">SHA-256 XML</dt>
+        <dd className="break-all font-mono text-muted">{einvoice.xml_sha256 ?? "–"}</dd>
+      </dl>
+      <p className="text-[11px] leading-relaxed text-subtle">
+        Geprüft werden Profilkennung, Pflichtfelder und Summenregeln. Eine Validierung gegen XSD und Schematron
+        (KoSIT-Validator) ist nicht Teil dieser Prüfung.
+      </p>
+    </div>
+  );
+}
+
 const LEVEL_LABELS = { strict: "Strikt", standard: "Standard", audit_only: "Audit-Only" } as const;
 
 export function DocumentInspector({ document, tab, onTabChange }: {
@@ -404,7 +573,20 @@ export function DocumentInspector({ document, tab, onTabChange }: {
   return (
     <section className="card p-4" aria-label="Dokumenten-Inspektor">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-fg">Dokumenten-Inspektor</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-fg">Dokumenten-Inspektor</h2>
+          {document.einvoice && !document.einvoice.error && (
+            <button
+              type="button"
+              onClick={() => onTabChange("xml")}
+              className={cx("chip transition-colors duration-150 hover:border-accent", TONE_CLASSES[document.einvoice.is_einvoice ? "accent" : "warn"])}
+              title="XML-Datensatz anzeigen"
+            >
+              <FileCode size={12} aria-hidden="true" />
+              {einvoiceLabel(document.einvoice)}
+            </button>
+          )}
+        </div>
         {document.text_view && (
           <span className="chip border-line bg-surface-2 text-subtle">
             Maskierung: {LEVEL_LABELS[document.text_view.level]} · {document.text_view.spans.length} Markierungen
@@ -443,6 +625,7 @@ export function DocumentInspector({ document, tab, onTabChange }: {
               { key: "aiact", label: "EU AI Act" },
               { key: "pii", label: "PII-Ledger", badge: <span className="font-mono text-[10px] text-subtle">{document.compliance?.gdpr.findings.length ?? 0}</span> },
               { key: "facts", label: "Kerndaten" },
+              ...(document.einvoice ? [{ key: "xml" as const, label: "XML-Datensatz" }] : []),
             ]}
           />
           <div className="max-h-[600px] overflow-y-auto pt-3">
@@ -455,6 +638,7 @@ export function DocumentInspector({ document, tab, onTabChange }: {
             {tab === "aiact" && <AiActPanel document={document} />}
             {tab === "pii" && <PiiPanel document={document} highlight={activeSpan} />}
             {tab === "facts" && <FactsPanel document={document} />}
+            {tab === "xml" && <XmlPanel document={document} />}
           </div>
         </div>
       </div>

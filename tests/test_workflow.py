@@ -167,14 +167,14 @@ def test_batch_limit(make_full_client: Callable[..., TestClient], invoice_pdf: b
 
 def test_demo_seed_ist_idempotent(full_client: TestClient) -> None:
     first = full_client.post("/api/demo/seed").json()
-    assert first["created"] == 3
+    assert first["created"] == 4
     names = [item["filename"] for item in first["items"]]
     assert names == ["Rechnung_Gueltig_14UStG.pdf", "Rechnung_Fehlerhaft_Steuerfalle.pdf",
-                     "KI_Recruiting_Dienstleistervertrag.pdf"]
+                     "KI_Recruiting_Dienstleistervertrag.pdf", "Rechnung_ZUGFeRD_Hybrid.pdf"]
     second = full_client.post("/api/demo/seed").json()
     assert second["created"] == 0
     assert [item["id"] for item in second["items"]] == [item["id"] for item in first["items"]]
-    assert full_client.get("/documents").json()["total"] == 3
+    assert full_client.get("/documents").json()["total"] == 4
 
 
 def test_demo_rechnungen_scoren_wie_dokumentiert(

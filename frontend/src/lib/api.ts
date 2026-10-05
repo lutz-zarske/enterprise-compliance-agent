@@ -15,6 +15,7 @@ import type {
   ExtractionResponse,
   HealthResponse,
   KpiResponse,
+  LedgerVerification,
   ProgressResponse,
   RuntimeSettings,
   SeedResponse,
@@ -39,6 +40,7 @@ export class ApiError extends Error {
 }
 
 const ACCESS_KEY_STORAGE = "eca-access-key";
+const BATCH_SIZE = 20;
 const BASE_STORAGE = "eca-api-base";
 
 function configuredBase(): string | null {
@@ -121,6 +123,31 @@ async function request<T>(path: string, init: RequestInit = {}, base = activeBas
   return (await response.json()) as T;
 }
 
+async function requestBlob(path: string): Promise<{ blob: Blob; filename: string | null }> {
+  let response: Response;
+  try {
+    response = await fetch(`${activeBase}${path}`, { cache: "no-store", headers: headers() });
+  } catch {
+    throw new ApiError(`Backend unter ${activeBase} nicht erreichbar.`, 0, "network");
+  }
+  if (!response.ok) throw await toApiError(response);
+  return { blob: await response.blob(), filename: filenameFrom(response.headers.get("Content-Disposition")) };
+}
+
+/** Dateiname aus Content-Disposition (RFC 5987 bevorzugt, sonst ASCII-Fallback). */
+function filenameFrom(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      /* Fallback unten */
+    }
+  }
+  return /filename="([^"]+)"/i.exec(header)?.[1] ?? null;
+}
+
 async function requestText(path: string): Promise<string> {
   let response: Response;
   try {
@@ -173,21 +200,31 @@ export const api = {
   reportHtml: (id: string) => requestText(`/documents/${id}/report?format=html`),
   copilot: (id: string, question: string, history: CopilotTurn[]) =>
     request<CopilotResponse>(`/documents/${id}/copilot`, json({ question, history })),
+  gobdPackage: (id: string) => requestBlob(`/api/documents/${id}/export/gobd`),
+  verifyLedger: () => request<LedgerVerification>("/api/audit/verify"),
   kpis: () => request<KpiResponse>("/api/dashboard/kpis"),
   seed: () => request<SeedResponse>("/api/demo/seed", { method: "POST" }),
   settings: () => request<RuntimeSettings>("/api/settings"),
   updateSettings: (update: SettingsUpdate) => request<RuntimeSettings>("/api/settings", json(update)),
   testConnection: (provider?: string) =>
     request<ConnectionTestResult>("/api/settings/test-connection", json({ provider: provider ?? null })),
+  /** Laedt beliebig viele Dateien in Paketen zu je 20 (Backend-Limit MAX_BATCH_FILES). */
   uploadBatch: async (files: File[]): Promise<BatchUploadResponse> => {
-    const form = new FormData();
-    files.forEach((file) => form.append("files", file));
-    return request<BatchUploadResponse>("/documents/upload-batch", { method: "POST", body: form });
+    const result: BatchUploadResponse = { items: [], succeeded: 0, failed: 0 };
+    for (let start = 0; start < files.length; start += BATCH_SIZE) {
+      const form = new FormData();
+      files.slice(start, start + BATCH_SIZE).forEach((file) => form.append("files", file));
+      const part = await request<BatchUploadResponse>("/documents/upload-batch", { method: "POST", body: form });
+      result.items.push(...part.items);
+      result.succeeded += part.succeeded;
+      result.failed += part.failed;
+    }
+    return result;
   },
 };
 
 export function downloadBlob(content: BlobPart, filename: string, type: string): void {
-  const url = URL.createObjectURL(new Blob([content], { type }));
+  const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }));
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.redaction import (
+    build_text_view,
     enforce_masking,
     mask_email,
     mask_value,
@@ -114,3 +115,23 @@ def test_ust_idnr_ist_keine_ausweisnummer_und_iban_keine_telefonnummer() -> None
     categories = [finding.category for finding in findings]
     assert categories.count(PIICategory.ID_DOCUMENT_NUMBER) == 1  # nur die echte Ausweisnummer
     assert PIICategory.CONTACT_DATA not in categories
+
+
+def test_kurze_schluesselwoerter_nur_am_wortanfang() -> None:
+    # "reha" steckt in "Softwarehaus", "rezept" in "Rezeption" - beides kein Gesundheitsdatum.
+    assert scan_text("Softwarehaus Nordhessen GmbH, Hotel-Rezeption") == []
+    categories = {finding.masked_value for finding in scan_text("Reha-Massnahme laut Rezept, Arztattest anbei")}
+    assert {"Schluesselwort: reha", "Schluesselwort: rezept", "Schluesselwort: attest"} <= categories
+
+
+def test_leitweg_id_ist_keine_telefonnummer() -> None:
+    findings = scan_text("Leitweg-ID: 04011000-1234512345-06\nTelefon: 0561 1234567")
+    assert [finding.masked_value for finding in findings if finding.category is PIICategory.CONTACT_DATA] == [
+        "0561****4567"
+    ]
+
+
+def test_textansicht_markiert_leitweg_id_nicht() -> None:
+    view = build_text_view("Leitweg-ID: 04011000-1234512345-06\nTelefon: 0561 1234567", "standard")
+    assert "04011000-1234512345-06" in view["text"]
+    assert "0561 1234567" not in view["text"]

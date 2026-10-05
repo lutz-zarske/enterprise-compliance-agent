@@ -77,7 +77,7 @@ export function Tabs<T extends string>({ tabs, active, onChange, className }: {
   className?: string;
 }) {
   return (
-    <div role="tablist" className={cx("flex gap-1 border-b border-line", className)}>
+    <div role="tablist" className={cx("flex gap-1 overflow-x-auto border-b border-line", className)}>
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -85,7 +85,7 @@ export function Tabs<T extends string>({ tabs, active, onChange, className }: {
           aria-selected={active === tab.key}
           onClick={() => onChange(tab.key)}
           className={cx(
-            "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors duration-150",
+            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-medium transition-colors duration-150",
             active === tab.key ? "border-accent text-fg" : "border-transparent text-subtle hover:text-fg",
           )}
         >

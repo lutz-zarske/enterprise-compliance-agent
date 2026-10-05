@@ -828,6 +828,9 @@ class DocumentSummary(ApiModel):
     sealed: bool = False
     pinned: bool = False
     provider: str | None = None
+    einvoice_profile: str | None = Field(
+        default=None, description="Profil der strukturierten E-Rechnung (z. B. 'XRECHNUNG 3.0'), sonst null."
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -862,6 +865,9 @@ class DocumentDetail(ApiModel):
     scorecard: Scorecard | None = None
     sign_off: SignOff | None = None
     text_view: TextView | None = None
+    einvoice: EInvoiceData | None = Field(
+        default=None, description="EN-16931-Datensatz (eingebettetes oder reines XML), sonst null."
+    )
     pinned: bool = False
     provider: str | None = None
     error: str | None = None
@@ -970,6 +976,174 @@ class Scorecard(ApiModel):
     structured_einvoice_detected: bool = False
     computed_at: datetime
     ruleset_version: str
+
+
+# ---------------------------------------------------------------------------
+# Strukturierte E-Rechnung nach EN 16931 (seit v2.1)
+# ---------------------------------------------------------------------------
+
+
+class EInvoiceParty(ApiModel):
+    """Verkaeufer bzw. Kaeufer aus dem XML-Datensatz."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str | None = None
+    vat_id: str | None = None
+    tax_number: str | None = None
+    street: str | None = None
+    postcode: str | None = None
+    city: str | None = None
+    country: str | None = None
+    electronic_address: str | None = None
+    electronic_address_scheme: str | None = None
+
+    @computed_field(description="Anschrift in einer Zeile.")  # type: ignore[prop-decorator]
+    @property
+    def address(self) -> str | None:
+        city = " ".join(part for part in (self.postcode, self.city) if part)
+        parts = [part for part in (self.street, city, self.country) if part]
+        return ", ".join(parts) or None
+
+
+class EInvoiceVat(ApiModel):
+    """Eine Zeile der Umsatzsteueraufschluesselung (BG-23)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    category: str | None = None
+    rate: Decimal | None = None
+    taxable_amount: Decimal | None = None
+    tax_amount: Decimal | None = None
+    exemption_reason: str | None = None
+
+
+class EInvoiceLine(ApiModel):
+    """Eine Rechnungsposition (BG-25)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    line_id: str | None = None
+    name: str | None = None
+    quantity: Decimal | None = None
+    unit: str | None = None
+    net_amount: Decimal | None = None
+    vat_rate: Decimal | None = None
+
+
+class LeitwegCheck(ApiModel):
+    """Formal- und Pruefziffernkontrolle einer Leitweg-ID (KoSIT-Formatspezifikation 2.0.2)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    value: str
+    valid: bool
+    reason: str | None = None
+
+
+class VisualCheck(ApiModel):
+    """Abgleich eines XML-Werts mit dem visuellen PDF-Teil einer hybriden Rechnung."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    bt: str
+    label: str
+    xml_value: str
+    status: Literal["match", "mismatch", "not_found"]
+    visual_value: str | None = None
+
+
+class BusinessTermField(ApiModel):
+    """Zeile der BT-Tabelle im Inspektor."""
+
+    bt: str
+    label: str
+    value: str | None = None
+
+
+class EInvoiceData(ApiModel):
+    """Ausgelesener EN-16931-Datensatz (CII oder UBL) samt Pruefbefunden.
+
+    Der Datensatz entsteht beim Upload und wird mit dem Dokument gespeichert.
+    Bei hybriden Rechnungen (ZUGFeRD/Factur-X) ist er nach dem BMF-Schreiben vom
+    15.10.2024 (Rz. 36) der fuehrende Teil der Rechnung.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    source: Literal["embedded", "standalone"]
+    attachment_name: str | None = None
+    error: str | None = Field(default=None, description="Gesetzt, wenn das XML nicht auswertbar ist.")
+    syntax: Literal["CII", "UBL"] | None = None
+    specification_id: str | None = Field(default=None, description="BT-24 Spezifikationskennung.")
+    profile: str = "Unbekannt"
+    profile_key: str = "unknown"
+    is_einvoice: bool = Field(
+        default=False,
+        description="False bei MINIMUM/BASIC WL: keine E-Rechnung im Sinne von § 14 Abs. 1 UStG.",
+    )
+    invoice_number: str | None = None
+    issue_date: date | None = None
+    type_code: str | None = None
+    currency: str | None = None
+    buyer_reference: str | None = None
+    order_reference: str | None = None
+    seller: EInvoiceParty = Field(default_factory=EInvoiceParty)
+    buyer: EInvoiceParty = Field(default_factory=EInvoiceParty)
+    delivery_date: date | None = None
+    period_start: date | None = None
+    period_end: date | None = None
+    due_date: date | None = None
+    payment_terms: str | None = None
+    iban: str | None = None
+    line_total: Decimal | None = None
+    allowance_total: Decimal | None = None
+    charge_total: Decimal | None = None
+    net_total: Decimal | None = None
+    tax_total: Decimal | None = None
+    grand_total: Decimal | None = None
+    due_payable: Decimal | None = None
+    vat_breakdown: list[EInvoiceVat] = Field(default_factory=list)
+    lines: list[EInvoiceLine] = Field(default_factory=list)
+    rule_violations: list[str] = Field(default_factory=list)
+    leitweg: LeitwegCheck | None = None
+    public_buyer: bool = False
+    public_buyer_reason: str | None = None
+    visual_check: list[VisualCheck] = Field(default_factory=list)
+    xml_sha256: str | None = None
+    xml_size: int | None = None
+
+    @computed_field(description="Zentrale Business Terms fuer die Tabellenansicht.")  # type: ignore[prop-decorator]
+    @property
+    def business_terms(self) -> list[BusinessTermField]:
+        def money(value: Decimal | None) -> str | None:
+            if value is None:
+                return None
+            text = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return f"{text} {self.currency or ''}".strip()
+
+        def electronic(party: EInvoiceParty) -> str | None:
+            if not party.electronic_address:
+                return None
+            scheme = party.electronic_address_scheme
+            return f"{party.electronic_address} (Schema {scheme})" if scheme else party.electronic_address
+
+        return [
+            BusinessTermField(bt="BT-1", label="Rechnungsnummer", value=self.invoice_number),
+            BusinessTermField(
+                bt="BT-2", label="Rechnungsdatum", value=self.issue_date.strftime("%d.%m.%Y") if self.issue_date else None
+            ),
+            BusinessTermField(bt="BT-10", label="Käuferreferenz / Leitweg-ID", value=self.buyer_reference),
+            BusinessTermField(bt="BT-27", label="Name des Verkäufers", value=self.seller.name),
+            BusinessTermField(bt="BT-31", label="USt-IdNr. des Verkäufers", value=self.seller.vat_id),
+            BusinessTermField(bt="BT-34", label="Elektronische Adresse des Verkäufers", value=electronic(self.seller)),
+            BusinessTermField(bt="BT-44", label="Name des Käufers", value=self.buyer.name),
+            BusinessTermField(bt="BT-49", label="Elektronische Adresse des Käufers", value=electronic(self.buyer)),
+            BusinessTermField(bt="BT-109", label="Summe netto", value=money(self.net_total)),
+            BusinessTermField(bt="BT-110", label="Umsatzsteuer gesamt", value=money(self.tax_total)),
+            BusinessTermField(bt="BT-112", label="Rechnungsgesamtbetrag (brutto)", value=money(self.grand_total)),
+            BusinessTermField(bt="BT-115", label="Zahlbetrag", value=money(self.due_payable)),
+        ]
 
 
 class SignOffDecision(str, Enum):
