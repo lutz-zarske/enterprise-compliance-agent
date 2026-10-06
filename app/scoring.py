@@ -46,6 +46,7 @@ from app.schemas import (
     EInvoiceData,
     ExtractionResult,
     PIICategory,
+    RetentionInfo,
     ScoreBand,
     ScoreCheck,
     Scorecard,
@@ -872,6 +873,23 @@ def compute_scorecard(
     else:
         recommendation, blocked = "Freigabe empfohlen — Prüfung ohne Befund", False
 
+    retention = None
+    if is_invoice and extraction.document_date is not None:
+        from app.retention import RETENTION_NOTE, invoice_retention
+
+        period = invoice_retention(extraction.document_date)
+        if period is not None:
+            retention = RetentionInfo(
+                years=period.years,
+                until=period.until,
+                financial_sector_until=period.financial_sector_until,
+                basis=period.basis,
+                note=(
+                    f"{RETENTION_NOTE} Kreditinstitute, Versicherungen und Wertpapierinstitute: 10 Jahre. "
+                    "Die Verfahrensdokumentation ist 10 Jahre aufzubewahren (§ 147 Abs. 1 Nr. 1 AO)."
+                ),
+            )
+
     return Scorecard(
         score=score,
         band=band,
@@ -886,4 +904,5 @@ def compute_scorecard(
         structured_einvoice_detected=marker or (einvoice is not None and not einvoice.error),
         computed_at=utcnow(),
         ruleset_version=RULESET_VERSION,
+        retention=retention,
     )

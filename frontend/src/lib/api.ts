@@ -15,7 +15,9 @@ import type {
   ExtractionResponse,
   HealthResponse,
   KpiResponse,
+  LedgerEntry,
   LedgerVerification,
+  OverrideRequest,
   ProgressResponse,
   RuntimeSettings,
   SeedResponse,
@@ -201,6 +203,11 @@ export const api = {
   copilot: (id: string, question: string, history: CopilotTurn[]) =>
     request<CopilotResponse>(`/documents/${id}/copilot`, json({ question, history })),
   gobdPackage: (id: string) => requestBlob(`/api/documents/${id}/export/gobd`),
+  proceduralDoc: (id: string) => requestText(`/api/documents/${id}/export/procedural-doc?format=html`),
+  override: (id: string, body: OverrideRequest) =>
+    request<DocumentDetail>(`/api/documents/${id}/override`, json(body)),
+  trail: (id: string) =>
+    request<{ items: LedgerEntry[]; count: number }>(`/api/audit/trail?document_id=${encodeURIComponent(id)}&limit=200`),
   verifyLedger: () => request<LedgerVerification>("/api/audit/verify"),
   kpis: () => request<KpiResponse>("/api/dashboard/kpis"),
   seed: () => request<SeedResponse>("/api/demo/seed", { method: "POST" }),

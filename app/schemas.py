@@ -958,6 +958,35 @@ class ScoreTile(ApiModel):
     checks: list[ScoreCheck] = Field(default_factory=list)
 
 
+class RetentionInfo(ApiModel):
+    """Aufbewahrungsfrist eines Belegs nach BEG IV (§ 147 AO, § 14b UStG)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    years: int
+    until: date
+    financial_sector_until: date
+    basis: str
+    note: str
+
+
+class HumanOverride(ApiModel):
+    """Uebersteuerung einer KI-Einstufung durch eine natuerliche Person (Art. 14 Abs. 4 lit. d AI Act)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    auditor_name: str
+    previous_risk_level: AIActRiskLevel
+    new_risk_level: AIActRiskLevel
+    previous_score: int | None = None
+    new_score: int
+    reason: str
+    legal_basis: str
+    overridden_at: datetime
+    ledger_entry_id: str = ""
+    ledger_entry_hash: str = ""
+
+
 class Scorecard(ApiModel):
     """Deterministischer Compliance-Score (0-100) mit Begruendung je Abzug."""
 
@@ -976,6 +1005,12 @@ class Scorecard(ApiModel):
     structured_einvoice_detected: bool = False
     computed_at: datetime
     ruleset_version: str
+    human_override: HumanOverride | None = Field(
+        default=None, description="Gesetzt, wenn eine Pruefperson die KI-Einstufung uebersteuert hat."
+    )
+    retention: RetentionInfo | None = Field(
+        default=None, description="Aufbewahrungsfrist bei Rechnungen mit Belegdatum (BEG IV)."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1155,6 +1190,25 @@ class SignOffRequest(ApiModel):
     auditor_name: str = Field(min_length=2, max_length=120)
     note: str = Field(default="", max_length=2000)
     decision: SignOffDecision = SignOffDecision.APPROVED
+
+
+class OverrideRequest(ApiModel):
+    """Uebersteuerung der EU-AI-Act-Einstufung durch die Pruefperson."""
+
+    auditor_name: str = Field(min_length=2, max_length=120)
+    risk_level: AIActRiskLevel = Field(description="Neue Risikostufe nach Wuerdigung durch die Pruefperson.")
+    reason: str = Field(
+        min_length=20, max_length=2000,
+        description="Begruendung - nachvollziehbar fuer Dritte (Art. 14 Abs. 4 lit. d, Art. 12 AI Act).",
+    )
+    legal_basis: str = Field(
+        min_length=3, max_length=300, description="Rechtsnorm, z. B. 'Art. 6 Abs. 3 lit. d VO (EU) 2024/1689'."
+    )
+
+    @field_validator("auditor_name", "reason", "legal_basis", mode="before")
+    @classmethod
+    def _strip(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
 
 
 class SignOff(ApiModel):

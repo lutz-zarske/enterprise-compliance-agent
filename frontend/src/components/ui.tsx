@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { CheckStatus } from "../types/api";
 import { cx, TONE_CLASSES, type Tone } from "../lib/format";
-import { AlertTriangle, CheckCircle, Info, MinusCircle, X, XCircle } from "./icons";
+import { AlertTriangle, Check, CheckCircle, Copy, Info, MinusCircle, ShieldAlert, ShieldCheck, X, XCircle } from "./icons";
 
 export function Chip({ tone = "neutral", children, className, title }: {
   tone?: Tone;
@@ -45,7 +45,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/50 p-4 pt-[8vh] no-print">
+    <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/50 p-4 pt-[8vh] no-print">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}
@@ -53,7 +53,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className={cx("relative w-full rounded-xl border border-line bg-surface-solid shadow-2xl outline-none", width)}
+        className={cx("anim-panel relative w-full rounded-xl border border-line bg-surface-solid shadow-2xl outline-none", width)}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div>
@@ -71,21 +71,28 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
 }
 
 export function Tabs<T extends string>({ tabs, active, onChange, className }: {
-  tabs: { key: T; label: string; badge?: React.ReactNode }[];
+  tabs: { key: T; label: string; badge?: React.ReactNode; title?: string }[];
   active: T;
   onChange: (key: T) => void;
   className?: string;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  // Bei schmaler Spalte scrollt die Leiste: der aktive Tab bleibt immer sichtbar.
+  useEffect(() => {
+    const button = listRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+    button?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
   return (
-    <div role="tablist" className={cx("flex gap-1 overflow-x-auto border-b border-line", className)}>
+    <div ref={listRef} role="tablist" className={cx("flex gap-0.5 overflow-x-auto border-b border-line", className)}>
       {tabs.map((tab) => (
         <button
           key={tab.key}
           role="tab"
           aria-selected={active === tab.key}
+          title={tab.title}
           onClick={() => onChange(tab.key)}
           className={cx(
-            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-medium transition-colors duration-150",
+            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-[13px] font-medium transition-colors duration-150 ease-out",
             active === tab.key ? "border-accent text-fg" : "border-transparent text-subtle hover:text-fg",
           )}
         >
@@ -257,5 +264,105 @@ export function Tooltip({ content, children, align = "left", className }: {
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cx("rounded-md bg-surface-2", className)} aria-hidden="true" />;
+  return <div className={cx("skeleton-shimmer rounded-md", className)} aria-hidden="true" />;
+}
+
+/**
+ * 1-Klick-Kopieren mit 1,5 s Haken-Feedback. Der Button behaelt seine Breite,
+ * damit beim Wechsel auf „Kopiert“ nichts springt.
+ */
+export function CopyButton({ value, label, className }: { value: string; label: string; className?: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const timer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (timer.current) window.clearTimeout(timer.current);
+  }, []);
+
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setState("idle"), 1500);
+  }, [value]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      className={cx(
+        "inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] transition-colors duration-150 ease-out",
+        state === "copied" ? "text-ok" : state === "failed" ? "text-bad" : "text-subtle hover:bg-surface-2 hover:text-fg",
+        className,
+      )}
+      aria-label={state === "copied" ? `${label} kopiert` : `${label} kopieren`}
+      title={state === "failed" ? "Zwischenablage nicht verfügbar" : `${label} kopieren`}
+    >
+      <span className="relative inline-flex h-3.5 w-3.5">
+        <Copy
+          size={13}
+          aria-hidden="true"
+          className={cx("absolute inset-0 transition-[opacity,transform] duration-150 ease-out", state === "copied" ? "scale-75 opacity-0" : "opacity-100")}
+        />
+        <Check
+          size={13}
+          aria-hidden="true"
+          className={cx("absolute inset-0 transition-[opacity,transform] duration-150 ease-out", state === "copied" ? "opacity-100" : "scale-75 opacity-0")}
+        />
+      </span>
+      <span aria-live="polite" className={cx("transition-opacity duration-150", state === "idle" ? "sr-only" : "")}>
+        {state === "copied" ? "Kopiert" : state === "failed" ? "Fehler" : ""}
+      </span>
+    </button>
+  );
+}
+
+/** Kopierbarer Wert in Monospace (Rechnungsnummer, Leitweg-ID, IBAN). */
+export function CopyValue({ value, label, display, className }: {
+  value: string | null | undefined;
+  label: string;
+  display?: React.ReactNode;
+  className?: string;
+}) {
+  if (!value) return <span className="text-subtle">–</span>;
+  return (
+    <span className={cx("inline-flex max-w-full items-center gap-1", className)}>
+      <span className="min-w-0 font-mono tabular-nums [overflow-wrap:anywhere]">{display ?? value}</span>
+      <CopyButton value={value} label={label} />
+    </span>
+  );
+}
+
+/**
+ * Gekuerzter Hash im Monospace-Badge mit Verifikationsstatus und Kopierbutton.
+ * ``verified``: true = nachgerechnet/Signatur gueltig, false = Befund, null = nicht geprueft.
+ */
+export function HashBadge({ value, label = "SHA-256", verified = null, verifiedLabel, className }: {
+  value: string;
+  label?: string;
+  verified?: boolean | null;
+  verifiedLabel?: string;
+  className?: string;
+}) {
+  const short = value.length > 20 ? `${value.slice(0, 10)}…${value.slice(-6)}` : value;
+  const tone = verified === true ? "ok" : verified === false ? "bad" : "neutral";
+  const status = verified === true ? verifiedLabel ?? "verifiziert" : verified === false ? "Befund" : null;
+  return (
+    <span className={cx("inline-flex max-w-full flex-wrap items-center gap-1", className)}>
+      <span
+        className={cx("chip font-mono text-[10.5px] tabular-nums", TONE_CLASSES[tone])}
+        title={`${label} ${value}`}
+      >
+        {verified === true && <ShieldCheck size={11} aria-hidden="true" />}
+        {verified === false && <ShieldAlert size={11} aria-hidden="true" />}
+        <span className="opacity-70">{label}</span> {short}
+        {status && <span className="font-sans opacity-80">· {status}</span>}
+      </span>
+      <CopyButton value={value} label={label} />
+    </span>
+  );
 }

@@ -62,6 +62,20 @@ _SOURCE_LABELS = {
 
 _VISUAL_LABELS = {"match": "übereinstimmend", "mismatch": "ABWEICHUNG", "not_found": "im Bildteil nicht gefunden"}
 
+_EVENT_LABELS = {
+    AuditEventType.ANALYSIS: "Analyse",
+    AuditEventType.SIGN_OFF: "Prüfer-Siegel",
+    AuditEventType.HUMAN_OVERRIDE: "Übersteuerung (Art. 14)",
+}
+
+
+def _fmt_date(value: Any) -> str:
+    """ISO-Datum -> 31.12.2034."""
+    try:
+        return datetime.fromisoformat(str(value)).strftime("%d.%m.%Y")
+    except ValueError:
+        return str(value)
+
 
 def _fmt_ts(value: Any) -> str:
     """ISO-Zeitstempel -> "04.10.2026, 01:35:38 UTC" (Rohwert bleibt im JSON erhalten)."""
@@ -213,13 +227,21 @@ def build_report(
             "iban_valid": extraction.iban_valid if extraction else None,
         },
         "sign_off": sign_off.model_dump(mode="json") if sign_off else None,
+        "human_override": (
+            scorecard.human_override.model_dump(mode="json") if scorecard and scorecard.human_override else None
+        ),
+        "retention": scorecard.retention.model_dump(mode="json") if scorecard and scorecard.retention else None,
         "ledger_history": [
             {
                 "seq": entry.seq,
                 "event_type": entry.event_type,
+                "event_label": _EVENT_LABELS.get(entry.event_type, entry.event_type),
                 "timestamp_utc": entry.timestamp_utc,
                 "compliance_score": entry.compliance_score,
                 "entry_hash": entry.entry_hash,
+                "actor": (entry.details or {}).get("auditor_name"),
+                "signed": entry.signature is not None,
+                "milestone": entry.event_type in AuditEventType.HUMAN,
             }
             for entry in entries
         ],
@@ -308,6 +330,26 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"  - {finding['category']}: `{_md(finding['masked_value'])}` "
             f"({_SOURCE_LABELS.get(finding['source'], finding['source'])})"
         )
+    override = report.get("human_override")
+    if override:
+        lines += [
+            "",
+            "## Prüfer-Meilenstein: Übersteuerung der KI-Einstufung (Art. 14 Abs. 4 lit. d AI Act)",
+            "",
+            f"- **Prüfperson:** {_md(override['auditor_name'])} · {_fmt_ts(override['overridden_at'])}",
+            f"- **Einstufung:** {override['previous_risk_level']} → {override['new_risk_level']} · "
+            f"Score {_md(override['previous_score'])} → {override['new_score']}",
+            f"- **Rechtsnorm:** {_md(override['legal_basis'])}",
+            f"- **Begründung:** {_md(override['reason'])}",
+            f"- **Ledger-Eintrag (Ed25519-signiert):** `{_md(override['ledger_entry_hash'])}`",
+        ]
+    retention = report.get("retention")
+    if retention:
+        lines += [
+            "",
+            f"**Aufbewahrung:** {retention['years']} Jahre, bis mindestens {_fmt_date(retention['until'])} "
+            f"({_md(retention['basis'])}). Finanzsektor: bis {_fmt_date(retention['financial_sector_until'])}.",
+        ]
     sign = report["sign_off"]
     lines += ["", "## Prüfvermerk (Human Oversight, Art. 14)", ""]
     if sign:
@@ -386,6 +428,38 @@ def render_html(report: dict[str, Any]) -> str:
 <table><thead><tr><th style="width:12%">BT</th><th style="width:38%">Business Term</th><th>Wert</th></tr></thead><tbody>{terms}</tbody></table>
 {f'<table><thead><tr><th style="width:12%">BT</th><th style="width:30%">Abgleich XML ↔ Bildteil</th><th style="width:20%">Ergebnis</th><th>Wert</th></tr></thead><tbody>{visual}</tbody></table>' if visual else ''}"""
 
+    override = report.get("human_override")
+    override_block = ""
+    if override:
+        override_block = f"""<h2>Prüfer-Meilenstein · Übersteuerung (Art. 14 Abs. 4 lit. d AI Act)</h2>
+<div class="milestone">
+<div class="grid small">
+<div>Prüfperson</div><div><strong>{_e(override['auditor_name'])}</strong> · {_e(_fmt_ts(override['overridden_at']))}</div>
+<div>Einstufung</div><div>{_e(override['previous_risk_level'])} → <strong>{_e(override['new_risk_level'])}</strong></div>
+<div>Score</div><div class="num">{_e(override['previous_score'])} → <strong>{_e(override['new_score'])}</strong></div>
+<div>Rechtsnorm</div><div>{_e(override['legal_basis'])}</div>
+<div>Begründung</div><div>{_e(override['reason'])}</div>
+<div>Ledger-Eintrag</div><div class="mono">{_e(override['ledger_entry_hash'])} · Ed25519-signiert</div>
+</div></div>"""
+
+    history = "".join(
+        f"<tr class='{'ms' if h['milestone'] else ''}'><td class='num'>{_e(h['seq'])}</td>"
+        f"<td>{_e(h['event_label'])}{' · Prüfer-Meilenstein' if h['milestone'] else ''}</td>"
+        f"<td>{_e(_fmt_ts(h['timestamp_utc']))}</td><td>{_e(h['actor'] or '')}</td>"
+        f"<td class='num'>{_e(h['compliance_score'])}</td><td class='mono'>{_e(h['entry_hash'][:16])}…</td>"
+        f"<td>{'Ed25519' if h['signed'] else '–'}</td></tr>"
+        for h in sorted(report["ledger_history"], key=lambda item: item["seq"] or 0)
+    ) or "<tr><td colspan='7'>Keine Ledger-Einträge.</td></tr>"
+
+    retention = report.get("retention")
+    retention_row = (
+        f"<div>Aufbewahrung</div><div>{_e(retention['years'])} Jahre, bis mindestens "
+        f"{_e(_fmt_date(retention['until']))} ({_e(retention['basis'])}); Finanzsektor bis "
+        f"{_e(_fmt_date(retention['financial_sector_until']))}</div>"
+        if retention
+        else ""
+    )
+
     seal_block = (
         f"""<div class="sealbox {'ok' if approved else 'bad'}">{_SEAL_SVG}
         <div><div class="sealtitle">{'GEPRÜFT &amp; FREIGEGEBEN' if approved else 'GEPRÜFT – FREIGABE VERWEIGERT'}</div>
@@ -434,13 +508,16 @@ th {{ font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #
 .seal {{ width: 84px; height: 84px; flex: none; }}
 .sealtitle {{ font-weight: 800; letter-spacing: .08em; color: inherit !important; }}
 .sealbox.ok .sealtitle {{ color: #047857 !important; }} .sealbox.bad .sealtitle {{ color: #be123c !important; }}
+.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+.milestone {{ padding: 10px 12px; border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 8px; }}
+tr.ms td {{ background: #f5f7ff; }}
 .draft {{ margin-top: 18px; padding: 10px; border: 1px dashed #94a3b8; color: #475569; text-align: center; border-radius: 8px; }}
 footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
 @media print {{
   body {{ background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
   .page {{ border: 0; margin: 0; padding: 0; max-width: none; }}
   h2 {{ break-after: avoid; }}
-  tr, .sealbox, .verdict, .refnote, .grid {{ break-inside: avoid; }}
+  tr, .sealbox, .verdict, .refnote, .grid, .milestone {{ break-inside: avoid; }}
   thead {{ display: table-header-group; }}
 }}
 </style></head>
@@ -465,6 +542,7 @@ footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
 <div>Hash-Kette</div><div>{'intakt' if report['ledger']['chain_valid'] else 'GEBROCHEN'} ({_e(report['ledger']['chain_entries'])} Einträge)</div>
 <div>Modell / Provider</div><div>{_e(report['inference']['model'])} / {_e(report['inference']['provider'])}</div>
 <div>Regelwerk</div><div>{_e(score.get('ruleset_version'))}</div>
+{retention_row}
 </div>
 
 {einvoice_block}
@@ -484,6 +562,11 @@ footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
 
 <h2>DSGVO – PII-Befunde (maskiert)</h2>
 <table><thead><tr><th>Kategorie</th><th>Wert</th><th>Quelle</th><th>Konfidenz</th></tr></thead><tbody>{findings}</tbody></table>
+
+{override_block}
+
+<h2>Prüfpfad (Ledger)</h2>
+<table><thead><tr><th class="num" style="width:6%">Seq</th><th style="width:26%">Ereignis</th><th style="width:20%">Zeitpunkt</th><th>Person</th><th class="num" style="width:8%">Score</th><th style="width:18%">Eintrags-Hash</th><th style="width:9%">Signatur</th></tr></thead><tbody>{history}</tbody></table>
 
 {seal_block}
 <footer>{_e(report['disclaimer'])}<br>Erstellt {_e(_fmt_ts(report['generated_at']))} · {_e(report['generator'])}</footer>

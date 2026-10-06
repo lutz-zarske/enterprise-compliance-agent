@@ -58,6 +58,8 @@ from app.schemas import (
     PIICategory,
     PIIFinding,
     RiskLevel,
+    HumanOverride,
+    OverrideRequest,
     Scorecard,
     SignOff,
     SignOffRequest,
@@ -130,6 +132,14 @@ class InvalidEInvoiceUploadError(UploadValidationError):
     code = "invalid_einvoice"
     status_code = 422
     hint = "Erwartet wird eine XRechnung bzw. ein ZUGFeRD-/Factur-X-Datensatz (CII oder UBL)."
+
+
+class OverrideWithoutChangeError(ServiceError):
+    """Die beantragte Einstufung entspricht der bestehenden."""
+
+    code = "override_without_change"
+    status_code = 422
+    hint = "Eine Uebersteuerung muss die Risikostufe aendern; zur reinen Freigabe das Siegel verwenden."
 
 
 class OriginalMissingError(ServiceError):
@@ -878,6 +888,100 @@ class DocumentService:
             compliance_score=score,
         )
         return await self._repository.save_sign_off(record.id, sign_off.model_dump(mode="json"))
+
+    async def override(self, record: DocumentRecord, request: OverrideRequest) -> DocumentRecord:
+        """Uebersteuert die EU-AI-Act-Einstufung (Art. 14 Abs. 4 lit. d) und rechnet den Score neu.
+
+        Der Score bleibt deterministisch: Die Pruefperson aendert die Eingabe
+        (Risikostufe), nicht das Ergebnis.  Der Ledger-Eintrag ``human_override``
+        haelt Person, Begruendung, Rechtsnorm sowie Score vorher/nachher fest und
+        wird Ed25519-signiert.  Ein bestehendes Siegel verliert seinen Gegenstand;
+        eine erneute Analyse verwirft den Override (die Historie bleibt im Ledger).
+        """
+        compliance = parse_compliance(record)
+        extraction = parse_extraction(record)
+        previous_card = parse_scorecard(record)
+        if record.status != DocumentStatus.EXTRACTED.value or compliance is None or extraction is None:
+            raise DocumentNotAnalyzedError(f"Dokument {record.id} ist noch nicht analysiert - kein Override moeglich.")
+        previous_level = compliance.ai_act.overall_risk_level
+        if request.risk_level is previous_level:
+            raise OverrideWithoutChangeError(
+                f"Die Einstufung ist bereits '{previous_level.value}'."
+            )
+
+        now = utcnow()
+        note = (
+            f"Menschliche Übersteuerung am {now:%d.%m.%Y} durch {request.auditor_name} "
+            f"({previous_level.value} -> {request.risk_level.value}; {request.legal_basis}): {request.reason}"
+        )
+        ai_act = compliance.ai_act.model_copy(
+            update={
+                "overall_risk_level": request.risk_level,
+                "reasoning": f"{compliance.ai_act.reasoning}\n{note}".strip()[:2000],
+            }
+        )
+        updated = compliance.model_copy(update={"ai_act": ai_act})
+        enforce_ustg, _ = self._flags()
+        pdf_bytes = await anyio.to_thread.run_sync(self._read_pdf, record)
+        scorecard = compute_scorecard(
+            extraction,
+            updated,
+            record.raw_text or "",
+            enforce_ustg_check=enforce_ustg,
+            pdf_bytes=pdf_bytes,
+            einvoice=parse_einvoice(record),
+            structured=record.provider == STRUCTURED_PROVIDER,
+        )
+        previous_score = previous_card.score if previous_card else None
+
+        entry: LedgerEntry | None = None
+        if self._ledger is not None:
+            entry = await self._ledger.append(
+                event_type=AuditEventType.HUMAN_OVERRIDE,
+                document_id=record.id,
+                sha256_hash=record.sha256,
+                model_name=record.model or "",
+                prompt_hash=PROMPT_HASH,
+                result_summary=(
+                    f"Einstufung {previous_level.value} -> {request.risk_level.value} durch "
+                    f"{request.auditor_name}; Score {previous_score} -> {scorecard.score}"
+                ),
+                compliance_score=scorecard.score,
+                risk_tier=request.risk_level.value,
+                details={
+                    "auditor_name": request.auditor_name,
+                    "previous_risk_level": previous_level.value,
+                    "new_risk_level": request.risk_level.value,
+                    "previous_score": previous_score,
+                    "new_score": scorecard.score,
+                    "reason": request.reason,
+                    "legal_basis": request.legal_basis,
+                    "overridden_at": now.isoformat(),
+                    "legal_reference": "Art. 14 Abs. 4 lit. d VO (EU) 2024/1689",
+                },
+            )
+        scorecard.human_override = HumanOverride(
+            auditor_name=request.auditor_name,
+            previous_risk_level=previous_level,
+            new_risk_level=request.risk_level,
+            previous_score=previous_score,
+            new_score=scorecard.score,
+            reason=request.reason,
+            legal_basis=request.legal_basis,
+            overridden_at=now,
+            ledger_entry_id=entry.entry_id if entry else "",
+            ledger_entry_hash=entry.entry_hash if entry else "",
+        )
+        logger.info(
+            "Dokument %s: Einstufung durch Pruefperson uebersteuert (%s -> %s, Score %s -> %s)",
+            record.id, previous_level.value, request.risk_level.value, previous_score, scorecard.score,
+            extra={"document_id": record.id},
+        )
+        return await self._repository.save_override(
+            record.id,
+            compliance=updated.model_dump(mode="json"),
+            scorecard=scorecard.model_dump(mode="json"),
+        )
 
     async def set_pinned(self, record: DocumentRecord, pinned: bool) -> DocumentRecord:
         return await self._repository.set_pinned(record.id, pinned)

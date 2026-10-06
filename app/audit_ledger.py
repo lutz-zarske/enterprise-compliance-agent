@@ -50,10 +50,24 @@ _APPEND_LOCK = threading.Lock()
 
 
 class AuditEventType:
-    """Stabile Ereignistypen im Ledger."""
+    """Stabile Ereignistypen im Ledger.
+
+    Die Werte sind Teil gespeicherter, gehashter Eintraege und werden nie
+    umbenannt.  ``SIGN_OFF`` ist das Pruefer-Siegel (Freigabe/Ablehnung),
+    ``HUMAN_OVERRIDE`` die Uebersteuerung einer KI-Einstufung durch eine
+    natuerliche Person (Art. 14 Abs. 4 lit. d VO (EU) 2024/1689).
+    """
 
     ANALYSIS = "analysis"
     SIGN_OFF = "sign_off"
+    HUMAN_OVERRIDE = "human_override"
+
+    #: Ereignisse natuerlicher Personen - werden zusaetzlich Ed25519-signiert.
+    HUMAN = frozenset({SIGN_OFF, HUMAN_OVERRIDE})
+
+
+#: Schluessel der Signatur innerhalb von ``details``.
+SIGNATURE_FIELD = "signature"
 
 
 def canonical_json(payload: dict[str, Any]) -> str:
@@ -94,6 +108,17 @@ class LedgerEntry:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    def signed_content(self) -> bytes:
+        """Signierter Inhalt: alle gehashten Felder inkl. ``previous_hash``, ohne die Signatur selbst."""
+        content = self.hashed_content()
+        content["details"] = {k: v for k, v in (content.get("details") or {}).items() if k != SIGNATURE_FIELD}
+        return canonical_json(content).encode("utf-8")
+
+    @property
+    def signature(self) -> dict[str, Any] | None:
+        value = (self.details or {}).get(SIGNATURE_FIELD)
+        return value if isinstance(value, dict) else None
+
 
 @dataclass(slots=True)
 class ChainVerification:
@@ -105,6 +130,8 @@ class ChainVerification:
     broken_at_seq: int | None = None
     reason: str | None = None
     verified_at: str = field(default_factory=lambda: utcnow().isoformat())
+    #: Anzahl der Ed25519-signierten Pruefer-Eintraege, die geprueft wurden.
+    signed_entries: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -131,10 +158,22 @@ def _row_to_entry(row: Any) -> LedgerEntry:
 
 
 class AuditLedger:
-    """Append-only-Protokoll auf Basis von SQLAlchemy Core."""
+    """Append-only-Protokoll auf Basis von SQLAlchemy Core.
 
-    def __init__(self, engine: Engine) -> None:
+    Mit ``signer`` werden Eintraege natuerlicher Personen (Siegel, Override)
+    zusaetzlich Ed25519-signiert.  Die Signatur entsteht unter derselben Sperre
+    wie die Verkettung und deckt ``previous_hash`` ab; ``entry_hash`` deckt
+    wiederum die Signatur ab.  Wer die Kette vollstaendig neu berechnet, kann
+    diese Eintraege ohne den privaten Schluessel nicht neu signieren.
+    """
+
+    def __init__(self, engine: Engine, signer: Any | None = None) -> None:
         self._engine = engine
+        self._signer = signer
+
+    @property
+    def signer(self) -> Any | None:
+        return self._signer
 
     # --- synchron -----------------------------------------------------------
     def _append(self, entry: LedgerEntry) -> LedgerEntry:
@@ -148,6 +187,9 @@ class AuditLedger:
                 .limit(1)
             ).scalar_one_or_none()
             entry.previous_hash = last or GENESIS_HASH
+            if self._signer is not None and entry.event_type in AuditEventType.HUMAN:
+                entry.details = {k: v for k, v in entry.details.items() if k != SIGNATURE_FIELD}
+                entry.details[SIGNATURE_FIELD] = self._signer.sign_bytes(entry.signed_content())
             entry.entry_hash = compute_entry_hash(entry.hashed_content())
             values = entry.to_dict()
             values.pop("seq")
@@ -168,6 +210,7 @@ class AuditLedger:
         previous = GENESIS_HASH
         expected_seq: int | None = None
         count = 0
+        signed = 0
         with self._engine.connect() as connection:
             for row in connection.execute(statement):
                 entry = _row_to_entry(row)
@@ -189,9 +232,32 @@ class AuditLedger:
                         False, count, previous, entry.seq,
                         "Inhalt veraendert: neu berechneter Hash weicht vom gespeicherten ab.",
                     )
+                if entry.signature is not None:
+                    ok, message = self.verify_entry_signature(entry)
+                    if not ok:
+                        return ChainVerification(
+                            False, count, previous, entry.seq, f"Pruefer-Signatur: {message}", signed_entries=signed
+                        )
+                    signed += 1
                 previous = entry.entry_hash
                 expected_seq = (entry.seq or 0) + 1
-        return ChainVerification(True, count, previous)
+        return ChainVerification(True, count, previous, signed_entries=signed)
+
+    def verify_entry_signature(self, entry: LedgerEntry) -> tuple[bool, str]:
+        """Prueft die Ed25519-Signatur eines Eintrags gegen den System-Schluessel."""
+        from app.signing import verify_signature
+
+        signature = entry.signature
+        if signature is None:
+            return False, "Eintrag ist nicht signiert."
+        expected = self._signer.public_info()["fingerprint"] if self._signer is not None else None
+        return verify_signature(signature, entry.signed_content(), expected_fingerprint=expected)
+
+    def signature_status(self, entry: LedgerEntry) -> str:
+        """``valid`` | ``invalid`` | ``unsigned`` - fuer die Ledger-Historie im Frontend."""
+        if entry.signature is None:
+            return "unsigned"
+        return "valid" if self.verify_entry_signature(entry)[0] else "invalid"
 
     def _head(self) -> tuple[str, int]:
         with self._engine.connect() as connection:
@@ -236,6 +302,9 @@ class AuditLedger:
 
     async def verify_chain(self) -> ChainVerification:
         return await anyio.to_thread.run_sync(self._verify)
+
+    async def signature_statuses(self, entries: list[LedgerEntry]) -> list[str]:
+        return await anyio.to_thread.run_sync(lambda: [self.signature_status(entry) for entry in entries])
 
     async def head(self) -> tuple[str, int]:
         return await anyio.to_thread.run_sync(self._head)

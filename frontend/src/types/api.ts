@@ -109,6 +109,52 @@ export interface ScoreTile {
   checks: ScoreCheck[];
 }
 
+export interface HumanOverride {
+  auditor_name: string;
+  previous_risk_level: AIActRiskLevel;
+  new_risk_level: AIActRiskLevel;
+  previous_score: number | null;
+  new_score: number;
+  reason: string;
+  legal_basis: string;
+  overridden_at: string;
+  ledger_entry_id: string;
+  ledger_entry_hash: string;
+}
+
+export interface RetentionInfo {
+  years: number;
+  until: string;
+  financial_sector_until: string;
+  basis: string;
+  note: string;
+}
+
+export interface OverrideRequest {
+  auditor_name: string;
+  risk_level: AIActRiskLevel;
+  reason: string;
+  legal_basis: string;
+}
+
+export interface LedgerEntry {
+  seq: number;
+  entry_id: string;
+  event_type: "analysis" | "sign_off" | "human_override" | string;
+  document_id: string;
+  sha256_hash: string;
+  model_name: string;
+  prompt_hash: string;
+  timestamp_utc: string;
+  result_summary: string;
+  compliance_score: number | null;
+  risk_tier: string;
+  details: Record<string, unknown> & { signature?: { algorithm: string; fingerprint: string } };
+  previous_hash: string;
+  entry_hash: string;
+  signature_status: "valid" | "invalid" | "unsigned";
+}
+
 export interface Scorecard {
   score: number;
   band: ScoreBand;
@@ -123,6 +169,8 @@ export interface Scorecard {
   structured_einvoice_detected: boolean;
   computed_at: string;
   ruleset_version: string;
+  human_override: HumanOverride | null;
+  retention: RetentionInfo | null;
 }
 
 export interface SignOff {
@@ -208,6 +256,7 @@ export interface EInvoiceData {
   issue_date: string | null;
   currency: string | null;
   buyer_reference: string | null;
+  iban: string | null;
   seller: EInvoiceParty;
   buyer: EInvoiceParty;
   net_total: Money;
@@ -403,6 +452,7 @@ export interface LedgerVerification {
   broken_at_seq: number | null;
   reason: string | null;
   verified_at: string;
+  signed_entries: number;
 }
 
 export interface HealthResponse {

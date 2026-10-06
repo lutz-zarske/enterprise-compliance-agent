@@ -4,8 +4,8 @@ import React, { useEffect, useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
 import type { DocumentDetail, SignOffDecision } from "../types/api";
 import { cx, formatDate } from "../lib/format";
-import { Check, Copy, Download, Package, Printer, Stamp } from "./icons";
-import { Modal, Spinner } from "./ui";
+import { BookOpen, Check, Copy, Download, Package, Printer, Stamp } from "./icons";
+import { HashBadge, Modal, Spinner } from "./ui";
 
 const AUDITOR_STORAGE = "eca-auditor-name";
 
@@ -140,6 +140,19 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
           }
         />
         <Option
+          icon={<BookOpen size={16} />}
+          title="GoBD-Verfahrensdokumentation"
+          text="Vier Säulen nach GoBD Rz. 153 mit Prüfpfad dieses Belegs. Entwurf zum Ergänzen; aufzubewahren 10 Jahre (§ 147 Abs. 1 Nr. 1 AO)."
+          action="HTML"
+          busy={busy === "vd"}
+          onClick={() =>
+            run("vd", async () => {
+              downloadBlob(await api.proceduralDoc(document.id), `Verfahrensdokumentation_${stem}.html`, "text/html;charset=utf-8");
+              notify("ok", "Verfahrensdokumentation erstellt", "Markierte Stellen ergänzt das Unternehmen vor der Freigabe.");
+            })
+          }
+        />
+        <Option
           icon={<Copy size={16} />}
           title="Compliance-Memo kopieren"
           text="Formatierter Markdown-Text für E-Mails an Lieferanten oder die Buchhaltung."
@@ -171,7 +184,7 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
             <p className="font-semibold">
               {seal.status === "SEALED_APPROVED" ? "Freigegeben" : "Freigabe verweigert"} durch {seal.auditor_name} am {formatDate(seal.sealed_at, true)}
             </p>
-            <p className="mt-1 break-all font-mono text-[10.5px] opacity-80">Siegel-Hash {seal.ledger_entry_hash}</p>
+            <HashBadge className="mt-2" value={seal.ledger_entry_hash} label="Siegel" verified verifiedLabel="Ed25519-signiert" />
           </div>
         )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

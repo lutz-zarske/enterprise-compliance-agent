@@ -6,7 +6,10 @@ Revisionssichere Vorprüfung von Rechnungen und Verträgen: **§ 14 UStG**,
 hash-verkettetem Prüfprotokoll, Prüfer-Siegel und signiertem Prüfdatenpaket.
 Inferenz standardmäßig **lokal über Ollama**; optional Gemini, Claude oder GPT,
 dann ausschließlich über ein **Privacy Gateway**, das identifizierende Daten vor
-dem Versand pseudonymisiert.
+dem Versand pseudonymisiert. Prüfpersonen können die KI-Einstufung begründet
+übersteuern (Art. 14 AI Act, Ed25519-signiert im Ledger); das System erzeugt
+einen Entwurf der **GoBD-Verfahrensdokumentation** aus seinem tatsächlichen
+Zustand.
 
 | | |
 |---|---|
@@ -14,7 +17,7 @@ dem Versand pseudonymisiert.
 | **Frontend** | Next.js 15 · React 19 · Tailwind CSS 4 · TypeScript (strict) |
 | **Inferenz** | Ollama `qwen2.5:14b-instruct` (Default) · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein LangChain |
 | **Persistenz** | SQLite (Default) · PostgreSQL über `DATABASE_URL` |
-| **Qualität** | 230 Pytest-Tests (ca. 13 s, ohne laufendes LLM) · ESLint · `next build` · CI für Backend, Frontend, Docker |
+| **Qualität** | 256 Pytest-Tests (ca. 20 s, ohne laufendes LLM) · ESLint · `next build` · CI für Backend, Frontend, Docker |
 | **Betrieb** | Ein-Klick-Start für Windows · Docker Compose (API `:8001`, Frontend `:3001`) · Non-Root-Container, Healthchecks |
 
 ![Dashboard: KI-Recruiting-Vertrag, EU AI Act Anhang III Nr. 4, Score auf 59 gedeckelt](docs/screenshots/dashboard-hochrisiko-dark.png)
@@ -24,6 +27,8 @@ dem Versand pseudonymisiert.
 | ![Prüfzertifikat mit Hash-Kette und Siegel](docs/screenshots/pruefzertifikat.png) | ![Copilot mit Zeilen- und Normverweisen](docs/screenshots/copilot.png) |
 | **E-Rechnung: XML-Datensatz (EN 16931)** | **Export-Center mit Prüfdatenpaket (ZIP)** |
 | ![ZUGFeRD-Rechnung: Business Terms aus dem XML, Abgleich mit dem PDF-Bildteil, Leitweg-ID](docs/screenshots/e-rechnung-xml-datensatz.png) | ![Export-Center: ZIP-Prüfdatenpaket, Zertifikat, JSON, Memo, Siegel](docs/screenshots/export-siegel.png) |
+| **Übersteuerung durch die Prüfperson (Art. 14)** | **Ledger-Historie mit Ed25519-Status** |
+| ![KI-Einstufung Hochrisiko → Begrenztes Risiko übersteuert, Score 59 → 95, Begründung und Rechtsnorm](docs/screenshots/human-override.png) | ![Ledger-Historie: Übersteuerung als signierter Prüfer-Meilenstein, darunter die maschinellen Analysen](docs/screenshots/ledger-historie.png) |
 
 > **Zu den Screenshots:** Alle Prüfergebnisse stammen aus den eingebauten
 > **Musterdaten** und laufen ohne Sprachmodell. Bei den drei PDF-Belegen ist nur
@@ -55,14 +60,15 @@ oder hinterlegtem Cloud-Key lässt sich jedes Musterdokument über
 
 | Rechtsgrundlage | Was das System prüft bzw. umsetzt | Stand |
 |---|---|---|
-| **EU AI Act** – VO (EU) 2024/1689 | Risikoklassen (Art. 5, Art. 6 Abs. 2 i. V. m. Anhang III, Art. 50), Anhang-III-Eskalation, Hinweis auf Art. 6 Abs. 3, Betreiberpflichten (Art. 26), Logging (Art. 12), menschliche Aufsicht (Art. 14) | Anhang-III-Pflichten ab **02.12.2027**, Anhang I ab 02.08.2028 nach **VO (EU) 2026/1744** (Digital Omnibus, in Kraft seit 27.07.2026) |
+| **EU AI Act** – VO (EU) 2024/1689 | Risikoklassen (Art. 5, Art. 6 Abs. 2 i. V. m. Anhang III, Art. 50), Anhang-III-Eskalation, Hinweis auf Art. 6 Abs. 3, Betreiberpflichten (Art. 26), Logging (Art. 12), menschliche Aufsicht (Art. 14) inkl. begründeter Übersteuerung der KI-Einstufung (Art. 14 Abs. 4 lit. d) | Anhang-III-Pflichten ab **02.12.2027**, Anhang I ab 02.08.2028 nach **VO (EU) 2026/1744** (Digital Omnibus, in Kraft seit 27.07.2026) |
 | **§ 14 Abs. 4 UStG** | Pflichtangaben Nr. 1–8 einzeln, Kleinbetragsrechnung (§ 33 UStDV), Vorsteuerrisiko (§ 15 UStG) | gültig |
 | **E-Rechnung** – § 14 Abs. 1 UStG, EN 16931 | XML aus ZUGFeRD/Factur-X-PDFs und reine XRechnung (CII/UBL) werden gelesen; Profil aus BT-24; MINIMUM/BASIC WL sind keine E-Rechnung; Pflichtfelder und Summenregeln (BR-CO-10/13/14/15, BR-DE-15) | Empfangspflicht seit 01.01.2025; Ausstellungspflicht 2027/2028 |
 | **XML-Vorrang** – BMF-Schreiben vom 15.10.2024, Rz. 36 | Bei hybriden Rechnungen ist der XML-Teil maßgeblich; Abgleich von acht Kernwerten mit dem PDF-Bildteil, Abweichungen −10 | präzisiert durch BMF-Schreiben vom 15.10.2025 |
 | **B2G** – § 5 Abs. 1 Nr. 1 ERechV, BR-DE-15 | Leitweg-ID bei öffentlichen Auftraggebern: Aufbau und Prüfziffer (ISO/IEC 7064, MOD 97-10) nach KoSIT-Formatspezifikation 2.0.2 | Bund; Länder und Kommunen nach Landesrecht |
 | **§ 12 / § 14c UStG** | Zulässige Steuersätze, Steuerberechnung, Hinweis auf EuGH C-378/21 (Endverbraucher) | BMF-Schreiben vom 27.02.2024 |
 | **DSGVO** – Art. 4 Nr. 5, 9, 25, 32 | Pseudonymisierung vor Cloud-Aufrufen, Art.-9/10-Erkennung, maskierte Speicherung, drei Schwärzungsstufen | – |
-| **GoBD / § 147 AO, § 14b UStG** | Unveränderbares, hash-verkettetes Prüfprotokoll; Prüfdatenpaket je Beleg mit Original, XML, Ledger-Auszug und signiertem Manifest | Buchungsbelege 8 Jahre (BEG IV) |
+| **GoBD / § 147 AO, § 14b UStG** | Unveränderbares, hash-verkettetes Prüfprotokoll; Prüfdatenpaket je Beleg mit Original, XML, Ledger-Auszug, Verfahrensdokumentation und signiertem Manifest; Aufbewahrungsende je Rechnung | Rechnungen/Buchungsbelege 8 Jahre (BEG IV, Finanzsektor 10); Bücher, Abschlüsse, Verfahrensdokumentation 10 Jahre |
+| **GoBD Rz. 151–155** | Verfahrensdokumentation in vier Teilen (Rz. 153) als Entwurf aus dem Systemzustand, Platzhalter für Organisatorisches | BMF-Schreiben vom 28.11.2019 in der jeweils geltenden Fassung |
 
 Quellen und Prüfmethode: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
 
@@ -76,12 +82,14 @@ Quellen und Prüfmethode: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
 4. [Oberfläche](#oberfläche)
 5. [API-Referenz & cURL](#api-referenz--curl)
 6. [Compliance-Scorecard](#compliance-scorecard-0100)
-7. [Prüfprotokoll (Hash-Kette)](#prüfprotokoll-hash-kette)
-8. [Datenschutz & Privacy Gateway](#datenschutz--privacy-gateway)
-9. [Betrieb: Logging, Rate-Limiting, Konfiguration](#betrieb)
-10. [Tests](#tests)
-11. [Docker](#docker)
-12. [Grenzen](#grenzen)
+7. [E-Rechnung (EN 16931)](#e-rechnung-en-16931) · [Prüfdatenpaket (ZIP)](#prüfdatenpaket-zip)
+8. [Verfahrensdokumentation & Aufbewahrung](#verfahrensdokumentation--aufbewahrung)
+9. [Prüfprotokoll (Hash-Kette)](#prüfprotokoll-hash-kette)
+10. [Datenschutz & Privacy Gateway](#datenschutz--privacy-gateway)
+11. [Betrieb: Logging, Rate-Limiting, Konfiguration](#betrieb)
+12. [Tests](#tests)
+13. [Docker](#docker)
+14. [Grenzen](#grenzen)
 
 
 Rechtsquellen: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
@@ -101,9 +109,11 @@ Rechtsquellen: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
 | **Compliance-Score** | Deterministisch 0–100, vier Kacheln, Deckelung bei Hochrisiko, Freigabeempfehlung, Ein-Satz-Risikoerklärung je Abzug |
 | **Musterdaten** | Drei PDF-Referenzdokumente mit vorberechneter KI-Antwort plus eine hybride ZUGFeRD-Rechnung an eine Kommune, die live aus dem XML geprüft wird – sofort nutzbar ohne Modell |
 | **Prüfprotokoll** | Append-only-Tabelle `audit_trails` mit SHA-256-Hash-Kette, DB-Trigger gegen UPDATE/DELETE, Kettenprüfung per API |
-| **Human Oversight** | Prüfer-Siegel (Art. 14 EU AI Act) als eigener Ledger-Eintrag; erneute Analyse hebt das Siegel auf |
-| **Prüfzertifikat** | A4-HTML (druckfertig, CSP-gehärtet), Markdown-Memo, JSON für ERP-Archivierung |
-| **Prüfdatenpaket (ZIP)** | Originalbeleg, XML-Datensatz, Ledger-Auszug, Zertifikat und `manifest.json` mit SHA-256 je Datei und Ed25519-Systemsignatur; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
+| **Human Oversight** | Prüfer-Siegel und **Übersteuerung der KI-Einstufung** (Art. 14 Abs. 4 lit. d AI Act) mit Begründung, Rechtsnorm und Score vorher/nachher; beide als Ed25519-signierte Ledger-Einträge. Eine Übersteuerung hebt ein bestehendes Siegel auf, eine erneute Analyse verwirft Übersteuerung und Siegel |
+| **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 in vier Teilen aus dem echten Systemzustand (Version, Regelwerk, Prompt-Hash, Schlüssel-Fingerabdruck, Kettenstatus) plus Anhang je Beleg; HTML (A4) und Markdown, auch im Prüfdatenpaket |
+| **Aufbewahrung** | Aufbewahrungsende je Rechnung nach BEG IV (8 Jahre ab Ende des Kalenderjahres, Finanzsektor 10 Jahre) in Scorecard, Zertifikat und Tooltip |
+| **Prüfzertifikat** | A4-HTML (druckfertig, CSP-gehärtet), Markdown-Memo, JSON für ERP-Archivierung; Übersteuerungen als Prüfer-Meilenstein und vollständiger Ledger-Auszug |
+| **Prüfdatenpaket (ZIP)** | Originalbeleg, XML-Datensatz, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und `manifest.json` mit SHA-256 je Datei und Ed25519-Systemsignatur; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
 | **Multi-Provider** | Ollama / Gemini / Claude / GPT zur Laufzeit umschaltbar; API-Keys Fernet-verschlüsselt gespeichert, nur maskiert ausgeliefert |
 | **Compliance Copilot** | Dokumentbezogene Fragen, geerdet auf nummeriertem Text und Prüfergebnis, mit Zeilen- und Normverweisen |
 | **Betrieb** | JSON-Logs mit `request_id`, PII-Filter im Log, Token-Bucket-Rate-Limit, Mehrfach-Upload per Drag & Drop, Ledger-Integritätsanzeige, KPI-Endpunkt |
@@ -132,21 +142,26 @@ flowchart LR
     P4 --> S[Deterministische<br/>Scorecard 0–100]
     S --> L[(audit_trails<br/>Hash-Kette)]
     S --> UI[Dashboard · Inspektor · Copilot]
-    UI --> H[Prüfer-Siegel<br/>Art. 14]
+    UI --> H[Prüfer-Siegel · Übersteuerung<br/>Art. 14, Ed25519-signiert]
+    H -- neuer Score --> S
     H --> L
     L --> Z[Prüfzertifikat<br/>HTML · MD · JSON]
+    L --> VD[Verfahrensdokumentation<br/>GoBD Rz. 153]
     L --> ZIP[Prüfdatenpaket<br/>ZIP + Ed25519-Manifest]
+    VD --> ZIP
 ```
 
 ```
 app/
   main.py            FastAPI: Endpunkte, Auth, Fehlerformat, Request-Tracing
-  services.py        Pipeline (4 Stufen), Sign-off, KPIs, Copilot, Demo-Seed
+  services.py        Pipeline (4 Stufen), Sign-off, Übersteuerung, KPIs, Copilot, Demo-Seed
   scoring.py         Deterministische Scorecard (Regelwerk 2026.2)
+  retention.py       Aufbewahrungsfristen nach § 147 AO / BEG IV
   extractors/        EN-16931-Parser (CII/UBL), PDF-Anhänge, Leitweg-ID, Abgleich XML ↔ PDF
   gobd_export.py     Prüfdatenpaket (ZIP) mit Manifest und Prüffunktion
+  procedural_doc.py  GoBD-Verfahrensdokumentation (Rz. 153) als HTML und Markdown
   signing.py         Ed25519-Systemsignatur (Schlüssel unter data/.signing.key)
-  audit_ledger.py    Append-only-Ledger mit SHA-256-Hash-Kette
+  audit_ledger.py    Append-only-Ledger mit SHA-256-Hash-Kette, signierte Prüfer-Einträge
   inference.py       InferenceRouter: lokal oder Cloud (immer mit Vault)
   llm.py             Basisclient (JSON-Vertrag, Reparatur), Ollama, Prompts
   providers.py       Gemini-, Claude-, OpenAI-Transport (httpx)
@@ -161,7 +176,8 @@ app/
 frontend/src/
   app/page.tsx       Dashboard-Orchestrierung (kein Mock-Fallback)
   components/        Header, KpiStrip, Scorecard, AuditStepper, DocumentList,
-                     DocumentInspector, ExportModal, SettingsModal, CopilotDrawer
+                     DocumentInspector, ExportModal, OverrideModal, SettingsModal,
+                     CopilotDrawer, ui (CopyButton, HashBadge, Modal, Tabs)
   lib/api.ts         Typisierter Client, Backend-Erkennung, Fehlerobjekte
 ```
 
@@ -220,7 +236,10 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 | ![Gültige Rechnung](docs/screenshots/gueltige-rechnung-light.png) | **Light Mode, gültige Rechnung (100/100)** – „Zur Auszahlung freigegeben“, mit Demo-Siegel versiegelt. Farbcodierte PII-Markierungen im Text. |
 | ![Live-Audit](docs/screenshots/live-audit-stepper.png) | **Live-Audit-Stepper** (Aufnahme mit Ollama-Stub) – zeigt die echten Pipeline-Stufen des Backends (`GET /documents/{id}/progress`), keine simulierte Animation. |
 | ![E-Rechnung](docs/screenshots/e-rechnung-xml-datensatz.png) | **E-Rechnung (100/100)** – Profil-Badge, Tab „XML-Datensatz“ mit den Business Terms, Abgleich je Wert mit dem PDF-Bildteil, B2G-Erkennung mit gültiger Leitweg-ID. |
-| ![Export](docs/screenshots/export-siegel.png) | **Export-Center & Siegel** – Prüfdatenpaket (ZIP), Zertifikat drucken, JSON, Markdown-Memo; Prüfer-Siegel als Ledger-Eintrag (Art. 14 EU AI Act). |
+| ![Export](docs/screenshots/export-siegel.png) | **Export-Center & Siegel** – Prüfdatenpaket (ZIP), Zertifikat drucken, JSON, Markdown-Memo, GoBD-Verfahrensdokumentation; Prüfer-Siegel als Ledger-Eintrag (Art. 14 EU AI Act). |
+| ![Übersteuerung](docs/screenshots/human-override.png) | **Übersteuerung der KI-Einstufung** – Tab „AI Act“, Schaltfläche „Einstufung übersteuern“: neue Risikostufe, Rechtsnorm (Vorschläge zu Art. 6 Abs. 3 lit. a–d), Begründung ab 20 Zeichen, Prüfperson. Der Score wird neu berechnet (hier 59 → 95), der Hinweis oben im Tab zeigt den Hash des signierten Ledger-Eintrags. |
+| ![Ledger-Historie](docs/screenshots/ledger-historie.png) | **Ledger-Historie** – alle Einträge des Belegs, Prüfer-Meilensteine hervorgehoben, Ed25519-Status je Prüfer-Eintrag („Ed25519 gültig“ bzw. „Signatur ungültig“; maschinelle Einträge sind unsigniert), Hashes mit Kopierschaltfläche. |
+| ![Verfahrensdokumentation](docs/screenshots/verfahrensdokumentation.png) | **GoBD-Verfahrensdokumentation** – Entwurf in vier Teilen; vom Unternehmen zu ergänzende Stellen sind markiert. A4-druckfertig, als PDF speicherbar. |
 | ![Einstellungen](docs/screenshots/einstellungen.png) | **Einstellungen** – Provider, Modell, API-Key (maskiert), Privacy-Gateway-Hinweis, PII-Strenge, Toggles, X-API-Key. |
 | ![Mobil](docs/screenshots/mobil.png) | **Mobil (390 px)** – ohne horizontales Scrollen. |
 
@@ -228,7 +247,13 @@ Designprinzipien: semantische Farbtokens (Grün = konform, Bernstein = Prüfung,
 Rose = Verstoß/Hochrisiko, Indigo = Datenschutz), WCAG-AA-Kontraste in beiden
 Themes, keine Hover-Lifts, pulsierenden Effekte oder Deko-Icons,
 `prefers-reduced-motion` wird respektiert. Zahlen, Beträge, Hashes und
-Normzitate in JetBrains Mono mit gleich breiten Ziffern. Barrierefreiheit nach
+Normzitate in JetBrains Mono mit gleich breiten Ziffern; Beträge
+rechtsbündig, Summenblöcke (Netto, USt, Brutto, Zahlbetrag) auf die
+Dezimalstelle ausgerichtet. Rechnungsnummern, Leitweg-IDs, IBANs und SHA-256
+lassen sich mit einem Klick kopieren (1,5 s Häkchen). Hashes erscheinen
+gekürzt mit Prüfstatus. Tabs und Dialoge blenden in 150 ms ein, `Esc`
+schließt jeden Dialog. Der XML-Tab nutzt auf WQHD (2560 × 1440) die volle
+Höhe statt intern zu scrollen. Barrierefreiheit nach
 den Vercel Web Interface Guidelines: Skip-Link, echte Buttons, Tooltips per
 Tastaturfokus erreichbar, Formularfelder mit `name`/`autocomplete`. Ist das
 Backend nicht erreichbar, erscheint ein Hinweisbanner – **es werden nie
@@ -247,11 +272,13 @@ Ersatzdaten angezeigt.**
 | `GET` | `/documents/{id}/progress` | Aktuelle Pipeline-Stufe |
 | `GET` | `/documents` · `/documents/{id}` | Liste (Pins zuerst) · Detail inkl. geschwärzter Textansicht |
 | `PUT` | `/documents/{id}/pin` | Anpinnen |
-| `POST` | `/documents/{id}/sign-off` | Prüfer-Siegel (Art. 14) |
+| `POST` | `/documents/{id}/sign-off` | Prüfer-Siegel (Art. 14), Ed25519-signierter Ledger-Eintrag |
+| `POST` | `/api/documents/{id}/override` | Übersteuerung der KI-Einstufung (Art. 14 Abs. 4 lit. d): Score neu, signierter Ledger-Eintrag |
 | `GET` | `/documents/{id}/report?format=html\|markdown\|json` | Prüfzertifikat |
-| `GET` | `/api/documents/{id}/export/gobd` | Prüfdatenpaket (ZIP): Original, XML, Ledger-Auszug, Zertifikat, signiertes Manifest |
+| `GET` | `/api/documents/{id}/export/gobd` | Prüfdatenpaket (ZIP): Original, XML, Ledger-Auszug, Zertifikat, Verfahrensdokumentation, signiertes Manifest |
+| `GET` | `/api/documents/{id}/export/procedural-doc?format=html\|markdown` | GoBD-Verfahrensdokumentation (Entwurf) mit Anhang zum Beleg |
 | `POST` | `/documents/{id}/copilot` | Frage zum Dokument |
-| `GET` | `/api/audit/trail` · `/api/audit/verify` · `/api/audit/head` | Ledger lesen, Kette prüfen, Kopf-Hash zur Verankerung |
+| `GET` | `/api/audit/trail` · `/api/audit/verify` · `/api/audit/head` | Ledger lesen (mit `signature_status` je Eintrag), Kette und Signaturen prüfen, Kopf-Hash zur Verankerung |
 | `GET` | `/api/audit/signing-key` | Öffentlicher Schlüssel und Fingerabdruck der Systemsignatur |
 | `GET`/`POST` | `/api/settings` · `/api/settings/test-connection` | Laufzeit-Einstellungen (Keys maskiert), Verbindungstest |
 | `GET` | `/api/dashboard/kpis` | Portfolio-Kennzahlen |
@@ -283,7 +310,16 @@ curl -s -X POST $API/documents/$ID/sign-off -H "Content-Type: application/json" 
 curl -s "$API/documents/$ID/report?format=html" -o zertifikat.html
 curl -s "$API/documents/$ID/report?format=markdown"
 
-curl -s $API/api/audit/verify          # {"valid": true, "entries": ..., "head_hash": ...}
+# Übersteuerung der KI-Einstufung durch die Prüfperson (Art. 14 Abs. 4 lit. d AI Act)
+curl -s -X POST $API/api/documents/$ID/override -H "Content-Type: application/json" \
+     -d '{"auditor_name":"Erika Muster","risk_level":"limited",
+          "legal_basis":"Art. 6 Abs. 3 lit. d VO (EU) 2024/1689",
+          "reason":"Das System sortiert nur vor; die Auswahl trifft die Personalabteilung."}' \
+     | jq .scorecard.human_override
+
+curl -s "$API/api/documents/$ID/export/procedural-doc?format=html" -o verfahrensdokumentation.html
+
+curl -s $API/api/audit/verify          # {"valid": true, "entries": ..., "signed_entries": ..., "head_hash": ...}
 
 curl -s -X POST $API/api/settings -H "Content-Type: application/json" \
      -d '{"inference_mode":"gemini","api_keys":{"gemini":"<KEY>"},"pii_strictness":"strict"}' | jq .masked_keys
@@ -298,7 +334,7 @@ Ist `API_KEY` gesetzt, verlangen alle Endpunkte außer `/health` den Header
 
 Fehlerformat (einheitlich): `{"error": {"code", "message", "hint"}}`. Wichtige
 Codes: `invalid_upload` 415 · `file_too_large` 413 · `no_text_layer` 422 ·
-`invalid_einvoice` 422 · `document_not_analyzed` 409 · `original_missing` 410 · `rate_limited` 429 (+ `Retry-After`) ·
+`invalid_einvoice` 422 · `override_without_change` 422 · `document_not_analyzed` 409 · `original_missing` 410 · `rate_limited` 429 (+ `Retry-After`) ·
 `provider_not_configured` 400 · `provider_auth_failed` 502 ·
 `ollama_unavailable`/`provider_unavailable` 503 · `provider_timeout` 504.
 
@@ -386,6 +422,7 @@ original/<Dateiname>          Originalbeleg, bitgenau (SHA-256 = Datenbank)
 factur-x.xml                  eingebetteter XML-Datensatz (nur hybride PDFs)
 ledger_audit_trail.json       alle Ledger-Einträge des Belegs, je Eintrag nachgerechnet
 audit_certificate.html        A4-Prüfzertifikat
+verfahrensdokumentation.html  Verfahrensdokumentation (Entwurf) mit Anhang zum Beleg
 manifest.json                 SHA-256 je Datei, Prüfzeitpunkt, Score, Siegel,
                               Kopf-Hash der Kette, Ed25519-Signatur
 ```
@@ -395,9 +432,46 @@ Datei-Hashes und Signatur ohne Server. Den Fingerabdruck liefert
 `GET /api/audit/signing-key`; er gehört in die Verfahrensdokumentation – ein im
 Paket mitgelieferter Schlüssel allein beweist nichts.
 
+## Verfahrensdokumentation & Aufbewahrung
+
+`GET /api/documents/{id}/export/procedural-doc?format=html|markdown` bzw.
+„GoBD-Verfahrensdokumentation“ im Export-Center erzeugt einen **Entwurf** nach
+GoBD Rz. 153:
+
+| Teil | Inhalt aus dem System | Vom Unternehmen zu ergänzen |
+|---|---|---|
+| 1. Allgemeine Beschreibung | Zweck, Belegarten und maßgeblicher Teil, Rechtsgrundlagen, Fristen | Prozesseigner, Prüfpersonen, IT-Betrieb, Datenschutz, Freigabe der Dokumentation |
+| 2. Anwenderdokumentation | Belegfluss, Vier-Augen-Prinzip, Rollen, Eskalationsmatrix der Scorecard | Posteingang, Übergabe an ERP/Archiv, Anmeldung (SSO), Rollenzuordnung |
+| 3. Technische Systemdokumentation | Version, Regelwerk, Prompt-Hash, Modell, Schnittstellen, Hash-Kette, Signaturschlüssel (Fingerabdruck), Kettenstatus, XML-Härtung, KI-Komponente | ERP-/Archivanbindung, externe Verankerung des Kopf-Hashes |
+| 4. Betriebsdokumentation | Datensicherung des Schlüssels, WORM-Prinzip, Protokollierung, Zugriffsschutz | Sicherungsintervall, Archivsystem, Änderungshistorie, Netzwerk und Patch-Management |
+
+Platzhalter sind als „[vom Unternehmen zu ergänzen]“ markiert. Ein Anhang
+dokumentiert den gewählten Beleg (SHA-256, Analysepfad, Score, Siegel,
+Vier-Augen-Prüfung, Aufbewahrungsende) und seine Ledger-Einträge. Das
+Dokument ersetzt keine eigene Verfahrensdokumentation: Erst die Freigabe durch
+die verantwortliche Person macht sie vollständig. Eine fehlende
+Verfahrensdokumentation ist nach Rz. 155 nur dann ein formeller Mangel mit
+sachlichem Gewicht, wenn die Nachvollziehbarkeit beeinträchtigt ist; in
+Betriebsprüfungen wird sie trotzdem regelmäßig angefordert.
+
+**Aufbewahrungsfristen** (`app/retention.py`, Fristbeginn mit Ablauf des
+Kalenderjahres, § 147 Abs. 4 AO):
+
+| Unterlage | Frist | Grundlage |
+|---|---|---|
+| Rechnungen, Buchungsbelege | **8 Jahre** | § 147 Abs. 1 Nr. 4, Abs. 3 AO, § 14b Abs. 1 UStG, § 257 Abs. 4 HGB (BEG IV, seit 01.01.2025) |
+| dieselben bei Kreditinstituten, Versicherungsunternehmen und Wertpapierinstituten | 10 Jahre | Rückausnahme für den Finanzsektor (Gesetz zur Modernisierung und Digitalisierung der Schwarzarbeitsbekämpfung) |
+| Bücher, Jahresabschlüsse, Organisationsunterlagen inkl. Verfahrensdokumentation | 10 Jahre | § 147 Abs. 1 Nr. 1, Abs. 3 AO |
+| Handels- und Geschäftsbriefe | 6 Jahre | § 147 Abs. 1 Nr. 2, 3, Abs. 3 AO |
+
+Die Scorecard weist für Rechnungen mit Rechnungsdatum das Aufbewahrungsende aus
+(Rechnung vom 15.09.2026 → aufbewahren bis 31.12.2034); Zertifikat und Tooltip
+nennen die Ausnahmen. Die Ablaufhemmung nach § 147 Abs. 3 S. 5 AO (laufende
+Außenprüfung, offene Festsetzungsfrist) prüft das System nicht.
+
 ## Prüfprotokoll (Hash-Kette)
 
-Jede Analyse und jedes Siegel schreibt einen Eintrag in `audit_trails`:
+Jede Analyse, jedes Siegel und jede Übersteuerung schreibt einen Eintrag in `audit_trails`:
 `document_id`, `sha256_hash` (Dokument), `model_name`, `prompt_hash`
 (Fingerabdruck der Prompt-Version), `timestamp_utc`, `result_summary`,
 `compliance_score`, `risk_tier`, `details`, `previous_hash`, `entry_hash`.
@@ -410,6 +484,19 @@ Jede Analyse und jedes Siegel schreibt einen Eintrag in `audit_trails`:
 * DB-Trigger (SQLite und PostgreSQL) verweigern `UPDATE` und `DELETE`.
 * Bei PostgreSQL serialisiert `pg_advisory_xact_lock` das Anhängen auch über
   mehrere Prozesse.
+* **Prüfer-Einträge sind signiert.** Siegel (`sign_off`) und Übersteuerung
+  (`human_override`) tragen in `details.signature` eine Ed25519-Signatur des
+  Systemschlüssels über den Eintragsinhalt inklusive `previous_hash`; der
+  `entry_hash` deckt die Signatur mit ab. `verify` prüft jede Signatur gegen
+  den aktuellen Systemschlüssel und zählt sie (`signed_entries`). Wer einen
+  Prüfer-Eintrag ändert und alle Hashes neu berechnet, fällt damit trotzdem
+  auf – es sei denn, er hat auch den privaten Schlüssel. Maschinelle Einträge
+  (`analysis`) bleiben unsigniert.
+
+Die Übersteuerung speichert Prüfperson, alte und neue Risikostufe, Score
+vorher/nachher, Begründung, Rechtsnorm, Zeitpunkt (ISO 8601) und den Verweis
+auf Art. 14 Abs. 4 lit. d AI Act. Der Score wird nicht von Hand gesetzt,
+sondern aus der geänderten Einstufung mit demselben Regelwerk neu berechnet.
 
 Ehrliche Einordnung: Das ist eine **lineare Hash-Kette**, kein Merkle-Baum.
 Gegen jemanden mit Vollzugriff auf die Datenbank hilft kein Trigger; wer die
@@ -485,7 +572,7 @@ Alembic dazu.
 ## Tests
 
 ```bash
-python -m pytest            # 230 Tests, ca. 13 s, kein LLM nötig
+python -m pytest            # 256 Tests, ca. 20 s, kein LLM nötig
 cd frontend && npm run lint && npm run build
 ```
 
@@ -501,6 +588,8 @@ nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault und Validierung laufen real.
 | `test_scoring.py` | 22 | Regelwerk, Demo-Scores, Kleinbetrag, Corona-Sätze, Deckelung, Risikoerklärungen, XML-Vorrang, § 14c-Hinweis |
 | `test_einvoice.py` | 38 | CII/UBL-Mapping, Profile, XXE/DTD-Abwehr, ZUGFeRD 1.0, Geschäftsregeln, Leitweg-ID (KoSIT-Beispiele), PDF-Anhang, Diskrepanzen, Mischsteuersatz, B2G/B2B |
 | `test_einvoice_api.py` | 18 | XML-Upload ohne Modell, hybride PDF, Batch mit PDF und XML, Zertifikat, ZIP-Paket inkl. Manipulations- und Fremdschlüsselnachweis, fehlende Originaldatei, Copilot-Musterantwort nur bei exakter SHA-256 |
+| `test_procedural_doc.py` | 14 | Vier Teile nach Rz. 153, Systemstand, Platzhalter, HTML-Escaping, Endpunkt HTML/Markdown, Vier-Augen-Prüfung im Anhang, BEG-IV-Fristen inkl. Finanzsektor, Fristende in Scorecard und Zertifikat, Verfahrensdokumentation im ZIP |
+| `test_human_override.py` | 12 | Neuberechnung 59 → 95, Ledger-Verkettung und Ed25519-Signatur, Siegel aufgehoben, neue Analyse verwirft Übersteuerung, 422/409-Fälle, Prüfer-Meilenstein im Zertifikat, neu gehashte Kette und fremder Schlüssel werden erkannt |
 | `test_reference_demo.py` | 12 | Musterdaten ohne Modell (100/45/59 + ZUGFeRD 100), Demo-Siegel, Ledger-Kennzeichnung, kein Überschreiben von Live-Audits, Copilot-Musterantworten |
 | `test_observability.py` | 13 | JSON-Logs, PII-Filter, Request-ID, Token-Bucket, 429 |
 | `test_audit_ledger.py` | 7 | Verkettung, Trigger, Manipulations- und Löschnachweis, Migration |
@@ -555,11 +644,23 @@ Steuerberatung. Maßgeblich bleibt die Freigabe durch die Prüfperson.
   qualifiziertes Siegel und kein qualifizierter Zeitstempel nach eIDAS.
 * **Art. 6 Abs. 3 AI Act.** Die Ausnahme für rein vorbereitende Tätigkeiten
   wird nicht automatisch geprüft; das System eskaliert konservativ und weist
-  darauf hin.
+  darauf hin. Greift sie, übersteuert die Prüfperson die Einstufung mit
+  Begründung. Nach Art. 6 Abs. 4 ist diese Bewertung vor dem Inverkehrbringen
+  zu dokumentieren – das ist Sache des Anbieters, nicht dieses Systems.
+* **Verfahrensdokumentation ist ein Entwurf.** Sie beschreibt nur, was das
+  System über sich weiß; Organisation, Archiv und IT-Betrieb ergänzt das
+  Unternehmen. Änderungen an den Laufzeit-Einstellungen (Modell, Provider)
+  stehen nur in den Anwendungslogs, nicht im Ledger.
+* **Schlüsselwechsel.** Wird `data/.signing.key` ersetzt, meldet `verify` alle
+  bisher signierten Prüfer-Einträge als „fremder Schlüssel“. Eine Rotation mit
+  Schlüsselhistorie ist nicht umgesetzt – den Schlüssel sichern.
 * **Synchrone Analyse.** Ein `POST /extract` blockiert für beide LLM-Läufe; für
   hohe Last wäre eine Queue (z. B. Arq, Celery) nötig.
-* **Prüfer-Identität.** Der Name im Siegel ist selbst erklärt. Produktiv
-  gehören SSO (OIDC) und ggf. eine qualifizierte elektronische Signatur dazu.
+* **Prüfer-Identität.** Der Name in Siegel und Übersteuerung ist selbst
+  erklärt; die Ed25519-Signatur stammt vom System, nicht von der Person. Sie
+  belegt Integrität, nicht Identität. Das Vier-Augen-Prinzip wird im Anhang der
+  Verfahrensdokumentation geprüft, aber nicht erzwungen. Produktiv gehören SSO
+  (OIDC) und ggf. eine qualifizierte elektronische Signatur dazu.
 * **Prozesslokale Zustände.** Rate-Limit und Pipeline-Fortschritt gelten je
   Prozess.
 
