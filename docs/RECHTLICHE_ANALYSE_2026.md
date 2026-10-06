@@ -161,3 +161,36 @@ Der regulatorische Druck auf die Softwareentwicklung hat ein historisches Maximu
 2. Dezember 2027 eine dringend benötigte temporäre Entlastung. Doch die operativen Fundamente – die zwingende Empfangsbereitschaft für EN 16931-strukturierte Rechnungen seit dem 
 
 1. Januar 2025, die GoBD-konforme Historisierung in der Verfahrensdokumentation sowie die rigorose Abschirmung personenbezogener Daten durch ephemere Pseudonymisierung vor dem Transfer an US-Hyperscaler – dulden keinen Aufschub. Erfolgreiche Architektur in den Jahren 2025 und 2026 definiert sich dadurch, dass juristische Vorgaben nicht als externe Blockaden, sondern als exakte technische Systemspezifikationen begriffen und implementiert werden.
+
+---
+
+## Anmerkungen aus der Umsetzung (v2.2, Oktober 2026)
+
+Abgleich der Analyse mit dem implementierten Stand. Der Text oben bleibt
+unverändert; die folgenden Punkte präzisieren ihn.
+
+1. **Folgen einer fehlenden Verfahrensdokumentation.** Nach GoBD Rz. 155 ist
+   eine fehlende oder ungenügende Verfahrensdokumentation nur dann ein
+   formeller Mangel mit sachlichem Gewicht, der die Beweiskraft der
+   Buchführung (§ 158 AO) entfallen lassen und eine Schätzung (§ 162 AO)
+   eröffnen kann, wenn die Nachvollziehbarkeit und Nachprüfbarkeit
+   beeinträchtigt sind. Ein Automatismus „fehlt, also
+   Schätzung“ besteht nicht. Umgesetzt: `app/procedural_doc.py` erzeugt einen
+   Entwurf nach Rz. 153 aus dem Systemzustand.
+2. **Rückausnahme Finanzsektor.** Für Kreditinstitute,
+   Versicherungsunternehmen und Wertpapierinstitute gilt für Buchungsbelege
+   wieder die Frist von zehn Jahren (Gesetz zur Modernisierung und
+   Digitalisierung der Schwarzarbeitsbekämpfung, Bundesrat 19.12.2025).
+   Umgesetzt in `app/retention.py`, Scorecard und Zertifikat.
+3. **Fristbeginn.** Die Frist beginnt mit dem Schluss des Kalenderjahres, in
+   dem der Beleg entstanden ist (§ 147 Abs. 4 AO), und läuft nicht ab, solange
+   die Festsetzungsfrist noch offen ist (§ 147 Abs. 3 S. 5 AO).
+4. **Pseudonymisierung.** Das Privacy Gateway arbeitet regelbasiert im
+   Backend (kein NER-Modell, keine Format-Preserving Encryption); das Mapping
+   bleibt flüchtig im Arbeitsspeicher. Die im Abschnitt „Client-Side
+   Pseudonymization & FPE Proxy“ beschriebene Architektur ist das Zielbild,
+   nicht der aktuelle Stand.
+5. **Menschliche Aufsicht.** Art. 14 Abs. 4 lit. d AI Act ist als begründete
+   Übersteuerung der Risikoeinstufung umgesetzt; Prüfer-Einträge sind im
+   Ledger Ed25519-signiert. Die Signatur stammt vom System und belegt
+   Integrität, nicht die Identität der Prüfperson.
