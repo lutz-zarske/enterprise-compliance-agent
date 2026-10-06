@@ -22,9 +22,10 @@ import {
   Zap,
 } from "../components/icons";
 import { KpiStrip } from "../components/KpiStrip";
+import { OverrideModal } from "../components/OverrideModal";
 import { Scorecard } from "../components/Scorecard";
 import { SettingsModal } from "../components/SettingsModal";
-import { EmptyState, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
+import { EmptyState, HashBadge, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
 import { api, ApiError, fetchHealth, getApiBase } from "../lib/api";
 import { cx, formatBytes, formatDate, formatModel, PROVIDER_NAMES } from "../lib/format";
 import type {
@@ -72,6 +73,7 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<InspectorTab>("ustg");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const { toasts, push, dismiss } = useToasts();
@@ -385,11 +387,14 @@ export default function DashboardPage() {
                           </Tooltip>
                         )}
                       </div>
-                      <p className="truncate font-mono text-[11px] text-subtle" title={detail.sha256}>
-                        SHA-256 {detail.sha256.slice(0, 16)}… · {isXml ? "XML" : `${detail.page_count ?? "?"} S.`} · {formatBytes(detail.size_bytes)}
-                        {detail.extracted_at && ` · geprüft ${formatDate(detail.extracted_at, true)}`}
-                        {detail.model && !isReference && ` · ${formatModel(detail.model)}`}
-                      </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-subtle">
+                        <HashBadge value={detail.sha256} label="SHA-256" />
+                        <span className="font-mono tabular-nums">
+                          {isXml ? "XML" : `${detail.page_count ?? "?"} S.`} · {formatBytes(detail.size_bytes)}
+                          {detail.extracted_at && ` · geprüft ${formatDate(detail.extracted_at, true)}`}
+                          {detail.model && !isReference && ` · ${formatModel(detail.model)}`}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -440,7 +445,12 @@ export default function DashboardPage() {
                   />
                 )}
 
-                <DocumentInspector document={detail} tab={tab} onTabChange={setTab} />
+                <DocumentInspector
+                  document={detail}
+                  tab={tab}
+                  onTabChange={setTab}
+                  onOverride={detail.compliance && !offline ? () => setOverrideOpen(true) : undefined}
+                />
               </>
             )}
           </div>
@@ -449,7 +459,7 @@ export default function DashboardPage() {
 
       <footer className="border-t border-line py-4 no-print">
         <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-1 px-4 text-[11px] text-subtle sm:flex-row sm:px-6">
-          <span>Enterprise Compliance Agent v{health?.version ?? "2.1.0"}</span>
+          <span>Enterprise Compliance Agent v{health?.version ?? "2.2.0"}</span>
           <span>VO (EU) 2024/1689 · § 14 UStG · DSGVO · GoBD-Hash-Kette</span>
           <span>{settings?.is_cloud ? "Cloud-Inferenz über Privacy Gateway" : "Lokale Inferenz · Zero Data Leakage"}</span>
         </div>
@@ -471,6 +481,16 @@ export default function DashboardPage() {
         open={exportOpen}
         onClose={() => setExportOpen(false)}
         onSealed={(updated) => {
+          setDetail(updated);
+          void refreshData().catch(() => undefined);
+        }}
+        notify={notify}
+      />
+      <OverrideModal
+        document={detail}
+        open={overrideOpen}
+        onClose={() => setOverrideOpen(false)}
+        onDone={(updated) => {
           setDetail(updated);
           void refreshData().catch(() => undefined);
         }}

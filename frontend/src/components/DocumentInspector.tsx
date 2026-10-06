@@ -1,7 +1,18 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import type { AIActRiskLevel, DetectionSource, DocumentDetail, EInvoiceData, PIIFinding, ScoreCheck, TextSpan, VisualCheck } from "../types/api";
+import React, { useEffect, useMemo, useState } from "react";
+import { api } from "../lib/api";
+import type {
+  AIActRiskLevel,
+  DetectionSource,
+  DocumentDetail,
+  EInvoiceData,
+  LedgerEntry,
+  PIIFinding,
+  ScoreCheck,
+  TextSpan,
+  VisualCheck,
+} from "../types/api";
 import {
   cx,
   DOC_TYPE_LABELS,
@@ -13,10 +24,13 @@ import {
   toneForRisk,
   toneForStatus,
 } from "../lib/format";
-import { AlertTriangle, Check, CheckCircle, FileCode, FileText, Info, Lock, MinusCircle } from "./icons";
-import { Chip, EmptyState, StatusIcon, Tabs, Tooltip } from "./ui";
+import { AlertTriangle, Check, CheckCircle, FileCode, FileText, Info, Layers, Lock, MinusCircle, Scale } from "./icons";
+import { Chip, CopyValue, EmptyState, HashBadge, Skeleton, StatusIcon, Tabs, Tooltip } from "./ui";
 
-export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml";
+export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml" | "ledger";
+
+/** Scrollhoehe der Inspektor-Spalten: auf grossen Monitoren (1440p/2K) die volle Hoehe nutzen. */
+const PANEL_HEIGHT = "max-h-[600px] xl:max-h-[max(600px,calc(100vh-280px))] 2xl:max-h-[max(780px,calc(100vh-280px))]";
 
 // --- Farbcodierung der PII-Markierungen --------------------------------------
 // IBAN/Steuer-IDs cyan, Namen bernstein, Betraege smaragd, Kontakt/Adresse indigo,
@@ -111,7 +125,7 @@ function TextViewer({ document, activeSpan, onSpanClick }: {
   }
 
   return (
-    <div className="max-h-[620px] overflow-y-auto rounded-lg border border-line bg-surface-2 p-4">
+    <div className={cx(PANEL_HEIGHT, "overflow-y-auto rounded-lg border border-line bg-surface-2 p-4")}>
       <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.75] text-muted">
         {segments.map(({ text, span, key }) =>
           span ? (
@@ -193,12 +207,36 @@ const PYRAMID: { level: AIActRiskLevel; label: string; sub: string; width: strin
   { level: "minimal", label: "Minimales Risiko", sub: "Art. 4 / 95", width: "w-full" },
 ];
 
-function AiActPanel({ document }: { document: DocumentDetail }) {
+function OverrideNotice({ document }: { document: DocumentDetail }) {
+  const override = document.scorecard?.human_override;
+  if (!override) return null;
+  return (
+    <div className="rounded-lg border border-accent-line bg-accent-soft p-3 text-xs">
+      <p className="flex flex-wrap items-center gap-2 font-semibold text-accent">
+        <Scale size={13} aria-hidden="true" /> Einstufung durch Prüfperson übersteuert
+        <span className="font-mono font-normal tabular-nums">
+          {RISK_LABELS[override.previous_risk_level]} → {RISK_LABELS[override.new_risk_level]} · Score{" "}
+          {override.previous_score ?? "–"} → {override.new_score}
+        </span>
+      </p>
+      <p className="mt-1.5 leading-relaxed text-fg">{override.reason}</p>
+      <p className="mt-1 text-subtle">
+        {override.auditor_name} · {formatDate(override.overridden_at, true)} · {override.legal_basis}
+      </p>
+      {override.ledger_entry_hash && (
+        <HashBadge className="mt-2" value={override.ledger_entry_hash} label="Ledger" verified verifiedLabel="Ed25519-signiert" />
+      )}
+    </div>
+  );
+}
+
+function AiActPanel({ document, onOverride }: { document: DocumentDetail; onOverride?: () => void }) {
   const ai = document.compliance?.ai_act;
   if (!ai) return <EmptyState icon={<Info size={18} />} title="Noch keine Risikobewertung" />;
   const regulatory = document.scorecard?.tiles.find((tile) => tile.key === "regulatory");
   return (
     <div className="space-y-4">
+      <OverrideNotice document={document} />
       <div className="flex flex-col items-center gap-1 py-2" aria-label="EU AI Act Risikopyramide">
         {PYRAMID.map((layer) => {
           const active = ai.overall_risk_level === layer.level;
@@ -230,9 +268,23 @@ function AiActPanel({ document }: { document: DocumentDetail }) {
         <ul key={check.id} className="rounded-lg border border-line px-3"><CheckRow check={check} /></ul>
       ))}
 
+      {onOverride && document.status === "extracted" && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line p-3">
+          <p className="max-w-[48ch] text-xs leading-relaxed text-muted">
+            Trifft die Einstufung nicht zu? Die Prüfperson kann sie mit Begründung und Rechtsnorm übersteuern
+            (Art. 14 Abs. 4 lit. d). Der Score wird neu berechnet und signiert protokolliert.
+          </p>
+          <button type="button" className="btn" onClick={onOverride}>
+            <Scale size={14} aria-hidden="true" /> Einstufung übersteuern
+          </button>
+        </div>
+      )}
+
       {ai.systems.length > 0 && (
         <div>
-          <p className="label-caps mb-1">Erkannte KI-Systeme</p>
+          <p className="label-caps mb-1">
+            Erkannte KI-Systeme{document.scorecard?.human_override ? " · Einstufung des Modells vor der Übersteuerung" : ""}
+          </p>
           <ul className="space-y-2">
             {ai.systems.map((system, index) => (
               <li key={index} className="rounded-lg border border-line p-3">
@@ -345,6 +397,34 @@ function Fact({ label, value, mono }: { label: string; value: React.ReactNode; m
   );
 }
 
+/**
+ * Summenblock nach Financial-UI-Muster: Bezeichnung links, Betrag rechtsbuendig in
+ * Tabellenziffern, Summenstrich vor dem Gesamtbetrag.
+ */
+function SumBlock({ rows, total, currency, marks }: {
+  rows: { label: string; value: string | number | null; mark?: React.ReactNode }[];
+  total: { label: string; value: string | number | null; mark?: React.ReactNode };
+  currency: string | null;
+  marks?: boolean;
+}) {
+  const line = (label: string, value: string | number | null, mark: React.ReactNode, strong = false) => (
+    <div className={cx("grid items-baseline gap-3 px-3 py-1.5", marks ? "grid-cols-[1fr_auto_1.5rem]" : "grid-cols-[1fr_auto]")}>
+      <dt className={cx("text-xs", strong ? "font-semibold text-fg" : "text-muted")}>{label}</dt>
+      <dd className={cx("text-right font-mono tabular-nums", strong ? "text-[14px] font-semibold text-fg" : "text-[13px] text-fg")}>
+        {typeof value === "string" && /[A-Z]{3}$/.test(value) ? value : formatMoney(value, currency)}
+      </dd>
+      {marks && <span className="flex justify-center">{mark}</span>}
+    </div>
+  );
+  return (
+    <dl className="rounded-lg border border-line bg-surface-2 py-1.5" aria-label="Summen">
+      {rows.map((row) => <React.Fragment key={row.label}>{line(row.label, row.value, row.mark)}</React.Fragment>)}
+      <div className="mx-3 my-1 border-t-2 border-double border-line-strong" aria-hidden="true" />
+      {line(total.label, total.value, total.mark, true)}
+    </dl>
+  );
+}
+
 function FactsPanel({ document }: { document: DocumentDetail }) {
   const ex = document.extraction;
   if (!ex) return <EmptyState icon={<FileText size={18} />} title="Noch keine Extraktion" />;
@@ -354,31 +434,35 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
     <div className="space-y-4">
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
         <Fact label="Dokumenttyp" value={DOC_TYPE_LABELS[ex.doc_type]} />
-        <Fact label="Belegnummer" value={ex.document_number} mono />
+        <Fact label="Belegnummer" value={<CopyValue value={ex.document_number} label="Belegnummer" />} />
         <Fact label="Aussteller" value={ex.sender} />
         <Fact label="Empfänger" value={ex.recipient} />
         <Fact label="Rechnungsdatum" value={formatDate(ex.document_date)} />
         <Fact label="Leistung" value={ex.service_period || (ex.service_date ? formatDate(ex.service_date) : null)} />
         <Fact label="Steuernr. / USt-IdNr." value={[ex.sender_tax_number, ex.sender_vat_id].filter(Boolean).join(" · ")} mono />
         <Fact label="Fällig" value={formatDate(ex.due_date)} />
-        <Fact label="Netto" value={formatMoney(ex.net_amount, ex.currency)} mono />
-        <Fact label="USt" value={ex.tax_amount != null ? `${formatMoney(ex.tax_amount, ex.currency)}${ex.tax_rate != null ? ` (${ex.tax_rate} %)` : ""}` : null} mono />
-        <Fact label="Brutto" value={formatMoney(ex.total_amount, ex.currency)} mono />
         <Fact
           label="IBAN"
           value={
             iban && (
               <span className="inline-flex flex-wrap items-center gap-1.5">
-                {iban}
+                <CopyValue value={ex.iban} display={iban} label="IBAN" />
                 <Chip tone={ex.iban_valid ? "ok" : "bad"}>
                   {ex.iban_valid ? <><Check size={11} aria-hidden="true" /> MOD-97</> : "Prüfziffer ungültig"}
                 </Chip>
               </span>
             )
           }
-          mono
         />
       </dl>
+      <SumBlock
+        currency={ex.currency}
+        rows={[
+          { label: "Summe netto", value: ex.net_amount },
+          { label: `Umsatzsteuer${ex.tax_rate != null ? ` ${ex.tax_rate} %` : ""}`, value: ex.tax_amount },
+        ]}
+        total={{ label: "Rechnungsbetrag brutto", value: ex.total_amount }}
+      />
       {ex.summary && (
         <div>
           <p className="label-caps mb-1">Zusammenfassung</p>
@@ -406,6 +490,10 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
 
 /** Namen in Proportionalschrift, Kennungen und Beträge in Monospace. */
 const NAME_TERMS = new Set(["BT-27", "BT-44"]);
+/** Beträge stehen im Summenblock (rechtsbündig), nicht in der Kennungen-Tabelle. */
+const MONEY_TERMS = ["BT-109", "BT-110", "BT-115", "BT-112"];
+/** Kennungen mit Kopierbutton. */
+const COPY_TERMS = new Set(["BT-1", "BT-10", "BT-31"]);
 
 const VISUAL_LABELS: Record<VisualCheck["status"], string> = {
   match: "Bildteil stimmt überein",
@@ -455,6 +543,12 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
     (check) => !einvoice.business_terms.some((term) => term.bt === check.bt),
   );
   const mismatches = einvoice.visual_check.filter((check) => check.status === "mismatch").length;
+  const identifiers = einvoice.business_terms.filter((term) => !MONEY_TERMS.includes(term.bt));
+  const money = MONEY_TERMS.map((bt) => einvoice.business_terms.find((term) => term.bt === bt)).filter(
+    (term): term is NonNullable<typeof term> => Boolean(term && term.value),
+  );
+  const moneyRows = money.filter((term) => term.bt !== "BT-112");
+  const total = money.find((term) => term.bt === "BT-112");
   return (
     <div className="space-y-4">
       <h3 className="sr-only">XML-Datensatz (EN 16931)</h3>
@@ -489,7 +583,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {einvoice.business_terms.map((term) => (
+            {identifiers.map((term) => (
               <tr key={term.bt}>
                 <td className="whitespace-nowrap px-3 py-2 align-top font-mono text-subtle">{term.bt}</td>
                 <td className="px-3 py-2 align-top text-muted">{term.label}</td>
@@ -499,7 +593,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
                     NAME_TERMS.has(term.bt) ? "text-[12.5px]" : "font-mono tabular-nums",
                   )}
                 >
-                  {term.value ?? "–"}
+                  {COPY_TERMS.has(term.bt) && term.value ? <CopyValue value={term.value} label={term.label} /> : term.value ?? "–"}
                 </td>
                 {embedded && <td className="px-3 py-2 text-center align-top"><VisualMark check={visual.get(term.bt)} /></td>}
               </tr>
@@ -509,13 +603,36 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
                 <tr key={check.bt}>
                   <td className="whitespace-nowrap px-3 py-2 align-top font-mono text-subtle">{check.bt}</td>
                   <td className="px-3 py-2 align-top text-muted">{check.label}</td>
-                  <td className="px-3 py-2 align-top font-mono tabular-nums text-fg [overflow-wrap:anywhere]">{check.xml_value}</td>
+                  <td className="px-3 py-2 align-top font-mono tabular-nums text-fg [overflow-wrap:anywhere]">
+                    {check.bt === "BT-84" && einvoice.iban ? (
+                      <CopyValue value={einvoice.iban} display={check.xml_value} label="IBAN" />
+                    ) : (
+                      check.xml_value
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-center align-top"><VisualMark check={check} /></td>
                 </tr>
               ))}
           </tbody>
         </table>
       </div>
+
+      {total && (
+        <SumBlock
+          currency={einvoice.currency}
+          marks={embedded}
+          rows={moneyRows.map((term) => ({
+            label: `${term.bt} · ${term.label}`,
+            value: term.value,
+            mark: embedded ? <VisualMark check={visual.get(term.bt)} /> : undefined,
+          }))}
+          total={{
+            label: `${total.bt} · ${total.label}`,
+            value: total.value,
+            mark: embedded ? <VisualMark check={visual.get(total.bt)} /> : undefined,
+          }}
+        />
+      )}
 
       {einvoice.public_buyer && (
         <div className="rounded-lg border border-line p-3 text-xs">
@@ -530,6 +647,12 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
             )}
           </div>
           <p className="mt-2 leading-relaxed text-muted">{einvoice.public_buyer_reason}</p>
+          {einvoice.leitweg && (
+            <p className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-subtle">Leitweg-ID</span>
+              <CopyValue value={einvoice.leitweg.value} label="Leitweg-ID" />
+            </p>
+          )}
           {einvoice.leitweg && !einvoice.leitweg.valid && (
             <p className="mt-1 leading-relaxed text-bad">{einvoice.leitweg.reason}</p>
           )}
@@ -549,7 +672,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
         <dt className="text-subtle">Spezifikation (BT-24)</dt>
         <dd className="break-all font-mono text-muted">{einvoice.specification_id ?? "–"}</dd>
         <dt className="text-subtle">SHA-256 XML</dt>
-        <dd className="break-all font-mono text-muted">{einvoice.xml_sha256 ?? "–"}</dd>
+        <dd>{einvoice.xml_sha256 ? <HashBadge value={einvoice.xml_sha256} label="XML" /> : "–"}</dd>
       </dl>
       <p className="text-[11px] leading-relaxed text-subtle">
         Geprüft werden Profilkennung, Pflichtfelder und Summenregeln. Eine Validierung gegen XSD und Schematron
@@ -559,14 +682,106 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
   );
 }
 
+// --- Ledger-Historie ---------------------------------------------------------
+
+const EVENT_LABELS: Record<string, string> = {
+  analysis: "Analyse",
+  sign_off: "Prüfer-Siegel",
+  human_override: "Übersteuerung (Art. 14)",
+};
+
+function LedgerPanel({ document }: { document: DocumentDetail }) {
+  const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Neu laden, sobald sich der Pruefstand aendert (Analyse, Siegel, Override).
+  const version = `${document.id}|${document.updated_at}|${document.sign_off?.ledger_entry_hash ?? ""}|${document.scorecard?.human_override?.ledger_entry_hash ?? ""}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    setEntries(null);
+    setError(null);
+    api
+      .trail(document.id)
+      .then((result) => !cancelled && setEntries(result.items))
+      .catch((err: unknown) => !cancelled && setError(err instanceof Error ? err.message : String(err)));
+    return () => {
+      cancelled = true;
+    };
+  }, [document.id, version]);
+
+  if (error) return <EmptyState icon={<Layers size={18} />} title="Ledger nicht abrufbar">{error}</EmptyState>;
+  if (!entries) {
+    return (
+      <div className="space-y-2" aria-busy="true" aria-label="Ledger wird geladen">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+  if (entries.length === 0) return <EmptyState icon={<Layers size={18} />} title="Noch keine Ledger-Einträge" />;
+
+  return (
+    <div className="space-y-2">
+    <h3 className="label-caps">Ledger-Historie · neueste zuerst</h3>
+    <ol className="space-y-2" aria-label="Ledger-Historie, neueste zuerst">
+      {entries.map((entry) => {
+        const milestone = entry.event_type === "sign_off" || entry.event_type === "human_override";
+        const details = entry.details ?? {};
+        const actor = typeof details.auditor_name === "string" ? details.auditor_name : entry.model_name;
+        return (
+          <li
+            key={entry.entry_id}
+            className={cx(
+              "rounded-lg border p-3 text-xs",
+              milestone ? "border-accent-line bg-accent-soft/40" : "border-line",
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <span className="font-mono text-[11px] tabular-nums text-subtle">#{entry.seq}</span>
+                <span className="font-semibold text-fg">{EVENT_LABELS[entry.event_type] ?? entry.event_type}</span>
+                {milestone && <Chip tone="accent">Prüfer-Meilenstein</Chip>}
+              </span>
+              <span className="font-mono text-[11px] tabular-nums text-subtle">{formatDate(entry.timestamp_utc, true)}</span>
+            </div>
+            <p className="mt-1 text-muted">{entry.result_summary}</p>
+            {entry.event_type === "human_override" && (
+              <p className="mt-1 text-subtle">
+                {String(details.legal_basis ?? "")} – {String(details.reason ?? "")}
+              </p>
+            )}
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-subtle">{actor}</span>
+              {entry.compliance_score != null && (
+                <span className="font-mono tabular-nums text-subtle">Score {entry.compliance_score}</span>
+              )}
+              <HashBadge value={entry.entry_hash} label="Eintrag" />
+              {entry.signature_status === "valid" && <Chip tone="ok">Ed25519 gültig</Chip>}
+              {entry.signature_status === "invalid" && <Chip tone="bad">Signatur ungültig</Chip>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+    </div>
+  );
+}
+
 const LEVEL_LABELS = { strict: "Strikt", standard: "Standard", audit_only: "Audit-Only" } as const;
 
-export function DocumentInspector({ document, tab, onTabChange }: {
+export function DocumentInspector({ document, tab, onTabChange, onOverride }: {
   document: DocumentDetail;
   tab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
+  onOverride?: () => void;
 }) {
   const [activeSpan, setActiveSpan] = useState<string | null>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const overrideHash = document.scorecard?.human_override?.ledger_entry_hash;
+  // Nach einer Uebersteuerung den Hinweis oben im Panel sichtbar machen.
+  useEffect(() => {
+    if (overrideHash) panelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [overrideHash]);
   const formal = document.scorecard?.tiles.find((t) => t.key === "formal");
   const failures = formal?.checks.filter((c) => c.status === "fail").length ?? 0;
 
@@ -622,23 +837,25 @@ export function DocumentInspector({ document, tab, onTabChange }: {
             onChange={onTabChange}
             tabs={[
               { key: "ustg", label: "§ 14 UStG", badge: failures ? <span className="font-mono text-[10px] text-bad">{failures}</span> : undefined },
-              { key: "aiact", label: "EU AI Act" },
-              { key: "pii", label: "PII-Ledger", badge: <span className="font-mono text-[10px] text-subtle">{document.compliance?.gdpr.findings.length ?? 0}</span> },
+              { key: "aiact", label: "AI Act", title: "EU AI Act (VO (EU) 2024/1689)" },
+              { key: "pii", label: "PII", title: "PII-Befunde (DSGVO)", badge: <span className="font-mono text-[10px] text-subtle">{document.compliance?.gdpr.findings.length ?? 0}</span> },
               { key: "facts", label: "Kerndaten" },
-              ...(document.einvoice ? [{ key: "xml" as const, label: "XML-Datensatz" }] : []),
+              ...(document.einvoice ? [{ key: "xml" as const, label: "XML-Datensatz", title: "XML-Datensatz (EN 16931)" }] : []),
+              { key: "ledger", label: "Ledger", title: "Ledger-Historie (Prüfprotokoll)" },
             ]}
           />
-          <div className="max-h-[600px] overflow-y-auto pt-3">
+          <div ref={panelRef} key={tab} role="tabpanel" className={cx(PANEL_HEIGHT, "anim-fade overflow-y-auto pt-3")}>
             {tab === "ustg" &&
               (formal ? (
                 <ul className="divide-y divide-line">{formal.checks.map((check) => <CheckRow key={check.id} check={check} />)}</ul>
               ) : (
                 <EmptyState icon={<Info size={18} />} title="Noch keine § 14-Prüfung" />
               ))}
-            {tab === "aiact" && <AiActPanel document={document} />}
+            {tab === "aiact" && <AiActPanel document={document} onOverride={onOverride} />}
             {tab === "pii" && <PiiPanel document={document} highlight={activeSpan} />}
             {tab === "facts" && <FactsPanel document={document} />}
             {tab === "xml" && <XmlPanel document={document} />}
+            {tab === "ledger" && <LedgerPanel document={document} />}
           </div>
         </div>
       </div>

@@ -68,3 +68,4 @@ export const Cpu = icon("Cpu", <><rect x="4" y="4" width="16" height="16" rx="2"
 export const Terminal = icon("Terminal", <><path d="m4 17 6-6-6-6" /><path d="M12 19h8" /></>);
 export const Package = icon("Package", <><path d="M11 21.7a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7z" /><path d="M12 22V12" /><path d="m3.3 7 7.7 4.7a2 2 0 0 0 2 0L20.7 7" /><path d="m7.5 4.3 9 5.1" /></>);
 export const FileCode = icon("FileCode", <><path d="M10 12.5 8 15l2 2.5" /><path d="m14 12.5 2 2.5-2 2.5" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" /></>);
+export const BookOpen = icon("BookOpen", <><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></>);

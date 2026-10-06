@@ -53,6 +53,14 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length, busy]);
 
+  // Escape schliesst den Drawer wie jedes Modal.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.document.addEventListener("keydown", onKey);
+    return () => window.document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   async function ask(question: string) {
@@ -99,7 +107,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[440px] flex-col overscroll-contain border-l border-line bg-surface-solid shadow-2xl no-print"
+      className="anim-fade fixed inset-y-0 right-0 z-50 flex w-full max-w-[440px] flex-col overscroll-contain border-l border-line bg-surface-solid shadow-2xl no-print"
       aria-label="Compliance Copilot"
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">

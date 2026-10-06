@@ -911,7 +911,7 @@ class DocumentService:
 
         now = utcnow()
         note = (
-            f"Menschliche Uebersteuerung am {now:%d.%m.%Y} durch {request.auditor_name} "
+            f"Menschliche Übersteuerung am {now:%d.%m.%Y} durch {request.auditor_name} "
             f"({previous_level.value} -> {request.risk_level.value}; {request.legal_basis}): {request.reason}"
         )
         ai_act = compliance.ai_act.model_copy(

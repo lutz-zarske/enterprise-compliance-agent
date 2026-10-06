@@ -496,7 +496,10 @@ def render_html(doc: dict[str, Any]) -> str:
 
     annex = doc.get("annex")
     if annex:
-        facts = "".join(f"<tr><th>{_e(key)}</th><td>{_e(value)}</td></tr>" for key, value in annex["rows"])
+        facts = "".join(
+            f"<tr><th>{_e(key)}</th><td{' class=mono' if key == 'SHA-256' else ''}>{_e(value)}</td></tr>"
+            for key, value in annex["rows"]
+        )
         ledger = "".join(
             f"<tr><td class='num'>{_e(e['seq'])}</td><td>{_e(e['event'])}</td><td>{_e(e['timestamp'])}</td>"
             f"<td>{_e(e['actor'])}</td><td class='num'>{_e(e['score'])}</td>"

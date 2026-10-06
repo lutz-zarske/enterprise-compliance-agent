@@ -2,9 +2,9 @@
 
 import React from "react";
 import type { Scorecard as ScorecardType, ScoreTile } from "../types/api";
-import { cx, TONE_CLASSES, TONE_TEXT, toneForBand, toneForStatus } from "../lib/format";
-import { Lock } from "./icons";
-import { StatusIcon } from "./ui";
+import { cx, formatDate, TONE_CLASSES, TONE_TEXT, toneForBand, toneForStatus } from "../lib/format";
+import { Clock, Lock, Scale } from "./icons";
+import { StatusIcon, Tooltip } from "./ui";
 
 const TILE_LABELS: Record<ScoreTile["key"], string> = {
   formal: "§ 14 UStG",
@@ -76,6 +76,37 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
               >
                 Referenz-Audit · ohne KI
               </span>
+            )}
+            {scorecard.human_override && (
+              <Tooltip
+                content={`${scorecard.human_override.auditor_name}, ${formatDate(scorecard.human_override.overridden_at, true)}: ${scorecard.human_override.legal_basis}. Score ${scorecard.human_override.previous_score ?? "–"} → ${scorecard.human_override.new_score}.`}
+              >
+                <span tabIndex={0} className="chip cursor-help border-accent-line bg-accent-soft text-accent">
+                  <Scale size={11} aria-hidden="true" /> Durch Prüfperson übersteuert
+                </span>
+              </Tooltip>
+            )}
+            {scorecard.retention && (
+              <Tooltip
+                content={
+                  <>
+                    <span className="block font-semibold">Aufbewahrung nach BEG IV</span>
+                    <span className="block">
+                      Rechnungen und Buchungsbelege {scorecard.retention.years} Jahre ({scorecard.retention.basis}).
+                    </span>
+                    <span className="block">
+                      Kreditinstitute, Versicherungen, Wertpapierinstitute: 10 Jahre (bis{" "}
+                      {formatDate(scorecard.retention.financial_sector_until)}).
+                    </span>
+                    <span className="block">Handelsbücher, Jahresabschlüsse und Verfahrensdokumentation: 10 Jahre (§ 147 Abs. 1 Nr. 1 AO).</span>
+                    <span className="mt-1 block text-subtle">Frist ab Schluss des Belegjahres (§ 147 Abs. 4 AO), Ablaufhemmung nach § 147 Abs. 3 Satz 5 AO.</span>
+                  </>
+                }
+              >
+                <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 font-mono tabular-nums text-muted">
+                  <Clock size={11} aria-hidden="true" /> Aufbewahren bis {formatDate(scorecard.retention.until)}
+                </span>
+              </Tooltip>
             )}
             <span className="font-mono text-[11px] text-subtle">
               Regelwerk {scorecard.ruleset_version}

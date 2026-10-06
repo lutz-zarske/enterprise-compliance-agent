@@ -41,7 +41,7 @@ def test_override_rechnet_score_neu_und_protokolliert(full_client: TestClient) -
     assert (override["previous_risk_level"], override["new_risk_level"]) == ("high", "limited")
     assert (override["previous_score"], override["new_score"]) == (59, 95)
     assert "Art. 6 Abs. 3" in override["legal_basis"]
-    assert "Menschliche Uebersteuerung" in detail["compliance"]["ai_act"]["reasoning"]
+    assert "Menschliche Übersteuerung" in detail["compliance"]["ai_act"]["reasoning"]
 
 
 def test_override_eintrag_im_ledger_mit_vorgaenger_und_signatur(full_client: TestClient) -> None:
