@@ -69,7 +69,10 @@ from app.schemas import (
     SettingsUpdate,
     SignOffRequest,
     UploadResponse,
+    VatVerification,
+    VatVerifyRequest,
 )
+from app.vies import ViesClient
 from app.services import (
     PROGRESS,
     DocumentNotAnalyzedError,
@@ -121,6 +124,7 @@ TAGS_METADATA = [
     {"name": "Human Oversight", "description": "Pruefbericht und Siegel durch eine Pruefperson (Art. 14)."},
     {"name": "Compliance Copilot", "description": "Dokumentbezogene Fragen an das aktive Modell."},
     {"name": "Einstellungen", "description": "Inferenz-Provider, API-Keys (verschluesselt), PII-Strenge."},
+    {"name": "USt-IdNr.", "description": "Live-Pruefung ueber VIES der Europaeischen Kommission (ohne API-Key)."},
     {"name": "Dashboard", "description": "Kennzahlen und Demo-Daten."},
 ]
 
@@ -148,6 +152,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     router = InferenceRouter(
         settings, runtime, llm, cloud_transport=getattr(app.state, "cloud_transport", None)
     )
+    vies = ViesClient(settings, transport=getattr(app.state, "vies_transport", None))
 
     app.state.engine = engine
     app.state.repository = repository
@@ -156,6 +161,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.runtime = runtime
     app.state.router = router
     app.state.signer = signer
+    app.state.vies = vies
     app.state.service = DocumentService(
         settings, repository, router, ledger=ledger, runtime=runtime, progress=PROGRESS
     )
@@ -173,6 +179,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await router.aclose()
         await llm.aclose()
+        await vies.aclose()
         engine.dispose()
         logger.info("Anwendung heruntergefahren.")
 
@@ -814,6 +821,32 @@ def _register_routes(application: FastAPI) -> None:
         record = await service.require_document(document_id)
         updated = await service.override(record, body)
         return to_detail(updated, pii_level=service.pii_level)
+
+    @application.post(
+        "/api/vat/verify",
+        response_model=VatVerification,
+        tags=["USt-IdNr."],
+        summary="USt-IdNr. live bei VIES (Europaeische Kommission) pruefen",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("vies", "rate_limit_vies_per_minute")),
+        ],
+        responses={
+            401: error_responses[401],
+            422: {"model": ErrorResponse, "description": "Laendercode oder Nummer nicht abfragbar"},
+            503: {"model": ErrorResponse, "description": "VIES oder Mitgliedstaat nicht erreichbar"},
+        },
+    )
+    async def verify_vat(body: VatVerifyRequest, request: Request) -> VatVerification:
+        """Fragt VIES mit kurzem Timeout ab und gibt Gueltigkeit, Name und Behoerdenzeitstempel zurueck.
+
+        Uebertragen werden nur Laendercode und Nummer. Das Ergebnis ist eine
+        Momentaufnahme: nicht gespeichert, ohne Einfluss auf den Score. Fuer
+        deutsche Nummern liefert VIES keinen Namen; die qualifizierte
+        Bestaetigung nach § 18e UStG erteilt das BZSt.
+        """
+        vies: ViesClient = request.app.state.vies
+        return await vies.verify(body.country_code, body.vat_number)
 
     @application.get(
         "/documents/{document_id}/report",

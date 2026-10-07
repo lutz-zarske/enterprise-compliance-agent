@@ -1247,6 +1247,32 @@ class PinRequest(ApiModel):
     pinned: bool
 
 
+class VatVerifyRequest(ApiModel):
+    """USt-IdNr. fuer die VIES-Abfrage - Laendercode und Nummer getrennt."""
+
+    country_code: str = Field(
+        min_length=2, max_length=2, description="Laendercode nach VIES, z. B. 'DE' (Griechenland: 'EL')."
+    )
+    vat_number: str = Field(
+        min_length=2, max_length=20, description="Nummer ohne Laenderpraefix, z. B. '312345678'."
+    )
+
+
+class VatVerification(ApiModel):
+    """Antwort der VIES-Abfrage (Momentaufnahme, nicht gespeichert, ohne Score-Einfluss)."""
+
+    country_code: str
+    vat_number: str
+    valid: bool = Field(description="USt-IdNr. ist laut VIES zum Abfragezeitpunkt gueltig.")
+    name: str | None = Field(
+        default=None, description="Firmenname laut VIES; Deutschland uebermittelt keine Namen (dann leer)."
+    )
+    address: str | None = None
+    request_date: datetime | None = Field(default=None, description="Zeitstempel der Behoerdenantwort.")
+    request_identifier: str | None = Field(default=None, description="Abfrage-ID von VIES, falls vergeben.")
+    source: str = "VIES – Europäische Kommission"
+
+
 class CopilotTurn(ApiModel):
     role: Literal["user", "assistant"]
     content: str = Field(max_length=8000)
