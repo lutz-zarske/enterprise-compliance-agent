@@ -2,39 +2,36 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-type Theme = "dark" | "light";
+export type Theme = "dark" | "light";
 
 interface ThemeContextValue {
   theme: Theme;
-  toggle: () => void;
+  setTheme: (theme: Theme) => void;
 }
 
-const ThemeContext = createContext<ThemeContextValue>({ theme: "dark", toggle: () => undefined });
+const ThemeContext = createContext<ThemeContextValue>({ theme: "dark", setTheme: () => undefined });
 
 const STORAGE_KEY = "eca-theme";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("dark");
 
   // Der Inline-Script im Layout hat die Klasse bereits gesetzt - hier nur uebernehmen.
   useEffect(() => {
-    setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
+    setThemeState(document.documentElement.classList.contains("dark") ? "dark" : "light");
   }, []);
 
-  const toggle = useCallback(() => {
-    setTheme((current) => {
-      const next: Theme = current === "dark" ? "light" : "dark";
-      document.documentElement.classList.toggle("dark", next === "dark");
-      try {
-        localStorage.setItem(STORAGE_KEY, next);
-      } catch {
-        /* privater Modus: Theme gilt nur fuer diese Sitzung */
-      }
-      return next;
-    });
+  const setTheme = useCallback((next: Theme) => {
+    document.documentElement.classList.toggle("dark", next === "dark");
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      /* privater Modus: Theme gilt nur fuer diese Sitzung */
+    }
+    setThemeState(next);
   }, []);
 
-  return <ThemeContext.Provider value={{ theme, toggle }}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextValue {

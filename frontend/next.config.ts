@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
+  // Kein schwebendes „N“-Badge im Entwicklungsmodus.
+  devIndicators: false,
 };
 
 export default nextConfig;

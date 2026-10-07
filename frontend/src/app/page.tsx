@@ -25,7 +25,8 @@ import { KpiStrip } from "../components/KpiStrip";
 import { OverrideModal } from "../components/OverrideModal";
 import { Scorecard } from "../components/Scorecard";
 import { SettingsModal } from "../components/SettingsModal";
-import { EmptyState, HashBadge, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
+import { SealModal } from "../components/SignOffPanel";
+import { EmptyState, HashBadge, isModEnter, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
 import { api, ApiError, fetchHealth, getApiBase } from "../lib/api";
 import { cx, formatBytes, formatDate, formatModel, PROVIDER_NAMES } from "../lib/format";
 import type {
@@ -75,6 +76,7 @@ export default function DashboardPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [sealOpen, setSealOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const { toasts, push, dismiss } = useToasts();
   const selectedRef = useRef<string | null>(null);
@@ -118,7 +120,9 @@ export default function DashboardPage() {
     return list.items;
   }, []);
 
+  const lastLoad = useRef(0);
   const loadAll = useCallback(async () => {
+    lastLoad.current = Date.now();
     try {
       const h = await fetchHealth();
       setHealth(h);
@@ -140,6 +144,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     void loadAll();
+  }, [loadAll]);
+
+  // Reaktiv statt Aktualisieren-Button: Rueckkehr ins Fenster laedt den Stand neu
+  // (z. B. nach einem Upload aus einem zweiten Tab), hoechstens alle 15 s.
+  useEffect(() => {
+    const onReturn = () => {
+      if (window.document.visibilityState === "visible" && Date.now() - lastLoad.current > 15_000) void loadAll();
+    };
+    window.addEventListener("focus", onReturn);
+    window.document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      window.document.removeEventListener("visibilitychange", onReturn);
+    };
   }, [loadAll]);
 
   // Ruhige Wiederverbindung, solange das Backend offline ist.
@@ -262,6 +280,20 @@ export default function DashboardPage() {
   );
   const canAnalyze = !offline && (inferenceAvailable || structuredReady);
   const isXml = detail?.content_type === "application/xml";
+  const overlayOpen = settingsOpen || exportOpen || overrideOpen || copilotOpen || sealOpen;
+  const canSeal = Boolean(detail?.scorecard) && !offline && extractingId === null;
+
+  // Strg/⌘ + Enter oeffnet den Siegel-Dialog; dort versiegelt ein zweites Strg/⌘ + Enter.
+  useEffect(() => {
+    if (overlayOpen || !canSeal) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!isModEnter(event)) return;
+      event.preventDefault();
+      setSealOpen(true);
+    };
+    window.document.addEventListener("keydown", onKey);
+    return () => window.document.removeEventListener("keydown", onKey);
+  }, [overlayOpen, canSeal]);
 
   // Den XML-Tab nicht stehen lassen, wenn das neue Dokument keinen Datensatz hat.
   useEffect(() => {
@@ -274,16 +306,18 @@ export default function DashboardPage() {
       <Header
         health={health}
         offline={offline}
-        apiBase={getApiBase()}
         settings={settings}
         ledger={ledger}
         seeding={seeding}
         onSeed={handleSeed}
-        onRefresh={() => void loadAll()}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      <main id="inhalt" tabIndex={-1} className="mx-auto w-full max-w-[1440px] flex-1 space-y-4 px-4 py-5 outline-none sm:px-6">
+      <main
+        id="inhalt"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-[1920px] flex-1 space-y-4 px-4 py-5 outline-none sm:px-6 2xl:max-w-[2400px] 2xl:space-y-5 2xl:px-10"
+      >
         {offline && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn" role="status">
             <WifiOff size={16} className="shrink-0" aria-hidden="true" />
@@ -329,8 +363,9 @@ export default function DashboardPage() {
 
         <KpiStrip kpis={kpis} loading={!health && !offline} />
 
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
-          <div className="space-y-4 lg:col-span-4 xl:col-span-3">
+        {/* Kompakte Queue (340 bzw. 400 px), der Rest gehoert der Workbench. */}
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)] 2xl:gap-5">
+          <div className="space-y-4">
             <DocumentUploader disabled={offline} onUploaded={handleUploaded} onError={(err) => reportError("Upload fehlgeschlagen", err)} />
             <DocumentList
               documents={documents}
@@ -338,10 +373,11 @@ export default function DashboardPage() {
               extractingId={extractingId}
               onSelect={setSelectedId}
               onTogglePin={handleTogglePin}
+              shortcutsEnabled={!overlayOpen}
             />
           </div>
 
-          <div className="min-w-0 space-y-4 lg:col-span-8 xl:col-span-9">
+          <div className="min-w-0 space-y-4 2xl:space-y-5">
             {!detail && !loadingDetail && (
               <div className="card">
                 <EmptyState icon={<ShieldCheck size={20} aria-hidden="true" />} title="Noch kein Dokument ausgewählt">
@@ -387,7 +423,7 @@ export default function DashboardPage() {
                           </Tooltip>
                         )}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-subtle">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
                         <HashBadge value={detail.sha256} label="SHA-256" />
                         <span className="font-mono tabular-nums">
                           {isXml ? "XML" : `${detail.page_count ?? "?"} S.`} · {formatBytes(detail.size_bytes)}
@@ -450,6 +486,8 @@ export default function DashboardPage() {
                   tab={tab}
                   onTabChange={setTab}
                   onOverride={detail.compliance && !offline ? () => setOverrideOpen(true) : undefined}
+                  ledger={offline ? null : ledger}
+                  onSeal={canSeal ? () => setSealOpen(true) : undefined}
                 />
               </>
             )}
@@ -458,8 +496,8 @@ export default function DashboardPage() {
       </main>
 
       <footer className="border-t border-line py-4 no-print">
-        <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-1 px-4 text-[11px] text-subtle sm:flex-row sm:px-6">
-          <span>Enterprise Compliance Agent v{health?.version ?? "2.2.0"}</span>
+        <div className="mx-auto flex w-full max-w-[1920px] flex-col items-center justify-between gap-1 px-4 text-xs text-subtle sm:flex-row sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
+          <span>Enterprise Compliance Agent <span className="font-mono tabular-nums">v{health?.version ?? "2.3.0"}</span></span>
           <span>VO (EU) 2024/1689 · § 14 UStG · DSGVO · GoBD-Hash-Kette</span>
           <span>{settings?.is_cloud ? "Cloud-Inferenz über Privacy Gateway" : "Lokale Inferenz · Zero Data Leakage"}</span>
         </div>
@@ -491,6 +529,16 @@ export default function DashboardPage() {
         open={overrideOpen}
         onClose={() => setOverrideOpen(false)}
         onDone={(updated) => {
+          setDetail(updated);
+          void refreshData().catch(() => undefined);
+        }}
+        notify={notify}
+      />
+      <SealModal
+        document={detail}
+        open={sealOpen}
+        onClose={() => setSealOpen(false)}
+        onSealed={(updated) => {
           setDetail(updated);
           void refreshData().catch(() => undefined);
         }}

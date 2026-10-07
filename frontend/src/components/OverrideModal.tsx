@@ -123,7 +123,7 @@ export function OverrideModal({ document, open, onClose, onDone, notify }: Props
                 )}
               >
                 {RISK_LABELS[value]}
-                {value === current && <span className="ml-auto font-mono text-[10px]">aktuell</span>}
+                {value === current && <span className="ml-auto font-mono text-xs">aktuell</span>}
               </button>
             ))}
           </div>
@@ -149,7 +149,7 @@ export function OverrideModal({ document, open, onClose, onDone, notify }: Props
         <label className="block">
           <span className="flex items-baseline justify-between">
             <span className="label-caps">Begründung</span>
-            <span className={cx("font-mono text-[11px] tabular-nums", reason.trim().length >= MIN_REASON ? "text-subtle" : "text-warn")}>
+            <span className={cx("font-mono text-xs tabular-nums", reason.trim().length >= MIN_REASON ? "text-subtle" : "text-warn")}>
               {reason.trim().length}/{MIN_REASON}
             </span>
           </span>
@@ -178,7 +178,7 @@ export function OverrideModal({ document, open, onClose, onDone, notify }: Props
         </label>
 
         <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-          <p className="text-[11px] leading-snug text-subtle">
+          <p className="text-xs leading-snug text-subtle">
             Vier-Augen-Prinzip: Die abschließende Freigabe sollte eine andere Person erteilen.
           </p>
           <div className="flex shrink-0 gap-2">

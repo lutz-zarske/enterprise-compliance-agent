@@ -23,6 +23,7 @@ import type {
   SeedResponse,
   SettingsUpdate,
   SignOffDecision,
+  VatVerification,
 } from "../types/api";
 
 export class ApiError extends Error {
@@ -209,6 +210,8 @@ export const api = {
   trail: (id: string) =>
     request<{ items: LedgerEntry[]; count: number }>(`/api/audit/trail?document_id=${encodeURIComponent(id)}&limit=200`),
   verifyLedger: () => request<LedgerVerification>("/api/audit/verify"),
+  verifyVat: (country_code: string, vat_number: string) =>
+    request<VatVerification>("/api/vat/verify", json({ country_code, vat_number })),
   kpis: () => request<KpiResponse>("/api/dashboard/kpis"),
   seed: () => request<SeedResponse>("/api/demo/seed", { method: "POST" }),
   settings: () => request<RuntimeSettings>("/api/settings"),

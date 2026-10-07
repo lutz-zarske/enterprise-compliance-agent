@@ -34,14 +34,19 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
   width?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // onClose ist meist eine Inline-Funktion: ueber eine Ref gelesen, damit ein
+  // Neurendern der Seite den Fokus nicht aus einem Eingabefeld zurueckholt.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && closeRef.current();
     document.addEventListener("keydown", onKey);
-    panelRef.current?.focus();
+    // Ein Kind (z. B. das Namensfeld) darf den Fokus beim Oeffnen selbst setzen.
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (
@@ -83,7 +88,11 @@ export function Tabs<T extends string>({ tabs, active, onChange, className }: {
     button?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active]);
   return (
-    <div ref={listRef} role="tablist" className={cx("flex gap-0.5 overflow-x-auto border-b border-line", className)}>
+    <div
+      ref={listRef}
+      role="tablist"
+      className={cx("flex max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-surface-2 p-0.5 [scrollbar-width:none]", className)}
+    >
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -92,8 +101,10 @@ export function Tabs<T extends string>({ tabs, active, onChange, className }: {
           title={tab.title}
           onClick={() => onChange(tab.key)}
           className={cx(
-            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-[13px] font-medium transition-colors duration-150 ease-out",
-            active === tab.key ? "border-accent text-fg" : "border-transparent text-subtle hover:text-fg",
+            "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-[background-color,color,box-shadow] duration-150 ease-out",
+            active === tab.key
+              ? "bg-surface-solid text-fg shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-line"
+              : "text-subtle hover:text-fg",
           )}
         >
           {tab.label}
@@ -120,7 +131,7 @@ export function Segmented<T extends string>({ options, value, onChange, size = "
           onClick={() => onChange(option.value)}
           className={cx(
             "rounded-md font-medium transition-colors duration-150",
-            size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-3 py-1 text-xs",
+            size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-xs",
             value === option.value ? "bg-surface-solid text-fg shadow-sm" : "text-subtle hover:text-fg",
           )}
         >
@@ -240,10 +251,11 @@ export function Spinner({ size = 14 }: { size?: number }) {
  * Tooltip ohne JavaScript: erscheint bei Hover und bei Tastaturfokus im
  * Ausloeser (WCAG 1.4.13: per Fokus erreichbar, ohne Zeigergeraet bedienbar).
  */
-export function Tooltip({ content, children, align = "left", className }: {
+export function Tooltip({ content, children, align = "left", side = "top", className }: {
   content: React.ReactNode;
   children: React.ReactNode;
-  align?: "left" | "right";
+  align?: "left" | "right" | "center";
+  side?: "top" | "bottom";
   className?: string;
 }) {
   if (!content) return <>{children}</>;
@@ -253,13 +265,42 @@ export function Tooltip({ content, children, align = "left", className }: {
       <span
         role="tooltip"
         className={cx(
-          "pointer-events-none absolute bottom-full z-30 mb-1.5 hidden w-max max-w-[300px] rounded-md border border-line bg-surface-solid px-2.5 py-2 text-left font-sans text-[11.5px] font-normal leading-snug text-fg shadow-lg group-hover/tt:block group-focus-within/tt:block",
-          align === "left" ? "left-0" : "right-0",
+          "pointer-events-none absolute z-30 hidden w-max max-w-[320px] rounded-md border border-line bg-surface-solid px-2.5 py-2 text-left font-sans text-xs font-normal leading-snug text-fg shadow-lg group-hover/tt:block group-focus-within/tt:block",
+          side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5",
+          align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2",
         )}
       >
         {content}
       </span>
     </span>
+  );
+}
+
+/** „⌘“ auf Apple-Geraeten, sonst „Strg“ (nach dem ersten Render, SSR-sicher). */
+export function useModifierLabel(): string {
+  const [label, setLabel] = useState("Strg");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/i.test(navigator.userAgent)) setLabel("⌘");
+  }, []);
+  return label;
+}
+
+/** Strg+Enter bzw. ⌘+Enter. */
+export function isModEnter(event: KeyboardEvent | React.KeyboardEvent): boolean {
+  return event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
+}
+
+/** Eingabefelder behalten ihre Tasten (J/K tippen statt navigieren). */
+export function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
+export function Kbd({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
+  return (
+    <kbd className={cx("kbd-shortcut", className)} title={title}>
+      {children}
+    </kbd>
   );
 }
 
@@ -295,7 +336,7 @@ export function CopyButton({ value, label, className }: { value: string; label: 
       type="button"
       onClick={() => void copy()}
       className={cx(
-        "inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] transition-colors duration-150 ease-out",
+        "inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs transition-colors duration-150 ease-out",
         state === "copied" ? "text-ok" : state === "failed" ? "text-bad" : "text-subtle hover:bg-surface-2 hover:text-fg",
         className,
       )}
@@ -354,7 +395,7 @@ export function HashBadge({ value, label = "SHA-256", verified = null, verifiedL
   return (
     <span className={cx("inline-flex max-w-full flex-wrap items-center gap-1", className)}>
       <span
-        className={cx("chip font-mono text-[10.5px] tabular-nums", TONE_CLASSES[tone])}
+        className={cx("chip font-mono text-xs tabular-nums", TONE_CLASSES[tone])}
         title={`${label} ${value}`}
       >
         {verified === true && <ShieldCheck size={11} aria-hidden="true" />}

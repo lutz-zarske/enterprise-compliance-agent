@@ -2,122 +2,120 @@
 
 import React from "react";
 import type { HealthResponse, LedgerVerification, RuntimeSettings } from "../types/api";
-import { cx, formatModel, PROVIDER_SHORT } from "../lib/format";
-import { useTheme } from "./ThemeProvider";
-import { Database, FileText, Lock, Moon, RefreshCw, Settings, ShieldAlert, ShieldCheck, Sun } from "./icons";
-import { Spinner } from "./ui";
+import { getApiBase } from "../lib/api";
+import { cx, formatModel, PROVIDER_NAMES } from "../lib/format";
+import { Database, FileText, Lock, Settings, ShieldCheck } from "./icons";
+import { Spinner, Tooltip } from "./ui";
 
 interface HeaderProps {
   health: HealthResponse | null;
   offline: boolean;
-  apiBase: string;
   settings: RuntimeSettings | null;
   ledger: LedgerVerification | null;
   seeding: boolean;
   onSeed: () => void;
-  onRefresh: () => void;
   onOpenSettings: () => void;
 }
 
-/** Ergebnis von GET /api/audit/verify: Die Kette wird bei jedem Aktualisieren vollständig nachgerechnet. */
-function LedgerBadge({ ledger }: { ledger: LedgerVerification }) {
-  if (ledger.entries === 0) {
-    return (
-      <span className="chip border-line bg-surface-2 font-mono text-[10.5px] text-subtle" title="Noch keine Einträge im Prüfprotokoll">
-        <ShieldCheck size={11} aria-hidden="true" /> Ledger leer
-      </span>
-    );
+type StatusTone = "ok" | "warn" | "bad" | "neutral";
+
+const DOT: Record<StatusTone, string> = {
+  ok: "text-ok",
+  warn: "text-warn",
+  bad: "text-bad",
+  neutral: "text-subtle",
+};
+
+/** Ein ruhiger Betriebszustand statt Telemetrie: Details stehen im Tooltip. */
+function systemStatus(health: HealthResponse | null, offline: boolean, ledger: LedgerVerification | null): {
+  tone: StatusTone;
+  label: string;
+  detail: React.ReactNode;
+} {
+  if (offline) {
+    return {
+      tone: "bad",
+      label: "Offline",
+      detail: `Keine Verbindung zu ${getApiBase()} – erneuter Versuch alle 10 s.`,
+    };
   }
-  if (!ledger.valid) {
-    return (
-      <span
-        role="status"
-        className="chip border-bad-line bg-bad-soft font-mono text-[10.5px] text-bad"
-        title={ledger.reason ?? "Hash-Kette gebrochen"}
-      >
-        <ShieldAlert size={11} aria-hidden="true" /> Hash-Kette gebrochen
-        {ledger.broken_at_seq != null && <span className="opacity-80">· #{ledger.broken_at_seq}</span>}
-      </span>
-    );
+  if (!health) return { tone: "neutral", label: "Verbinde…", detail: "Backend wird gesucht." };
+  if (ledger && !ledger.valid) {
+    return {
+      tone: "bad",
+      label: "Ledger-Befund",
+      detail: (
+        <>
+          <span className="block font-semibold text-bad">Hash-Kette gebrochen{ledger.broken_at_seq != null ? ` bei #${ledger.broken_at_seq}` : ""}</span>
+          <span className="mt-0.5 block text-subtle">{ledger.reason ?? "Ein Eintrag passt nicht zur Kette."}</span>
+        </>
+      ),
+    };
   }
-  return (
-    <span
-      className="chip border-ok-line bg-ok-soft font-mono text-[10.5px] text-ok"
-      title={`${ledger.entries} Einträge vollständig nachgerechnet · Kopf-Hash ${ledger.head_hash.slice(0, 16)}…`}
-    >
-      <ShieldCheck size={11} aria-hidden="true" />
-      <span className="md:hidden">Ledger intakt</span>
-      <span className="hidden md:inline">Ledger integer · Hash-Kette intakt</span>
-    </span>
+  const ledgerLine = !ledger ? (
+    "Ledger-Prüfung nicht verfügbar."
+  ) : ledger.entries === 0 ? (
+    "Prüfprotokoll noch leer."
+  ) : (
+    <>
+      Hash-Kette intakt: <span className="font-mono tabular-nums">{ledger.entries}</span> Einträge vollständig nachgerechnet,
+      davon <span className="font-mono tabular-nums">{ledger.signed_entries}</span> Ed25519-signiert.
+      <span className="mt-1 block font-mono tabular-nums text-subtle">Kopf-Hash {ledger.head_hash.slice(0, 16)}…</span>
+    </>
   );
+  if (health.status === "degraded") {
+    return {
+      tone: "warn",
+      label: "Eingeschränkt",
+      detail: (
+        <>
+          <span className="block">{health.ollama.detail ?? health.database.detail ?? "Eine Abhängigkeit antwortet nicht."}</span>
+          <span className="mt-1 block text-subtle">{ledgerLine}</span>
+        </>
+      ),
+    };
+  }
+  return { tone: "ok", label: "Betriebsbereit", detail: ledgerLine };
 }
 
-export function Header({ health, offline, apiBase, settings, ledger, seeding, onSeed, onRefresh, onOpenSettings }: HeaderProps) {
-  const { theme, toggle } = useTheme();
-  let port = "";
-  try {
-    port = new URL(apiBase).port || "80";
-  } catch {
-    port = "";
-  }
-
+export function Header({ health, offline, settings, ledger, seeding, onSeed, onOpenSettings }: HeaderProps) {
   const mode = settings?.inference_mode ?? health?.inference?.mode ?? "local";
   const model = settings?.active_model ?? health?.inference?.model ?? "";
-  const degraded = health?.status === "degraded";
-  const pillTone = offline ? "bad" : degraded ? "warn" : "ok";
-  const pillLabel = offline ? "API OFFLINE" : degraded ? "API EINGESCHRÄNKT" : "API ONLINE";
-  const pillClasses = {
-    ok: "border-ok-line bg-ok-soft text-ok",
-    warn: "border-warn-line bg-warn-soft text-warn",
-    bad: "border-bad-line bg-bad-soft text-bad",
-  }[pillTone];
-  const dotClasses = { ok: "bg-ok", warn: "bg-warn", bad: "bg-bad" }[pillTone];
+  const local = mode === "local";
+  const status = systemStatus(health, offline, ledger);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur-md no-print">
-      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent-line bg-accent-soft text-accent">
-            <ShieldCheck size={18} aria-hidden="true" />
+    <header className="sticky top-0 z-40 border-b border-line bg-[var(--header-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl no-print">
+      <div className="mx-auto grid w-full max-w-[1920px] grid-cols-[1fr_auto] items-center gap-3 px-4 py-2.5 sm:grid-cols-[1fr_auto_1fr] sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-accent-line bg-accent-soft text-accent">
+            <ShieldCheck size={17} aria-hidden="true" />
           </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[15px] font-semibold tracking-tight text-fg">Enterprise Compliance Agent</h1>
-              <span className="chip border-line bg-surface-2 font-mono text-[10.5px] text-muted">
-                VO (EU) 2024/1689 · § 14 UStG
-              </span>
-            </div>
-            <p className="truncate text-xs text-subtle">EU AI Act · DSGVO · E-Rechnung — revisionssichere Dokumentenprüfung</p>
-          </div>
+          <h1 className="truncate text-[15px] font-semibold tracking-tight text-fg" title="Enterprise Compliance Agent">
+            Compliance Agent
+          </h1>
+          {health?.version && (
+            <span className="chip border-line bg-surface-2 font-mono font-medium tabular-nums text-subtle">v{health.version}</span>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cx("chip font-mono text-[10.5px]", pillClasses)}
-            title={offline ? `Keine Verbindung zu ${apiBase}` : health?.ollama.detail ?? apiBase}
-          >
-            <span className={cx("h-1.5 w-1.5 rounded-full", dotClasses)} />
-            {pillLabel}
-            {port && <span className="opacity-70">| {port}</span>}
-          </span>
-
-          {ledger && !offline && <LedgerBadge ledger={ledger} />}
-
-          {model && (
+        <div className="hidden justify-center sm:flex">
+          <Tooltip content={status.detail} side="bottom" align="center">
             <span
-              className={cx(
-                "chip font-mono text-[10.5px]",
-                mode === "local" ? "border-ok-line bg-ok-soft text-ok" : "border-pii-line bg-pii-soft text-pii",
-              )}
-              title={mode === "local" ? "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner" : "Cloud-Inferenz über Privacy Gateway (Pseudonymisierung)"}
+              tabIndex={0}
+              role="status"
+              className="inline-flex cursor-help items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium text-muted outline-none transition-colors duration-150 hover:bg-surface-2 focus-visible:bg-surface-2"
             >
-              {mode === "local" ? <Database size={11} aria-hidden="true" /> : <Lock size={11} aria-hidden="true" />}
-              {PROVIDER_SHORT[mode]} ({formatModel(model)})
+              <span className={cx("relative inline-flex h-2 w-2", DOT[status.tone])} aria-hidden="true">
+                {status.tone === "ok" && <span className="status-pulse" />}
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
+              </span>
+              {status.label}
             </span>
-          )}
+          </Tooltip>
+        </div>
 
-          <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
-
+        <div className="flex items-center justify-end gap-2">
           <button
             className="btn"
             onClick={onSeed}
@@ -128,17 +126,34 @@ export function Header({ health, offline, apiBase, settings, ledger, seeding, on
             {seeding ? <Spinner size={13} /> : <FileText size={14} aria-hidden="true" />}
             <span className="hidden md:inline">Musterdaten laden</span>
           </button>
-          <button className="btn btn-icon" onClick={onRefresh} aria-label="Aktualisieren" title="Aktualisieren">
-            <RefreshCw size={15} />
-          </button>
-          <button
-            className="btn btn-icon"
-            onClick={toggle}
-            aria-label={theme === "dark" ? "Helles Design" : "Dunkles Design"}
-            title={theme === "dark" ? "Helles Design" : "Dunkles Design"}
-          >
-            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
+
+          {model && (
+            <Tooltip
+              side="bottom"
+              align="right"
+              content={
+                <>
+                  <span className="block font-semibold">{PROVIDER_NAMES[mode]}</span>
+                  <span className="block font-mono text-subtle">{model}</span>
+                  <span className="mt-1 block text-subtle">
+                    {local
+                      ? "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner."
+                      : "Cloud-Inferenz über das Privacy Gateway (Pseudonymisierung nach Art. 4 Nr. 5 DSGVO)."}
+                  </span>
+                </>
+              }
+            >
+              <span
+                tabIndex={0}
+                className={cx("chip cursor-help py-1", local ? "border-ok-line bg-ok-soft text-ok" : "border-pii-line bg-pii-soft text-pii")}
+              >
+                {local ? <Database size={12} aria-hidden="true" /> : <Lock size={12} aria-hidden="true" />}
+                {local ? "Lokal" : "Cloud"}
+                <span className="hidden font-mono font-medium opacity-80 2xl:inline">· {formatModel(model)}</span>
+              </span>
+            </Tooltip>
+          )}
+
           <button className="btn btn-icon" onClick={onOpenSettings} aria-label="Einstellungen" title="Einstellungen">
             <Settings size={15} />
           </button>

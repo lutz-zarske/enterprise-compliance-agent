@@ -37,7 +37,7 @@ function ScoreRing({ score, tone }: { score: number; tone: "ok" | "warn" | "bad"
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className={cx("font-mono text-[32px] font-semibold leading-none", TONE_TEXT[tone])}>{score}</span>
-        <span className="mt-1 font-mono text-[11px] text-subtle">/ 100</span>
+        <span className="mt-1 font-mono text-xs text-subtle">/ 100</span>
       </div>
     </div>
   );
@@ -61,7 +61,7 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
           <h2 className={cx("text-lg font-semibold leading-snug text-balance", scorecard.release_blocked ? "text-bad" : "text-ok")}>
             {scorecard.release_recommendation}
           </h2>
-          {scorecard.cap_applied && <p className="mt-1 text-[13px] text-warn">{scorecard.cap_applied}</p>}
+          {scorecard.cap_applied && <p className="mt-1 text-sm text-warn">{scorecard.cap_applied}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span className={cx("chip", TONE_CLASSES[tone])}>{scorecard.band_label}</span>
             {sealed && (
@@ -108,7 +108,7 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
                 </span>
               </Tooltip>
             )}
-            <span className="font-mono text-[11px] text-subtle">
+            <span className="font-mono text-xs text-subtle">
               Regelwerk {scorecard.ruleset_version}
               {scorecard.small_amount_invoice && " · Kleinbetragsrechnung (§ 33 UStDV)"}
               {scorecard.structured_einvoice_detected && " · E-Rechnung (XML) erkannt"}
@@ -129,13 +129,13 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
               aria-describedby={risks.length ? `risk-${tile.key}` : undefined}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11.5px] font-medium text-subtle">{TILE_LABELS[tile.key]}</span>
+                <span className="text-xs font-medium text-subtle">{TILE_LABELS[tile.key]}</span>
                 <StatusIcon status={tile.status} size={14} />
               </div>
-              <p className={cx("mt-1.5 text-[13px] font-semibold", tileTone === "neutral" ? "text-fg" : TONE_TEXT[tileTone])}>
+              <p className={cx("mt-1.5 text-sm font-semibold", tileTone === "neutral" ? "text-fg" : TONE_TEXT[tileTone])}>
                 {tile.headline || "–"}
               </p>
-              <p className={cx("mt-0.5 font-mono text-[11px]", tile.deduction > 0 ? "text-bad" : "text-subtle")}>
+              <p className={cx("mt-0.5 font-mono text-xs", tile.deduction > 0 ? "text-bad" : "text-subtle")}>
                 {tile.deduction > 0 ? (
                   <span className={cx(risks.length > 0 && "underline decoration-dotted underline-offset-2")}>−{tile.deduction} Punkte</span>
                 ) : (
@@ -146,7 +146,7 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
                 <span
                   id={`risk-${tile.key}`}
                   role="tooltip"
-                  className="pointer-events-none absolute bottom-full left-0 z-30 mb-1.5 hidden w-[min(320px,80vw)] rounded-md border border-line bg-surface-solid p-2.5 text-[11.5px] font-normal leading-snug text-fg shadow-lg group-hover/tile:block group-focus-visible/tile:block"
+                  className="pointer-events-none absolute bottom-full left-0 z-30 mb-1.5 hidden w-[min(320px,80vw)] rounded-md border border-line bg-surface-solid p-2.5 text-xs font-normal leading-snug text-fg shadow-lg group-hover/tile:block group-focus-visible/tile:block"
                 >
                   {risks.map((check) => (
                     <span key={check.id} className="block py-0.5">

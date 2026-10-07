@@ -27,7 +27,7 @@ const NO_MODEL_CODES = new Set(["ollama_unavailable", "model_not_found", "provid
 function renderAnswer(text: string): React.ReactNode[] {
   return text.split(/(\[Z\.\s?\d+\])/g).map((part, index) =>
     /^\[Z\.\s?\d+\]$/.test(part) ? (
-      <span key={index} className="mx-0.5 rounded border border-accent-line bg-accent-soft px-1 font-mono text-[11px] text-accent">
+      <span key={index} className="mx-0.5 rounded border border-accent-line bg-accent-soft px-1 font-mono text-xs text-accent">
         {part.slice(1, -1)}
       </span>
     ) : (
@@ -115,7 +115,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
           <div className="rounded-lg border border-line bg-surface-2 p-1.5 text-accent"><MessageSquare size={15} aria-hidden="true" /></div>
           <div>
             <p className="text-sm font-semibold text-fg">Compliance Copilot</p>
-            <p className="font-mono text-[10.5px] text-subtle">{modelLabel}</p>
+            <p className="font-mono text-xs text-subtle">{modelLabel}</p>
           </div>
         </div>
         <button className="btn btn-icon" onClick={onClose} aria-label="Copilot schließen"><X size={15} /></button>
@@ -134,7 +134,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
               <button
                 key={suggestion}
                 onClick={() => ask(suggestion)}
-                className="block w-full rounded-lg border border-line px-3 py-2 text-left text-[13px] text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-2"
+                className="block w-full rounded-lg border border-line px-3 py-2 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-2"
               >
                 {suggestion}
               </button>
@@ -145,7 +145,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
           <div key={index} className={cx("flex", message.role === "user" ? "justify-end" : "justify-start")}>
             <div
               className={cx(
-                "max-w-[90%] rounded-lg border px-3 py-2 text-[13px] leading-relaxed",
+                "max-w-[90%] rounded-lg border px-3 py-2 text-sm leading-relaxed",
                 message.role === "user" && "border-accent-line bg-accent-soft text-fg",
                 message.role === "assistant" && !message.error && !message.notice && "border-line bg-surface-2 text-fg",
                 message.notice && "border-warn-line bg-warn-soft text-fg",
@@ -154,7 +154,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
             >
               <div className="whitespace-pre-wrap break-words">{message.role === "assistant" ? renderAnswer(message.content) : message.content}</div>
               {message.meta && (
-                <p className={cx("mt-1.5 text-[10.5px]", message.reference ? "font-medium text-muted" : "font-mono text-subtle")}>{message.meta}</p>
+                <p className={cx("mt-1.5 text-xs", message.reference ? "font-medium text-muted" : "font-mono text-subtle")}>{message.meta}</p>
               )}
             </div>
           </div>
@@ -167,7 +167,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
 
       {document && isReference && messages.length > 0 && (
         <div className="border-t border-line px-3 pt-2.5" aria-label="Standardfragen">
-          <p className="mb-1.5 text-[11px] text-subtle">Standardfragen – bei Musterdaten auch ohne Modell:</p>
+          <p className="mb-1.5 text-xs text-subtle">Standardfragen – bei Musterdaten auch ohne Modell:</p>
           <div className="flex flex-wrap gap-1.5">
             {SUGGESTIONS.map((suggestion) => (
               <button
@@ -175,7 +175,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
                 type="button"
                 onClick={() => ask(suggestion)}
                 disabled={busy}
-                className="rounded-md border border-line px-2 py-1 text-left text-[11.5px] text-muted transition-colors duration-150 hover:border-line-strong hover:text-fg disabled:opacity-50"
+                className="rounded-md border border-line px-2 py-1 text-left text-xs text-muted transition-colors duration-150 hover:border-line-strong hover:text-fg disabled:opacity-50"
               >
                 {suggestion}
               </button>
@@ -213,7 +213,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
             <Send size={15} />
           </button>
         </div>
-        <p className="mt-1.5 flex items-center gap-1 text-[10.5px] text-subtle">
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-subtle">
           <MessageSquare size={11} /> Keine Rechts- oder Steuerberatung. Cloud-Modelle erhalten den Text nur pseudonymisiert.
         </p>
       </form>
