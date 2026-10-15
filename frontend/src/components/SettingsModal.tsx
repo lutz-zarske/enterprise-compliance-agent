@@ -5,9 +5,10 @@ import { api, ApiError, getAccessKey, getApiBase, setAccessKey } from "../lib/ap
 import type { ConnectionTestResult, InferenceMode, PiiStrictness, RuntimeSettings } from "../types/api";
 import { cx } from "../lib/format";
 import { CheckCircle, Eye, EyeOff, Lock, XCircle } from "./icons";
+import { useTheme, type Theme } from "./ThemeProvider";
 import { Modal, Segmented, Spinner, Tabs, Toggle } from "./ui";
 
-type Tab = "inference" | "compliance" | "connection";
+type Tab = "inference" | "compliance" | "connection" | "appearance";
 
 const PROVIDERS: { mode: InferenceMode; title: string; text: string; dot: string }[] = [
   { mode: "local", title: "Lokal (Ollama Engine)", text: "On-Premises Zero-Data-Leakage – Inferenz verlässt die lokale Umgebung nicht.", dot: "bg-ok" },
@@ -40,6 +41,7 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ConnectionTestResult | null>(null);
   const [accessKey, setAccessKeyState] = useState("");
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     if (!open || !settings) return;
@@ -105,10 +107,11 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
           { key: "inference", label: "Inferenz & KI-Provider" },
           { key: "compliance", label: "Compliance & Audit-Strenge" },
           { key: "connection", label: "Verbindung" },
+          { key: "appearance", label: "Darstellung" },
         ]}
       />
 
-      {!settings && tab !== "connection" && (
+      {!settings && (tab === "inference" || tab === "compliance") && (
         <p className="py-8 text-center text-sm text-subtle">Backend nicht erreichbar – Einstellungen können nicht geladen werden.</p>
       )}
 
@@ -164,7 +167,7 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
               <datalist id={`models-${mode}`}>
                 {settings.suggested_models[mode]?.map((name) => <option key={name} value={name} />)}
               </datalist>
-              <span className="mt-1 block text-[11px] text-subtle">
+              <span className="mt-1 block text-xs text-subtle">
                 Vorschläge im Dropdown verfügbar oder beliebige neue Modell-ID eintragen.
               </span>
             </label>
@@ -191,7 +194,7 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
                     {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
-                <span className="mt-1 block text-[11px] text-subtle">Serverseitig Fernet-verschlüsselt gespeichert, nur maskiert zurückgegeben.</span>
+                <span className="mt-1 block text-xs text-subtle">Serverseitig Fernet-verschlüsselt gespeichert, nur maskiert zurückgegeben.</span>
               </label>
             )}
           </div>
@@ -223,7 +226,7 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
               options={STRICTNESS.map(({ value, label }) => ({ value, label }))}
             />
             <p className="mt-2 text-xs text-subtle">{STRICTNESS.find((s) => s.value === settings.pii_strictness)?.text}</p>
-            <p className="mt-1 text-[11px] text-subtle">PII-Befunde werden unabhängig von dieser Stufe ausschließlich maskiert gespeichert.</p>
+            <p className="mt-1 text-xs text-subtle">PII-Befunde werden unabhängig von dieser Stufe ausschließlich maskiert gespeichert.</p>
           </div>
           <Toggle
             checked={settings.enforce_ustg_check}
@@ -237,7 +240,7 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
             label="EU AI Act Hochrisiko-Eskalation"
             description="Stuft automatisch auf „Hochrisiko“, sobald eine Anhang-III-Kategorie belegt ist – auch wenn das Modell niedriger bewertet."
           />
-          <p className="text-[11px] text-subtle">Änderungen gelten für die nächste Analyse; bestehende Prüfergebnisse bleiben unverändert im Ledger.</p>
+          <p className="text-xs text-subtle">Änderungen gelten für die nächste Analyse; bestehende Prüfergebnisse bleiben unverändert im Ledger.</p>
         </div>
       )}
 
@@ -246,7 +249,7 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
           <div>
             <p className="label-caps">Backend-Adresse</p>
             <p className="mt-1 font-mono text-sm text-fg">{getApiBase()}</p>
-            <p className="mt-1 text-[11px] text-subtle">Automatisch ermittelt (NEXT_PUBLIC_API_BASE_URL, gleicher Host :8001, 127.0.0.1, localhost).</p>
+            <p className="mt-1 text-xs text-subtle">Automatisch ermittelt (NEXT_PUBLIC_API_BASE_URL, gleicher Host :8001, 127.0.0.1, localhost).</p>
           </div>
           <label className="block">
             <span className="label-caps">Zugangsschlüssel (X-API-Key)</span>
@@ -273,6 +276,23 @@ export function SettingsModal({ open, settings, onClose, onSaved, onAccessChange
               Übernehmen
             </button>
           </div>
+        </div>
+      )}
+      {tab === "appearance" && (
+        <div className="space-y-2 pt-4">
+          <p className="label-caps">Farbschema</p>
+          <Segmented<Theme>
+            value={theme}
+            onChange={setTheme}
+            options={[
+              { value: "dark", label: "Dunkel" },
+              { value: "light", label: "Hell" },
+            ]}
+          />
+          <p className="text-xs text-subtle">
+            Dunkel ist der Standard für lange Prüfsitzungen; Hell eignet sich für Präsentationen und Ausdrucke. Gilt nur in
+            diesem Browser.
+          </p>
         </div>
       )}
     </Modal>

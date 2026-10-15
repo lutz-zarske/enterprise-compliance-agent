@@ -1,4 +1,4 @@
-// Typen spiegeln die Pydantic-Modelle aus app/schemas.py (Backend v2.1).
+// Typen spiegeln die Pydantic-Modelle aus app/schemas.py (Backend v2.3).
 
 export type DocumentStatus = "uploaded" | "processing" | "extracted" | "failed";
 export type DocType = "invoice" | "contract" | "offer" | "reminder" | "other";
@@ -443,6 +443,18 @@ export interface CopilotResponse {
   provider: string;
   duration_ms: number;
   reference: boolean;
+}
+
+/** POST /api/vat/verify - VIES-Momentaufnahme, nicht gespeichert, ohne Score-Einfluss. */
+export interface VatVerification {
+  country_code: string;
+  vat_number: string;
+  valid: boolean;
+  name: string | null;
+  address: string | null;
+  request_date: string | null;
+  request_identifier: string | null;
+  source: string;
 }
 
 export interface LedgerVerification {

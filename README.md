@@ -17,7 +17,7 @@ Zustand.
 | **Frontend** | Next.js 15 · React 19 · Tailwind CSS 4 · TypeScript (strict) |
 | **Inferenz** | Ollama `qwen2.5:14b-instruct` (Default) · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein LangChain |
 | **Persistenz** | SQLite (Default) · PostgreSQL über `DATABASE_URL` |
-| **Qualität** | 256 Pytest-Tests (ca. 20 s, ohne laufendes LLM) · ESLint · `next build` · CI für Backend, Frontend, Docker |
+| **Qualität** | 279 Pytest-Tests (ca. 20 s, ohne laufendes LLM, ohne Netz) · ESLint · `next build` · CI für Backend, Frontend, Docker |
 | **Betrieb** | Ein-Klick-Start für Windows · Docker Compose (API `:8001`, Frontend `:3001`) · Non-Root-Container, Healthchecks |
 
 ![Dashboard: KI-Recruiting-Vertrag, EU AI Act Anhang III Nr. 4, Score auf 59 gedeckelt](docs/screenshots/dashboard-hochrisiko-dark.png)
@@ -62,6 +62,7 @@ oder hinterlegtem Cloud-Key lässt sich jedes Musterdokument über
 |---|---|---|
 | **EU AI Act** – VO (EU) 2024/1689 | Risikoklassen (Art. 5, Art. 6 Abs. 2 i. V. m. Anhang III, Art. 50), Anhang-III-Eskalation, Hinweis auf Art. 6 Abs. 3, Betreiberpflichten (Art. 26), Logging (Art. 12), menschliche Aufsicht (Art. 14) inkl. begründeter Übersteuerung der KI-Einstufung (Art. 14 Abs. 4 lit. d) | Anhang-III-Pflichten ab **02.12.2027**, Anhang I ab 02.08.2028 nach **VO (EU) 2026/1744** (Digital Omnibus, in Kraft seit 27.07.2026) |
 | **§ 14 Abs. 4 UStG** | Pflichtangaben Nr. 1–8 einzeln, Kleinbetragsrechnung (§ 33 UStDV), Vorsteuerrisiko (§ 15 UStG) | gültig |
+| **USt-IdNr.** – VIES, § 18e UStG | Live-Abfrage der USt-IdNr. des Ausstellers (BT-31) bei VIES der EU-Kommission auf Klick; Momentaufnahme ohne Score-Einfluss. Die qualifizierte Bestätigung nach § 18e UStG erteilt weiterhin das BZSt | VIES-REST-Schnittstelle, ohne API-Key |
 | **E-Rechnung** – § 14 Abs. 1 UStG, EN 16931 | XML aus ZUGFeRD/Factur-X-PDFs und reine XRechnung (CII/UBL) werden gelesen; Profil aus BT-24; MINIMUM/BASIC WL sind keine E-Rechnung; Pflichtfelder und Summenregeln (BR-CO-10/13/14/15, BR-DE-15) | Empfangspflicht seit 01.01.2025; Ausstellungspflicht 2027/2028 |
 | **XML-Vorrang** – BMF-Schreiben vom 15.10.2024, Rz. 36 | Bei hybriden Rechnungen ist der XML-Teil maßgeblich; Abgleich von acht Kernwerten mit dem PDF-Bildteil, Abweichungen −10 | präzisiert durch BMF-Schreiben vom 15.10.2025 |
 | **B2G** – § 5 Abs. 1 Nr. 1 ERechV, BR-DE-15 | Leitweg-ID bei öffentlichen Auftraggebern: Aufbau und Prüfziffer (ISO/IEC 7064, MOD 97-10) nach KoSIT-Formatspezifikation 2.0.2 | Bund; Länder und Kommunen nach Landesrecht |
@@ -102,6 +103,8 @@ Rechtsquellen: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
 |---|---|
 | **Extraktion** | Zwei fokussierte LLM-Läufe (Extraktion, Compliance-Audit) mit striktem Pydantic-Vertrag und Reparaturrunde bei Schemaverletzung |
 | **§ 14 Abs. 4 UStG** | Alle Pflichtangaben (Nr. 1–8) einzeln geprüft, inkl. Kleinbetragsrechnung nach § 33 UStDV |
+| **USt-IdNr. (VIES)** | `POST /api/vat/verify`: Abfrage bei VIES (EU-Kommission) mit 3-s-Timeout; übertragen werden nur Ländercode und Nummer. Gültigkeit, Name (sofern der Mitgliedstaat ihn liefert – Deutschland nicht) und Behördenzeitstempel; nicht gespeichert, ohne Score-Einfluss. In Tests vollständig gemockt |
+| **Prüf-Workbench** | Fundstellen-Kopplung im Inspektor: Hover auf ein Kriterium hebt die belegende Zeile hervor, Klick scrollt dorthin; Klick auf eine Belegzeile öffnet das Kriterium. 4-Farben-Schema, `J`/`K`-Navigation, Action-Leiste mit Ledger-Status und Siegel per `Strg`/`⌘` + `Enter` |
 | **E-Rechnung (EN 16931)** | ZUGFeRD-/Factur-X-Anhang aus dem PDF und reine XRechnung (.xml) in CII- und UBL-Syntax; Profil-Erkennung (EN 16931, EXTENDED, BASIC, XRECHNUNG 3.0, Peppol, MINIMUM/BASIC WL); zentrale Business Terms; Abgleich XML ↔ Bildteil; Leitweg-ID bei Behörden. **Deterministisch, ohne Sprachmodell** |
 | **Finanzmathematik** | IBAN-Prüfziffer (ISO 13616, MOD-97-10), zulässiger Steuersatz (inkl. Corona-Sätze 07–12/2020), Netto + USt = Brutto, USt = Netto × Satz |
 | **EU AI Act** | Risikostufe (Art. 5 / Anhang III / Art. 50 / minimal), automatische Eskalation bei belegter Anhang-III-Kategorie, Artikel-Pflichtenliste |
@@ -231,6 +234,7 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 
 | | |
 |---|---|
+| ![Fundstellen-Kopplung](docs/screenshots/workbench-fundstellen.png) | **Prüf-Workbench (v2.3)** – Kriterium „Zulässiger Umsatzsteuersatz“ angeklickt: Die Zeile „MwSt. 16 %“ ist im Beleg rot umrandet (Verstoß), alle PII-Fundstellen einheitlich Indigo. Unten die Action-Leiste mit „GoBD & Ledger intakt“, Aufbewahrungsende und „Prüfentscheid siegeln“ (`Strg` + `Enter`). |
 | ![Start ohne Modell](docs/screenshots/start-ohne-modell.png) | **Start ohne Sprachmodell** – das Banner bietet direkt die Inferenz-Einstellungen und den Befehl `ollama serve` an und erklärt, dass die Pseudonymisierung lokal im Backend läuft. |
 | ![Steuerfalle](docs/screenshots/steuerfalle-dark.png) | **Fehlerhafte Rechnung (45/100)** – fehlende USt-IdNr. (−20), fehlendes Leistungsdatum (−10), ungültige IBAN (−15), Steuersatz 16 % (−10). Der Tooltip an der Kachel erklärt jeden Abzug in einem Satz. |
 | ![Gültige Rechnung](docs/screenshots/gueltige-rechnung-light.png) | **Light Mode, gültige Rechnung (100/100)** – „Zur Auszahlung freigegeben“, mit Demo-Siegel versiegelt. Farbcodierte PII-Markierungen im Text. |
@@ -243,10 +247,47 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 | ![Einstellungen](docs/screenshots/einstellungen.png) | **Einstellungen** – Provider, Modell, API-Key (maskiert), Privacy-Gateway-Hinweis, PII-Strenge, Toggles, X-API-Key. |
 | ![Mobil](docs/screenshots/mobil.png) | **Mobil (390 px)** – ohne horizontales Scrollen. |
 
+### Prüf-Workbench (v2.3)
+
+* **Kopfzeile** nur mit Titel und Versions-Badge, einem ruhigen
+  Betriebsstatus (Tooltip: Ledger-Integrität, nachgerechnete und signierte
+  Einträge, Kopf-Hash), „Musterdaten laden“, Modell-Pille (Lokal/Cloud) und
+  Einstellungen. Das Farbschema (Dunkel/Hell) liegt in den Einstellungen unter
+  „Darstellung“. Daten laden beim Zurückkehren ins Fenster neu – einen
+  Aktualisieren-Knopf gibt es nicht mehr.
+* **Breitbild:** Inhalt bis 1920 px, ab 2xl bis 2400 px; die Dokument-Queue ist
+  340 bzw. 400 px breit, der Rest gehört der Workbench. Auf WQHD hat jede
+  Inspektor-Spalte über 900 px.
+* **Fundstellen-Kopplung (Rossum-Muster):** Hover auf ein Kriterium (§ 14 UStG,
+  Finanzmathematik, AI Act) hebt die belegende Zeile im Belegtext hervor, das
+  Fadenkreuz scrollt dorthin. Umgekehrt öffnet ein Klick auf eine belegte Zeile
+  das zugehörige Kriterium. Die Zuordnung ist deterministisch
+  (`frontend/src/lib/evidence.ts`, gleiche Muster wie das Regelwerk) und
+  funktioniert auch auf geschwärztem Text.
+* **4-Farben-Schema:** Grün = konform, Gelb = Prüfhinweis oder Nachweis allein
+  durch das KI-Modell, Rot = Verstoß, Indigo = PII-Maskierung (DSGVO;
+  Art.-9-Fundstellen kräftig umrandet).
+* **Action-Leiste** am Fuß des Inspektors: Revisionssicherheits-Status
+  („GoBD & Ledger intakt“), Siegel des Belegs, Aufbewahrungsende und die
+  Primäraktion „Beleg freigeben & siegeln“.
+* **USt-IdNr. bei VIES prüfen** direkt an der Pflichtangabe Nr. 2 (BT-31).
+* Scrollbereiche reservieren ihre Scrollbalken-Spur (`scrollbar-gutter: stable`),
+  der Balken überdeckt nie Status-Chips oder Text.
+
+| Taste | Wirkung |
+|---|---|
+| `J` / `K` | Nächstes / vorheriges Dokument (in Filter- und Sortierreihenfolge; nicht beim Tippen) |
+| `↑` / `↓`, `Pos1` / `Ende` | Dasselbe, wenn die Dokumentliste den Fokus hat |
+| `Strg` + `Enter` (macOS `⌘` + `Enter`) | Siegel-Dialog öffnen; im Dialog versiegeln |
+| `Esc` | Dialog, Copilot oder gepinnte Fundstelle schließen |
+
 Designprinzipien: semantische Farbtokens (Grün = konform, Bernstein = Prüfung,
 Rose = Verstoß/Hochrisiko, Indigo = Datenschutz), WCAG-AA-Kontraste in beiden
-Themes, keine Hover-Lifts, pulsierenden Effekte oder Deko-Icons,
-`prefers-reduced-motion` wird respektiert. Zahlen, Beträge, Hashes und
+Themes. Dunkles Theme „Obsidian & Slate“: Canvas `#090d16`, gefrostete Flächen,
+Konturen in Weiß 8 %, feine Lichtkante oben an jeder Karte; KPI-Karten tragen
+ihren Status als Innenkante. Keine Hover-Lifts oder Deko-Icons; einzige
+Animation in Ruhe ist der Betriebsstatus-Punkt, `prefers-reduced-motion` stellt
+ihn still. Zahlen, Beträge, Hashes und
 Normzitate in JetBrains Mono mit gleich breiten Ziffern; Beträge
 rechtsbündig, Summenblöcke (Netto, USt, Brutto, Zahlbetrag) auf die
 Dezimalstelle ausgerichtet. Rechnungsnummern, Leitweg-IDs, IBANs und SHA-256
@@ -278,6 +319,7 @@ Ersatzdaten angezeigt.**
 | `GET` | `/api/documents/{id}/export/gobd` | Prüfdatenpaket (ZIP): Original, XML, Ledger-Auszug, Zertifikat, Verfahrensdokumentation, signiertes Manifest |
 | `GET` | `/api/documents/{id}/export/procedural-doc?format=html\|markdown` | GoBD-Verfahrensdokumentation (Entwurf) mit Anhang zum Beleg |
 | `POST` | `/documents/{id}/copilot` | Frage zum Dokument |
+| `POST` | `/api/vat/verify` | USt-IdNr. live bei VIES (EU-Kommission) prüfen: `valid`, Name, Behördenzeitstempel; nicht gespeichert |
 | `GET` | `/api/audit/trail` · `/api/audit/verify` · `/api/audit/head` | Ledger lesen (mit `signature_status` je Eintrag), Kette und Signaturen prüfen, Kopf-Hash zur Verankerung |
 | `GET` | `/api/audit/signing-key` | Öffentlicher Schlüssel und Fingerabdruck der Systemsignatur |
 | `GET`/`POST` | `/api/settings` · `/api/settings/test-connection` | Laufzeit-Einstellungen (Keys maskiert), Verbindungstest |
@@ -320,6 +362,10 @@ curl -s -X POST $API/api/documents/$ID/override -H "Content-Type: application/js
 curl -s "$API/api/documents/$ID/export/procedural-doc?format=html" -o verfahrensdokumentation.html
 
 curl -s $API/api/audit/verify          # {"valid": true, "entries": ..., "signed_entries": ..., "head_hash": ...}
+
+# USt-IdNr. bei VIES prüfen (nur Ländercode und Nummer verlassen den Server)
+curl -s -X POST $API/api/vat/verify -H "Content-Type: application/json" \
+     -d '{"country_code":"DE","vat_number":"312345678"}' | jq '{valid, name, request_date}'
 
 curl -s -X POST $API/api/settings -H "Content-Type: application/json" \
      -d '{"inference_mode":"gemini","api_keys":{"gemini":"<KEY>"},"pii_strictness":"strict"}' | jq .masked_keys
@@ -544,7 +590,7 @@ Filter schwärzt IBANs, E-Mails, Telefonnummern, lange Ziffernfolgen und
 API-Keys; Felder wie `raw_text` werden grundsätzlich ersetzt.
 
 **Rate-Limiting.** Token-Bucket je Client-IP und Routengruppe (Upload 30/min,
-Extraktion 10/min, Copilot 20/min, Einstellungen 30/min); Antwort 429 mit
+Extraktion 10/min, Copilot 20/min, Einstellungen 30/min, VIES 30/min); Antwort 429 mit
 `Retry-After`. Der Zustand liegt im Prozessspeicher – bei mehreren Workern
 gehört das Limit in Redis oder an das API-Gateway.
 
@@ -560,6 +606,7 @@ gehört das Limit in Redis oder an das API-Gateway.
 | `PII_STRICTNESS` | `standard` | `strict` · `standard` · `audit_only` |
 | `LOG_JSON` | `true` | `false` für lesbare Textlogs |
 | `RATE_LIMIT_*` | siehe oben | `0` = unbegrenzt |
+| `VIES_TIMEOUT_SECONDS` | `3` | Kurzes Timeout für die VIES-Abfrage; danach 503 mit Hinweis |
 | `SETTINGS_ENCRYPTION_KEY` | leer | Fernet-Schlüssel für gespeicherte Provider-Keys |
 | `CORS_ORIGINS` | `*` | Produktiv auf die Frontend-Origin beschränken |
 
@@ -572,12 +619,14 @@ Alembic dazu.
 ## Tests
 
 ```bash
-python -m pytest            # 256 Tests, ca. 20 s, kein LLM nötig
+python -m pytest            # 279 Tests, ca. 20 s, kein LLM und kein Netz nötig
 cd frontend && npm run lint && npm run build
 ```
 
-Ollama und die Cloud-Provider werden auf HTTP-Ebene über `httpx.MockTransport`
-nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault und Validierung laufen real.
+Ollama, die Cloud-Provider und VIES werden auf HTTP-Ebene über
+`httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
+Fehlerabbildung und Validierung laufen real. Jede Test-App bekommt den
+VIES-Mock, und eine lokale `.env` (etwa mit Cloud-Keys) wird in Tests ignoriert.
 
 | Datei | Tests | Schwerpunkt |
 |---|---:|---|
@@ -591,6 +640,7 @@ nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault und Validierung laufen real.
 | `test_procedural_doc.py` | 14 | Vier Teile nach Rz. 153, Systemstand, Platzhalter, HTML-Escaping, Endpunkt HTML/Markdown, Vier-Augen-Prüfung im Anhang, BEG-IV-Fristen inkl. Finanzsektor, Fristende in Scorecard und Zertifikat, Verfahrensdokumentation im ZIP |
 | `test_human_override.py` | 12 | Neuberechnung 59 → 95, Ledger-Verkettung und Ed25519-Signatur, Siegel aufgehoben, neue Analyse verwirft Übersteuerung, 422/409-Fälle, Prüfer-Meilenstein im Zertifikat, neu gehashte Kette und fremder Schlüssel werden erkannt |
 | `test_reference_demo.py` | 12 | Musterdaten ohne Modell (100/45/59 + ZUGFeRD 100), Demo-Siegel, Ledger-Kennzeichnung, kein Überschreiben von Live-Audits, Copilot-Musterantworten |
+| `test_vies.py` | 23 | VIES-Abfrage: gültig/ungültig, fehlender Name bei DE, Normalisierung (Präfix, Trennzeichen, GR → EL), Eingabefehler ohne Netzaufruf, Ausfall des Mitgliedstaats, Timeout, Offline, Auth, Rate-Limit |
 | `test_observability.py` | 13 | JSON-Logs, PII-Filter, Request-ID, Token-Bucket, 429 |
 | `test_audit_ledger.py` | 7 | Verkettung, Trigger, Manipulations- und Löschnachweis, Migration |
 | `test_llm.py` · `test_redaction.py` · `test_pdf_reader.py` | 28 | Client, Regex-Scan (u. a. „Softwarehaus“ ≠ Reha, Leitweg-ID ≠ Telefon), PDF-Fehlerklassen |
@@ -663,6 +713,15 @@ Steuerberatung. Maßgeblich bleibt die Freigabe durch die Prüfperson.
   (OIDC) und ggf. eine qualifizierte elektronische Signatur dazu.
 * **Prozesslokale Zustände.** Rate-Limit und Pipeline-Fortschritt gelten je
   Prozess.
+* **VIES ist eine Momentaufnahme.** Die Abfrage bestätigt nur, dass die
+  USt-IdNr. zum Zeitpunkt gültig war; Deutschland übermittelt keinen Namen,
+  ein Abgleich mit dem Aussteller findet also nicht statt. Das Ergebnis wird
+  weder gespeichert noch im Ledger protokolliert und ersetzt nicht die
+  qualifizierte Bestätigungsabfrage beim BZSt (§ 18e UStG).
+* **Fundstellen-Kopplung ist textbasiert.** Die Zuordnung Kriterium ↔ Zeile
+  folgt Feldbezeichnern und markierten Werten im Textlayer; bei ungewöhnlichen
+  Layouts kann eine Zeile fehlen. Fehlende Pflichtangaben haben naturgemäß
+  keine Fundstelle.
 
 ## Lizenz
 

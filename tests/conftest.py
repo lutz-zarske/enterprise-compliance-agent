@@ -257,10 +257,71 @@ def fake_ollama() -> FakeOllama:
     return FakeOllama()
 
 
+# ---------------------------------------------------------------------------
+# Gemocktes VIES (Europaeische Kommission)
+# ---------------------------------------------------------------------------
+
+
+class FakeVies:
+    """Stellt ``check-vat-number`` nach - jede Test-App nutzt diesen Transport.
+
+    Damit verlaesst kein Test das lokale System, auch wenn er VIES nur
+    mittelbar beruehrt.  Antwortformat wie die echte Schnittstelle
+    (deutsche Nummern ohne Namen: "---").
+    """
+
+    def __init__(self) -> None:
+        self.valid_numbers: dict[tuple[str, str], tuple[str, str]] = {
+            ("DE", "312345678"): ("---", "---"),
+            ("FR", "40303265045"): ("SA ODIGEO FRANCE", "1 RUE DU TEST, 75001 PARIS"),
+        }
+        self.mode: str = "ok"  # ok | offline | timeout | error | garbage
+        self.error_code = "MS_UNAVAILABLE"
+        self.calls: list[dict[str, Any]] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if self.mode == "offline":
+            raise httpx.ConnectError("Verbindung abgelehnt", request=request)
+        if self.mode == "timeout":
+            raise httpx.ReadTimeout("Zeitueberschreitung", request=request)
+        payload = json.loads(request.content)
+        self.calls.append(payload)
+        if self.mode == "garbage":
+            return httpx.Response(502, text="<html>Bad Gateway</html>")
+        if self.mode == "error":
+            return httpx.Response(
+                200, json={"actionSucceed": False, "errorWrappers": [{"error": self.error_code}]}
+            )
+        key = (payload["countryCode"], payload["vatNumber"])
+        name, address = self.valid_numbers.get(key, ("---", "---"))
+        return httpx.Response(
+            200,
+            json={
+                "countryCode": key[0],
+                "vatNumber": key[1],
+                "requestDate": "2026-10-07T09:15:00.000Z",
+                "valid": key in self.valid_numbers,
+                "requestIdentifier": "",
+                "name": name,
+                "address": address,
+            },
+        )
+
+
+@pytest.fixture
+def fake_vies() -> FakeVies:
+    return FakeVies()
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    """Isolierte Konfiguration: eigene SQLite-Datei, eigenes Upload-Verzeichnis."""
+    """Isolierte Konfiguration: eigene SQLite-Datei, eigenes Upload-Verzeichnis.
+
+    ``_env_file=None``: Eine lokale ``.env`` (etwa mit Cloud-Keys) darf das
+    Testergebnis nicht veraendern.
+    """
     return Settings(
+        _env_file=None,
         app_env="test",
         api_key=None,
         database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
@@ -276,7 +337,7 @@ def settings(tmp_path: Path) -> Settings:
 
 @pytest.fixture
 def make_client(
-    settings: Settings, fake_ollama: FakeOllama
+    settings: Settings, fake_ollama: FakeOllama, fake_vies: FakeVies
 ) -> Iterator[Callable[..., TestClient]]:
     """Fabrik fuer Testclients - erlaubt abweichende Settings je Test."""
     opened: list[TestClient] = []
@@ -300,6 +361,7 @@ def make_client(
             )
 
         application = create_app(effective)
+        application.state.vies_transport = httpx.MockTransport(fake_vies.handler)
         application.dependency_overrides[get_llm] = lambda: llm
         application.dependency_overrides[get_service] = service_override
 
@@ -341,7 +403,7 @@ def uploaded_document_id(client: TestClient, pdf: bytes, filename: str = "rechnu
 
 @pytest.fixture
 def make_full_client(
-    settings: Settings, fake_ollama: FakeOllama
+    settings: Settings, fake_ollama: FakeOllama, fake_vies: FakeVies
 ) -> Iterator[Callable[..., TestClient]]:
     """Vollstaendige App ohne Dependency-Overrides (Router, Runtime-Store, Vault).
 
@@ -355,6 +417,7 @@ def make_full_client(
         effective = settings.model_copy(update=overrides) if overrides else settings
         application = create_app(effective)
         application.state.ollama_transport = httpx.MockTransport(fake_ollama.handler)
+        application.state.vies_transport = httpx.MockTransport(fake_vies.handler)
         if cloud_handler is not None:
             application.state.cloud_transport = httpx.MockTransport(cloud_handler)
         test_client = TestClient(application)
@@ -372,4 +435,4 @@ def full_client(make_full_client: Callable[..., TestClient]) -> TestClient:
     return make_full_client()
 
 
-__all__ = ["FakeOllama", "build_pdf", "uploaded_document_id"]
+__all__ = ["FakeOllama", "FakeVies", "build_pdf", "uploaded_document_id"]

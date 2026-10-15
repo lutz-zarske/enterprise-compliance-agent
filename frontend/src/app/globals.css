@@ -38,16 +38,23 @@
   --pii-line: #c7d2fe;
 
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --header-bg: rgba(255, 255, 255, 0.75);
+  --scroll-thumb: rgba(148, 163, 184, 0.45);
+  --scroll-thumb-hover: rgba(100, 116, 139, 0.65);
   color-scheme: light;
 }
 
+/*
+ * Obsidian & Slate: kein reines Schwarz, Flaechen leicht gefrostet, zarte
+ * Aussenkonturen (weiss 8 %) und eine feine Lichtkante oben an jeder Karte.
+ */
 .dark {
   --bg: #090d16;
-  --surface: rgba(15, 23, 42, 0.6);
+  --surface: rgba(17, 23, 38, 0.6);
   --surface-2: rgba(30, 41, 59, 0.45);
-  --surface-solid: #0f172a;
-  --line: rgba(30, 41, 59, 0.8);
-  --line-strong: #334155;
+  --surface-solid: #111726;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
   --fg: #e2e8f0;
   --fg-muted: #cbd5e1;
   --fg-subtle: #94a3b8;
@@ -70,7 +77,11 @@
   --pii-soft: rgba(99, 102, 241, 0.14);
   --pii-line: rgba(129, 140, 248, 0.4);
 
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --header-bg: rgba(2, 6, 23, 0.7);
+  /* slate-700/40, beim Ueberfahren slate-600/60 */
+  --scroll-thumb: rgba(51, 65, 85, 0.4);
+  --scroll-thumb-hover: rgba(71, 85, 105, 0.6);
   color-scheme: dark;
 }
 
@@ -124,10 +135,15 @@ body {
     border: 1px solid var(--line);
     border-radius: 0.75rem;
     box-shadow: var(--shadow);
+    transition: border-color 150ms ease-out;
   }
   .dark .card {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+  }
+  /* Kanten-Hover: nur die Kontur hellt auf, kein Schein, kein Versatz. */
+  .card-hover:hover {
+    border-color: var(--line-strong);
   }
 
   .btn {
@@ -193,35 +209,113 @@ body {
     border-radius: 0.375rem;
     border: 1px solid var(--line);
     padding: 0.05rem 0.45rem;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    line-height: 1.1rem;
+    line-height: 1.15rem;
     white-space: nowrap;
   }
 
-  /* PII-Markierung: Ring statt Rahmen, damit die Monospace-Spalten fluchten. */
+  /*
+   * PII-Maskierung (DSGVO): einheitlich Indigo. Art.-9-Fundstellen tragen eine
+   * kraeftigere Kontur. Ring statt Rahmen, damit die Monospace-Spalten fluchten.
+   */
   .pii-mark {
     border-radius: 3px;
     padding: 0 1px;
-    box-shadow: inset 0 0 0 1px var(--mark-line);
-    background: var(--mark-bg);
-    color: var(--mark-fg);
+    box-shadow: inset 0 0 0 1px var(--pii-line);
+    background: var(--pii-soft);
+    color: var(--pii);
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
-    transition: box-shadow 150ms;
+    transition: box-shadow 150ms ease-out;
+  }
+  .pii-mark[data-art9="true"] {
+    box-shadow: inset 0 0 0 1.5px var(--pii);
+    font-weight: 600;
   }
   .pii-mark[data-active="true"],
   .pii-mark:focus-visible {
-    box-shadow: inset 0 0 0 2px var(--mark-fg);
+    box-shadow: inset 0 0 0 2px var(--pii), 0 0 0 2px var(--pii-line);
     outline: none;
   }
 
+  /*
+   * Fundstellen-Hervorhebung (Rossum-Muster): Zeile im Beleg, die eine Pruefung
+   * belegt. Gruen konform, Gelb Pruefhinweis/KI-Vorschlag, Rot Verstoss.
+   */
+  .doc-line {
+    display: block;
+    min-height: 1.75em;
+    margin: 0 -0.375rem;
+    padding: 0 0.375rem;
+    border-radius: 0.25rem;
+    transition: background-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+  .doc-line[data-anchor="true"] {
+    cursor: pointer;
+  }
+  .doc-line[data-anchor="true"]:hover {
+    background: var(--surface-2);
+  }
+  .doc-line[data-evidence="ok"],
+  .doc-line[data-evidence="ok"]:hover {
+    background: var(--ok-soft);
+    box-shadow: 0 0 0 2px var(--ok);
+  }
+  .doc-line[data-evidence="warn"],
+  .doc-line[data-evidence="warn"]:hover {
+    background: var(--warn-soft);
+    box-shadow: 0 0 0 2px var(--warn);
+  }
+  .doc-line[data-evidence="bad"],
+  .doc-line[data-evidence="bad"]:hover {
+    background: var(--bad-soft);
+    box-shadow: 0 0 0 2px var(--bad);
+  }
+
+  /* Feldbezeichner: text-xs, medium, Versalien mit tracking-wider. */
   .label-caps {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--fg-subtle);
+  }
+
+  /* Tastatur-Badge (Strg ↵ / ⌘ ↵, J / K). */
+  .kbd-shortcut {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    min-width: 1.25rem;
+    justify-content: center;
+    border-radius: 0.3rem;
+    border: 1px solid var(--line-strong);
+    border-bottom-width: 2px;
+    background: var(--surface-2);
+    padding: 0 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.1rem;
+    color: var(--fg-subtle);
+  }
+  .btn-primary .kbd-shortcut {
+    border-color: color-mix(in srgb, var(--accent-fg) 30%, transparent);
+    background: color-mix(in srgb, var(--accent-fg) 12%, transparent);
+    color: var(--accent-fg);
+  }
+
+  /*
+   * Scrollbereiche: Der Platz fuer den Scrollbalken ist immer reserviert
+   * (scrollbar-gutter), damit er nie Badges, Haken oder Text ueberdeckt.
+   */
+  .scroll-area {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .scroll-area:hover {
+    scrollbar-color: var(--scroll-thumb-hover) transparent;
   }
 }
 
@@ -268,6 +362,11 @@ a,
   outline-offset: 2px;
 }
 
+/* Schlanker FinTech-Scrollbalken (Standard-Eigenschaften; WebKit-Fallback darunter). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -276,8 +375,11 @@ a,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
+  background: var(--scroll-thumb);
   border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
 }
 
 /* --- Micro-Interactions (150 ms ease-out, kein Layout-Shift) ------------- */
@@ -292,6 +394,18 @@ a,
 @keyframes eca-shimmer {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
+}
+/* Ruhiger Betriebs-Puls: ein sich weitender, verblassender Ring. */
+@keyframes eca-pulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
+}
+.status-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: eca-pulse 2.4s ease-out infinite;
 }
 .anim-fade { animation: eca-fade-in 150ms ease-out both; }
 .anim-panel { animation: eca-panel-in 150ms ease-out both; }

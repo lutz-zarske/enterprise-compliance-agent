@@ -19,7 +19,7 @@ export function AuditStepper({ stages, filename, provider }: { stages: ProgressS
     <section className="card p-4" aria-label="Live-Audit" aria-live="polite">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-semibold text-fg">Live-Audit läuft: <span className="font-normal text-muted">{filename}</span></p>
-        <p className="font-mono text-[11px] text-subtle">{provider}</p>
+        <p className="font-mono text-xs text-subtle">{provider}</p>
       </div>
       <ol className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         {stages.map((stage, index) => (

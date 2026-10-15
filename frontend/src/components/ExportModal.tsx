@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
-import type { DocumentDetail, SignOffDecision } from "../types/api";
-import { cx, formatDate } from "../lib/format";
-import { BookOpen, Check, Copy, Download, Package, Printer, Stamp } from "./icons";
-import { HashBadge, Modal, Spinner } from "./ui";
-
-const AUDITOR_STORAGE = "eca-auditor-name";
+import type { DocumentDetail } from "../types/api";
+import { BookOpen, Copy, Download, Package, Printer, Stamp } from "./icons";
+import { SignOffPanel } from "./SignOffPanel";
+import { Modal, Spinner } from "./ui";
 
 interface Props {
   document: DocumentDetail | null;
@@ -60,20 +58,6 @@ function Option({ icon, title, text, action, busy, onClick, disabled }: {
 
 export function ExportModal({ document, open, onClose, onSealed, notify }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [auditor, setAuditor] = useState("");
-  const [note, setNote] = useState("");
-  const [decision, setDecision] = useState<SignOffDecision>("SEALED_APPROVED");
-
-  useEffect(() => {
-    if (!open) return;
-    try {
-      setAuditor(window.localStorage.getItem(AUDITOR_STORAGE) ?? "");
-    } catch {
-      /* ignorieren */
-    }
-    setNote("");
-    setDecision(document?.scorecard?.release_blocked ? "SEALED_REJECTED" : "SEALED_APPROVED");
-  }, [open, document?.id, document?.scorecard?.release_blocked]);
 
   if (!document) return null;
   const analyzed = Boolean(document.scorecard);
@@ -90,8 +74,6 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
       setBusy(null);
     }
   }
-
-  const seal = document.sign_off;
 
   return (
     <Modal open={open} onClose={onClose} title="Export-Center & Prüfvermerk" subtitle={document.filename}>
@@ -169,89 +151,12 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
       </div>
 
       <div className="mt-5 rounded-lg border border-line p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Stamp size={16} className="text-accent" />
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Stamp size={16} className="text-accent" aria-hidden="true" />
           <p className="text-sm font-semibold text-fg">Auditor Sign-Off & Siegel</p>
-          <span className="font-mono text-[11px] text-subtle">Human Oversight · Art. 14 EU AI Act</span>
+          <span className="font-mono text-xs text-subtle">Human Oversight · Art. 14 EU AI Act</span>
         </div>
-        {seal && (
-          <div
-            className={cx(
-              "mb-3 rounded-lg border p-3 text-xs",
-              seal.status === "SEALED_APPROVED" ? "border-ok-line bg-ok-soft text-ok" : "border-bad-line bg-bad-soft text-bad",
-            )}
-          >
-            <p className="font-semibold">
-              {seal.status === "SEALED_APPROVED" ? "Freigegeben" : "Freigabe verweigert"} durch {seal.auditor_name} am {formatDate(seal.sealed_at, true)}
-            </p>
-            <HashBadge className="mt-2" value={seal.ledger_entry_hash} label="Siegel" verified verifiedLabel="Ed25519-signiert" />
-          </div>
-        )}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className="label-caps">Name der Prüfperson</span>
-            <input
-              className="input mt-1"
-              name="auditor-name"
-              autoComplete="name"
-              value={auditor}
-              onChange={(e) => setAuditor(e.target.value)}
-              placeholder="z. B. Lutz Zarske…"
-            />
-          </label>
-          <div>
-            <span className="label-caps">Entscheidung</span>
-            <div className="mt-1 flex gap-2">
-              {(["SEALED_APPROVED", "SEALED_REJECTED"] as const).map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setDecision(value)}
-                  className={cx(
-                    "btn flex-1",
-                    decision === value && (value === "SEALED_APPROVED" ? "border-ok-line bg-ok-soft text-ok" : "border-bad-line bg-bad-soft text-bad"),
-                  )}
-                >
-                  {decision === value && <Check size={13} />}
-                  {value === "SEALED_APPROVED" ? "Freigeben" : "Ablehnen"}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <label className="mt-3 block">
-          <span className="label-caps">Prüfungsnotiz</span>
-          <textarea
-            className="input mt-1 min-h-[70px]"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            name="audit-note"
-            placeholder="z. B. USt-IdNr. beim Lieferanten nachgefordert…"
-          />
-        </label>
-        <p className="mt-2 text-[11px] text-subtle">
-          Das Siegel wird als eigener Eintrag in die Hash-Kette geschrieben. Eine erneute Analyse hebt es auf; die Historie bleibt erhalten.
-        </p>
-        <div className="mt-3 flex justify-end">
-          <button
-            className="btn btn-primary"
-            disabled={!analyzed || auditor.trim().length < 2 || busy === "seal"}
-            onClick={() =>
-              run("seal", async () => {
-                const updated = await api.signOff(document.id, auditor.trim(), note.trim(), decision);
-                try {
-                  window.localStorage.setItem(AUDITOR_STORAGE, auditor.trim());
-                } catch {
-                  /* ignorieren */
-                }
-                onSealed(updated);
-                notify("ok", "Prüfung versiegelt", `${auditor.trim()} · Ledger-Eintrag geschrieben`);
-              })
-            }
-          >
-            {busy === "seal" ? <Spinner size={13} /> : <Stamp size={14} />}
-            Digital versiegeln
-          </button>
-        </div>
+        <SignOffPanel document={document} shortcutActive={open} notify={notify} onSealed={onSealed} />
       </div>
     </Modal>
   );
