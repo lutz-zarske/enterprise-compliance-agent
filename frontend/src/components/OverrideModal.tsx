@@ -172,7 +172,7 @@ export function OverrideModal({ document, open, onClose, onDone, notify }: Props
             autoComplete="name"
             value={auditor}
             onChange={(event) => setAuditor(event.target.value)}
-            placeholder="z. B. Lutz Zarske…"
+            placeholder="Prüferkürzel oder Name eingeben…"
             required
           />
         </label>

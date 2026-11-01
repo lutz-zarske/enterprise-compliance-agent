@@ -50,7 +50,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
 
   if (!open) return null;
   return (
-    <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/50 p-4 pt-[8vh] no-print">
+    <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--backdrop)] p-4 pt-[8vh] backdrop-blur-md no-print">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}
@@ -184,41 +184,97 @@ export interface Toast {
   tone: "ok" | "warn" | "bad" | "info";
   title: string;
   message?: string;
+  leaving?: boolean;
 }
+
+/** Erfolg und Hinweis 3 s, Warnung und Fehler 6 s (laenger lesbar); Ueberfahren pausiert. */
+const TOAST_MS: Record<Toast["tone"], number> = { ok: 3000, info: 3000, warn: 6000, bad: 6000 };
 
 export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
+  const timers = useRef(new Map<number, number>());
+  const paused = useRef(false);
 
-  const dismiss = useCallback((id: number) => setToasts((all) => all.filter((t) => t.id !== id)), []);
+  const remove = useCallback((id: number) => {
+    window.clearTimeout(timers.current.get(id));
+    timers.current.delete(id);
+    // Erst ausblenden (180 ms), dann entfernen.
+    setToasts((all) => all.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
+    window.setTimeout(() => setToasts((all) => all.filter((t) => t.id !== id)), 180);
+  }, []);
+
+  const schedule = useCallback(
+    (id: number, ms: number) => {
+      window.clearTimeout(timers.current.get(id));
+      timers.current.set(id, window.setTimeout(() => remove(id), ms));
+    },
+    [remove],
+  );
+
   const push = useCallback(
-    (toast: Omit<Toast, "id">) => {
+    (toast: Omit<Toast, "id" | "leaving">) => {
       const id = ++counter.current;
       setToasts((all) => [...all.slice(-3), { ...toast, id }]);
-      window.setTimeout(() => dismiss(id), toast.tone === "bad" ? 9000 : 5000);
+      if (!paused.current) schedule(id, TOAST_MS[toast.tone]);
     },
-    [dismiss],
+    [schedule],
   );
-  return { toasts, push, dismiss };
+
+  const pause = useCallback(() => {
+    paused.current = true;
+    timers.current.forEach((timer) => window.clearTimeout(timer));
+  }, []);
+  const resume = useCallback(() => {
+    paused.current = false;
+    setToasts((all) => {
+      all.filter((t) => !t.leaving).forEach((t) => schedule(t.id, 1500));
+      return all;
+    });
+  }, [schedule]);
+
+  return { toasts, push, dismiss: remove, pause, resume };
 }
 
-export function Toaster({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+const TOAST_TONE: Record<Toast["tone"], string> = {
+  ok: "border-ok-line",
+  info: "border-accent-line",
+  warn: "border-warn-line",
+  bad: "border-bad-line",
+};
+
+export function Toaster({ toasts, onDismiss, onPause, onResume }: {
+  toasts: Toast[];
+  onDismiss: (id: number) => void;
+  onPause?: () => void;
+  onResume?: () => void;
+}) {
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2 no-print" aria-live="polite">
+    <div
+      className="fixed right-4 top-16 z-[60] flex w-[min(400px,calc(100vw-2rem))] flex-col gap-2 no-print"
+      aria-live="polite"
+      onMouseEnter={onPause}
+      onMouseLeave={onResume}
+    >
       {toasts.map((toast) => {
         const tone = toast.tone === "info" ? "accent" : toast.tone;
         const Icon = toast.tone === "ok" ? CheckCircle : toast.tone === "bad" ? XCircle : toast.tone === "warn" ? AlertTriangle : Info;
         return (
-          <div key={toast.id} className="flex items-start gap-3 rounded-lg border border-line bg-surface-solid p-3 shadow-lg">
+          <div
+            key={toast.id}
+            data-leaving={toast.leaving ? "true" : undefined}
+            role={toast.tone === "bad" ? "alert" : "status"}
+            className={cx("toast glass-menu flex items-start gap-3 p-3", TOAST_TONE[toast.tone])}
+          >
             <span className={cx("mt-0.5 rounded-md border p-1", TONE_CLASSES[tone])}>
-              <Icon size={14} />
+              <Icon size={14} aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-fg">{toast.title}</p>
-              {toast.message && <p className="mt-0.5 break-words text-xs text-subtle">{toast.message}</p>}
+              {toast.message && <p className="mt-0.5 break-words text-xs text-muted">{toast.message}</p>}
             </div>
-            <button className="text-subtle hover:text-fg" onClick={() => onDismiss(toast.id)} aria-label="Ausblenden">
-              <X size={14} />
+            <button className="text-subtle transition-colors duration-150 hover:text-fg" onClick={() => onDismiss(toast.id)} aria-label="Ausblenden">
+              <X size={14} aria-hidden="true" />
             </button>
           </div>
         );

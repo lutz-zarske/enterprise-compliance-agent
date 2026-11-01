@@ -59,7 +59,11 @@ import { Chip, CopyValue, EmptyState, HashBadge, Kbd, Skeleton, Spinner, StatusI
 export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml" | "ledger";
 
 /** Scrollhoehe der Inspektor-Spalten: auf grossen Monitoren (1440p/2K) die volle Hoehe nutzen. */
-const PANEL_HEIGHT = "max-h-[600px] xl:max-h-[max(600px,calc(100vh-280px))] 2xl:max-h-[max(780px,calc(100vh-280px))]";
+/**
+ * Feste Workbench-Hoehe statt max-h: Beim Reiterwechsel bleibt die Spalte gleich hoch,
+ * die Action-Leiste darunter springt um keinen Pixel. Inhalte scrollen im Panel.
+ */
+const PANEL_HEIGHT = "h-[560px] min-h-[480px] xl:h-[max(560px,calc(100vh-320px))] 2xl:h-[max(720px,calc(100vh-320px))]";
 
 const SOURCE_LABELS: Record<string, string> = {
   rule_based: "Regelwerk (Regex)",
@@ -1032,7 +1036,10 @@ function ActionBar({ document, ledger, onSeal }: {
   const blocked = Boolean(document.scorecard?.release_blocked);
   const label = seal ? "Siegel erneuern" : blocked ? "Prüfentscheid siegeln" : "Beleg freigeben & siegeln";
   return (
-    <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-line bg-surface-solid px-4 py-3 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.5)]">
+    <div
+      data-tour="actions"
+      className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-line bg-surface-solid px-4 py-3 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.5)]"
+    >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <LedgerSeal ledger={ledger} />
         {seal && (
@@ -1166,7 +1173,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
 
   return (
     <EvidenceContext.Provider value={evidenceApi}>
-      <section className="card p-4" aria-label="Dokumenten-Inspektor">
+      <section className="card p-4" aria-label="Dokumenten-Inspektor" data-tour="inspector">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-fg">Dokumenten-Inspektor</h2>

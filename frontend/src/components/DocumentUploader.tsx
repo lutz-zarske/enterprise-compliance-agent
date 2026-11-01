@@ -38,6 +38,7 @@ export function DocumentUploader({ disabled, onUploaded, onError }: Props) {
 
   return (
     <div
+      data-tour="upload"
       onDragOver={(event) => {
         event.preventDefault();
         if (!disabled) setDragCount(event.dataTransfer.items?.length ?? 0);

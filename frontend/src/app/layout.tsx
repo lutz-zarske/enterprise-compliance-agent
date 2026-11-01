@@ -2,12 +2,20 @@ import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
+import { SplashAbbau } from "../components/SplashAbbau";
 import { ThemeProvider } from "../components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Compliance Agent | VO (EU) 2024/1689 · § 14 UStG",
+  title: "Enterprise Compliance Agent | VO (EU) 2024/1689 · § 14 UStG",
   description:
     "Revisionssichere Prüfung von Rechnungen und Verträgen: EU AI Act, § 14 UStG, DSGVO – lokal oder über ein Privacy Gateway.",
+  icons: {
+    icon: [
+      { url: "/compliance-logo.svg", type: "image/svg+xml" },
+      { url: "/compliance-logo.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: "/compliance-logo.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -30,6 +38,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="bg-bg text-fg antialiased">
+        {/* Kaltstart-Splash: deckt den ersten Paint ab, bis die Startdaten geladen sind (SplashAbbau). */}
+        <div id="eca-splash" className="eca-splash no-print" aria-hidden="true">
+          <div className="eca-splash-inhalt">
+            {/* eslint-disable-next-line @next/next/no-img-element -- vor der Hydration, ohne next/image-Laufzeit */}
+            <img src="/compliance-logo.png" alt="" width={48} height={48} className="eca-splash-logo" />
+            <span className="eca-splash-name">Enterprise Compliance Agent</span>
+            <span className="eca-splash-linie" />
+          </div>
+        </div>
+        <SplashAbbau />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

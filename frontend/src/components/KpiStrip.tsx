@@ -3,7 +3,8 @@
 import React from "react";
 import type { KpiResponse } from "../types/api";
 import { cx, TONE_TEXT, toneForBand, type Tone } from "../lib/format";
-import { Skeleton } from "./ui";
+import { Info } from "./icons";
+import { Skeleton, Tooltip } from "./ui";
 
 type EdgeTone = "pass" | "warn" | "fail" | "neutral";
 
@@ -27,26 +28,30 @@ const EDGE_FOR_TONE: Record<Tone, EdgeTone> = {
   neutral: "neutral",
 };
 
-function Kpi({ label, value, context, title, edge, valueClass, loading }: {
+function Kpi({ label, value, info, edge, valueClass, loading }: {
   label: string;
   value: React.ReactNode;
-  context: React.ReactNode;
-  title?: string;
+  /** Regulatorischer Kontext, im (i)-Tooltip statt als Fliesstext unter der Zahl. */
+  info: React.ReactNode;
   edge: EdgeTone;
   valueClass?: string;
   loading: boolean;
 }) {
   return (
-    <div className={cx("card px-4 py-3.5 hover:border-line-strong dark:hover:border-white/[0.16] 2xl:px-5 2xl:py-4", EDGE[edge])} title={title}>
-      <p className="label-caps">{label}</p>
+    <div className={cx("card relative flex h-16 items-center justify-between gap-3 px-4 hover:z-20 focus-within:z-20 hover:border-line-strong dark:hover:border-white/[0.16] 2xl:px-5", EDGE[edge])}>
+      <p className="label-caps flex min-w-0 items-center gap-1.5">
+        <span className="truncate">{label}</span>
+        <Tooltip content={info} side="bottom">
+          <button type="button" className="shrink-0 rounded-full text-subtle transition-colors duration-150 hover:text-fg" aria-label={`Kontext: ${label}`}>
+            <Info size={13} aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </p>
       {loading ? (
-        <Skeleton className="mt-2 h-7 w-20" />
+        <Skeleton className="h-6 w-16" />
       ) : (
-        <p className={cx("mt-1 font-mono text-2xl font-semibold leading-tight tabular-nums text-fg 2xl:text-[28px]", valueClass)}>
-          {value}
-        </p>
+        <p className={cx("shrink-0 font-mono text-xl font-semibold leading-none tabular-nums text-fg 2xl:text-2xl", valueClass)}>{value}</p>
       )}
-      <p className="mt-1 truncate text-xs text-subtle">{context}</p>
     </div>
   );
 }
@@ -66,20 +71,16 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         label="Geprüfte Dokumente"
         value={kpis ? kpis.documents_analyzed : "–"}
         edge={quote === 100 ? "pass" : "neutral"}
-        title={
-          kpis
-            ? `${kpis.documents_total} erfasst · ${kpis.sealed_count} versiegelt${kpis.reference_count ? ` · ${kpis.reference_count} Referenz-Audits` : ""}`
-            : undefined
-        }
-        context={
-          kpis ? (
-            <>
-              <span className="font-mono tabular-nums">{quote != null ? percent(quote) : "–"}</span> Prüfquote ·{" "}
-              <span className="font-mono tabular-nums">{kpis.sealed_count}</span> versiegelt · GoBD-verankert
-            </>
-          ) : (
-            "keine Verbindung"
-          )
+        info={
+          <>
+            <span className="block">Jede Analyse im SHA-256-Ledger · Siegel Ed25519-signiert · unveränderbare Historie (GoBD).</span>
+            {kpis && (
+              <span className="mt-1 block font-mono tabular-nums text-subtle">
+                Prüfquote {quote != null ? percent(quote) : "–"} · {kpis.documents_total} erfasst · {kpis.sealed_count} versiegelt
+                {kpis.reference_count ? ` · ${kpis.reference_count} Referenz-Audits` : ""}
+              </span>
+            )}
+          </>
         }
       />
       <Kpi
@@ -88,10 +89,10 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         value={kpis?.average_score != null ? <>{kpis.average_score}<span className="text-sm font-normal text-subtle"> / 100</span></> : "–"}
         valueClass={kpis?.average_score != null ? TONE_TEXT[avgTone] : undefined}
         edge={EDGE_FOR_TONE[avgTone]}
-        context={
+        info={
           <>
-            deterministisches Regelwerk{" "}
-            {kpis?.ruleset_version && <span className="font-mono tabular-nums">{kpis.ruleset_version}</span>}
+            Deterministisches Regelwerk nach § 14 UStG &amp; ZUGFeRD EN 16931
+            {kpis?.ruleset_version && <span className="mt-1 block font-mono tabular-nums text-subtle">Regelwerk {kpis.ruleset_version}</span>}
           </>
         }
       />
@@ -101,7 +102,7 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         value={kpis ? kpis.pii_elements_masked : "–"}
         valueClass="text-pii"
         edge="neutral"
-        context="maskiert gespeichert · Art. 25 DSGVO"
+        info="Vertraulichkeits-Gateway: Personen-, IBAN- und Kontaktdaten maskiert gespeichert gem. Art. 25 DSGVO."
       />
       <Kpi
         loading={showSkeleton}
@@ -109,15 +110,15 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         value={kpis ? percent(kpis.high_risk_quota) : "–"}
         valueClass={kpis ? (highRisk ? "text-warn" : "text-ok") : undefined}
         edge={kpis ? (highRisk ? "warn" : "pass") : "neutral"}
-        title="Anteil der Dokumente mit Hochrisiko-KI-System nach Art. 6 Abs. 2 i. V. m. Anhang III VO (EU) 2024/1689"
-        context={
-          kpis ? (
-            <>
-              <span className="font-mono tabular-nums">{kpis.high_risk_count}</span> × Anhang III · Pflichten ab 02.12.2027
-            </>
-          ) : (
-            "keine Verbindung"
-          )
+        info={
+          <>
+            Anteil der Dokumente mit Hochrisiko-Einstufung gem. VO (EU) 2024/1689 Anhang III.
+            {kpis && (
+              <span className="mt-1 block text-subtle">
+                <span className="font-mono tabular-nums">{kpis.high_risk_count}</span> × Anhang III · Pflichten ab 02.12.2027
+              </span>
+            )}
+          </>
         }
       />
     </section>
