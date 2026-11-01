@@ -135,7 +135,7 @@ function InferenceTab({ settings, open, onSaved, notify }: Pick<Props, "settings
 
   const fallbacks = settings?.fallbacks ?? [];
   const available: InferenceMode[] = (["anthropic", "openai", "gemini", "local"] as InferenceMode[]).filter(
-    (candidate) => candidate !== mode && !fallbacks.includes(candidate),
+    (candidate) => candidate !== settings?.inference_mode && !fallbacks.includes(candidate),
   );
 
   async function save(update: Parameters<typeof api.updateSettings>[0], test?: InferenceMode) {

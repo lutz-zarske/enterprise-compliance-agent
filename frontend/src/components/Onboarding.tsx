@@ -137,13 +137,16 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
 
   if (!open) return null;
 
-  const below = rect ? window.innerHeight - rect.bottom > 220 : true;
-  const cardStyle: React.CSSProperties = rect
-    ? {
-        left: Math.max(16, Math.min(rect.left, window.innerWidth - CARD_WIDTH - 16)),
-        ...(below ? { top: rect.bottom + PAD + 12 } : { bottom: window.innerHeight - rect.top + PAD + 12 }),
-      }
-    : { left: "50%", top: "50%", transform: "translate(-50%, -50%)" };
+  // Unter dem Ziel, sonst darueber; ist beides zu knapp (grosses Ziel), unten rechts ins Bild.
+  const room = 230;
+  const left = rect ? Math.max(16, Math.min(rect.left, window.innerWidth - CARD_WIDTH - 16)) : 0;
+  const cardStyle: React.CSSProperties = !rect
+    ? { left: "50%", top: "50%", transform: "translate(-50%, -50%)" }
+    : window.innerHeight - rect.bottom > room
+      ? { left, top: rect.bottom + PAD + 12 }
+      : rect.top > room
+        ? { left, bottom: window.innerHeight - rect.top + PAD + 12 }
+        : { right: 24, bottom: 24 };
 
   return createPortal(
     <>
