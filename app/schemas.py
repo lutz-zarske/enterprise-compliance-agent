@@ -820,6 +820,7 @@ class DocumentSummary(ApiModel):
     page_count: int | None = None
     doc_type: DocType | None = None
     sender: str | None = None
+    document_number: str | None = None
     document_date: date | None = None
     total_amount: Decimal | None = None
     currency: str | None = None

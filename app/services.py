@@ -1269,6 +1269,7 @@ def to_summary(record: DocumentRecord) -> DocumentSummary:
         page_count=record.page_count,
         doc_type=extraction.doc_type if extraction else None,
         sender=extraction.sender if extraction else None,
+        document_number=extraction.document_number if extraction else None,
         document_date=extraction.document_date if extraction else None,
         total_amount=extraction.total_amount if extraction else None,
         currency=extraction.currency if extraction else None,
