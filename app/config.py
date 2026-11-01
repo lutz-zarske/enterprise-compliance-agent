@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     rate_limit_settings_per_minute: int = Field(default=30, ge=0)
     rate_limit_vies_per_minute: int = Field(default=30, ge=0)
     rate_limit_redact_per_minute: int = Field(default=120, ge=0)
+    # DLP-Gateway: zusaetzliche Sperrbegriffe (kommagetrennt), auch aus der .env.
+    dlp_terms: str = Field(default="")
     # Release-Assistent: Git-Arbeitskopie (leer = Projektwurzel); Update nur von localhost.
     release_repo_dir: str = Field(default="")
     release_update_local_only: bool = Field(default=True)

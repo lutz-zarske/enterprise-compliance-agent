@@ -1226,7 +1226,7 @@ def _register_routes(application: FastAPI) -> None:
             Depends(rate_limit("redact", "rate_limit_redact_per_minute")),
         ],
     )
-    async def redact_text_endpoint(body: RedactRequest) -> RedactResponse:
+    async def redact_text_endpoint(request: Request, body: RedactRequest) -> RedactResponse:
         """Schwaerzt Zugangsdaten, vertrauliche Dateinamen, geschuetzte Parameter, Sperrbegriffe
         (``DLP_TERMS`` plus ``extra_terms``) und personenbezogene Daten zu ``[REDACTED_...]``.
 
@@ -1236,7 +1236,10 @@ def _register_routes(application: FastAPI) -> None:
             partial(
                 redact_text_dlp,
                 body.text,
-                extra_terms=body.extra_terms,
+                extra_terms=[
+                    *(term.strip() for term in request.app.state.settings.dlp_terms.split(",") if term.strip()),
+                    *body.extra_terms,
+                ],
                 redact_pii=body.redact_pii,
                 redact_amounts=body.redact_amounts,
             )

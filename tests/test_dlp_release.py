@@ -56,6 +56,14 @@ def test_redact_endpunkt(client: TestClient) -> None:
     assert "/api/v1/redact" in client.get("/openapi.json").json()["paths"]
 
 
+def test_sperrbegriffe_aus_den_settings(make_client) -> None:
+    """DLP_TERMS aus der .env landet ueber die Settings im Gateway, nicht nur ueber os.environ."""
+    client = make_client(dlp_terms="Projekt Nordlicht, Quartalsziel")
+    body = client.post("/api/v1/redact", json={"text": "Projekt Nordlicht erreicht das Quartalsziel."}).json()
+    assert "Nordlicht" not in body["redacted_text"] and "Quartalsziel" not in body["redacted_text"]
+    assert body["counts"]["CONFIDENTIAL_TERM"] == 2
+
+
 # --- Release-Assistent ---------------------------------------------------------------
 
 
