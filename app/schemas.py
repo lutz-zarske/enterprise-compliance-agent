@@ -1379,3 +1379,31 @@ class ErrorResponse(ApiModel):
     """Einheitliches Fehlerformat aller Endpunkte."""
 
     error: ErrorDetail
+
+
+class RedactRequest(ApiModel):
+    """Text fuer das DLP-Gateway (``POST /api/v1/redact``)."""
+
+    text: str = Field(min_length=1, max_length=200_000, description="Zu schwaerzender Text (wird nicht gespeichert).")
+    extra_terms: list[Annotated[str, Field(min_length=2, max_length=100)]] = Field(
+        default_factory=list, max_length=50, description="Zusaetzliche Sperrbegriffe nur fuer diese Anfrage."
+    )
+    redact_pii: bool = Field(default=True, description="Personenbezogene Daten schwaerzen (ohne Betraege).")
+    redact_amounts: bool = Field(default=False, description="Auch Geldbetraege schwaerzen.")
+
+
+class RedactResponse(ApiModel):
+    """Geschwaerzter Text und Treffer je Kategorie - nie die gefundenen Werte."""
+
+    redacted_text: str
+    counts: dict[str, int]
+    total: int
+    ruleset_version: str
+
+
+class ReleaseApplyRequest(ApiModel):
+    """Bestaetigung eines Release-Wechsels durch die Administration."""
+
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.4.1'.")
+    commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestaetigter Commit-Hash des Tags (40 Zeichen).")
+    admin_name: str = Field(min_length=2, max_length=120, description="Wer das Update freigibt.")

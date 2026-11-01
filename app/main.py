@@ -14,6 +14,7 @@ import logging
 import secrets
 import time
 import uuid
+from pathlib import Path as FsPath
 from functools import partial
 from urllib.parse import quote
 
@@ -32,7 +33,7 @@ from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.audit_ledger import NO_DOCUMENT_HASH, SYSTEM_DOCUMENT_ID, AuditEventType, AuditLedger
-from app.config import APP_TITLE, APP_VERSION, Settings, get_settings
+from app.config import APP_TITLE, APP_VERSION, BASE_DIR, Settings, get_settings
 from app.db import build_repository, utcnow
 from app.gobd_export import build_gobd_package
 from app.procedural_doc import build_procedural_doc
@@ -48,6 +49,9 @@ from app.providers import (
 from app.reporting import REPORT_CSP, build_report, render_html, render_markdown
 from app.runtime_settings import CLOUD_PROVIDERS, SUGGESTED_MODELS, InferenceMode, RuntimeSettingsStore
 from app.model_catalog import parse_catalog, suggest_upgrade
+from app.redact import RULESET_VERSION as DLP_RULESET
+from app.redact import redact as redact_text_dlp
+from app.release import ReleaseError, ReleaseManager
 from app.logging_config import configure_logging, normalize_request_id, request_id_var
 from app.rate_limit import RateLimitExceededError, TokenBucketLimiter, rate_limit
 from app.pdf_reader import PdfReadError
@@ -68,6 +72,9 @@ from app.schemas import (
     OllamaHealth,
     PinRequest,
     ArchiveRequest,
+    RedactRequest,
+    ReleaseApplyRequest,
+    RedactResponse,
     SettingsUpdate,
     SignOffRequest,
     UploadResponse,
@@ -78,6 +85,7 @@ from app.vies import ViesClient
 from app.services import (
     PROGRESS,
     DocumentNotAnalyzedError,
+    ReleaseUpdateRunningError,
     DocumentService,
     ServiceError,
     UploadTooLargeError,
@@ -164,6 +172,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.router = router
     app.state.signer = signer
     app.state.vies = vies
+    app.state.release = ReleaseManager(
+        FsPath(settings.release_repo_dir) if settings.release_repo_dir else BASE_DIR, APP_VERSION
+    )
     app.state.service = DocumentService(
         settings, repository, router, ledger=ledger, runtime=runtime, progress=PROGRESS
     )
@@ -604,6 +615,7 @@ def _register_routes(application: FastAPI) -> None:
         },
     )
     async def extract_document(
+        request: Request,
         document_id: str = Path(..., description="UUID des Dokuments."),
         service: DocumentService = Depends(get_service),
     ) -> ExtractionResponse:
@@ -618,6 +630,8 @@ def _register_routes(application: FastAPI) -> None:
         Der Aufruf ist wiederholbar; ein erneuter Aufruf ueberschreibt das
         vorherige Ergebnis.
         """
+        if request.app.state.release.busy:
+            raise ReleaseUpdateRunningError("Ein Release-Wechsel laeuft gerade - keine neue Analyse.")
         record = await service.require_document(document_id)
         outcome = await service.extract_and_audit(record)
         return ExtractionResponse(
@@ -1133,6 +1147,104 @@ def _register_routes(application: FastAPI) -> None:
         except LLMError as exc:
             return {"ok": False, "provider": mode.value, "model": model, "message": str(exc), "code": exc.code}
         return {"ok": True, "provider": mode.value, "model": model, "message": message}
+
+    # --- Release-Assistent -------------------------------------------------
+    @application.get(
+        "/api/system/release",
+        tags=["System"],
+        summary="Neue Version pruefen (git fetch --tags, SemVer, Tag-Signatur, Aenderungen)",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def release_status(
+        request: Request, fetch: bool = Query(default=True, description="false = ohne Netzwerk, nur lokale Tags.")
+    ) -> dict[str, object]:
+        manager: ReleaseManager = request.app.state.release
+        try:
+            return await anyio.to_thread.run_sync(partial(manager.status, fetch=fetch))
+        except ReleaseError as exc:
+            return {"git": False, "current_version": APP_VERSION, "update_available": False, "message": str(exc)}
+
+    @application.post(
+        "/api/system/release/apply",
+        tags=["System"],
+        summary="Release einspielen: nach Bestaetigung des Commit-Hashes, nur Fast-Forward, mit DB-Sicherung",
+        dependencies=[Depends(require_api_key)],
+        responses={403: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+    )
+    async def release_apply(request: Request, body: ReleaseApplyRequest) -> JSONResponse:
+        settings_: Settings = request.app.state.settings
+        manager: ReleaseManager = request.app.state.release
+        host = request.client.host if request.client else ""
+        try:
+            if settings_.release_update_local_only and host not in {"127.0.0.1", "::1", "localhost"}:
+                raise ReleaseError("local_only", "Updates nur direkt am Server (localhost) einspielen.", 403)
+            release = await anyio.to_thread.run_sync(
+                partial(manager.preflight, body.tag, body.commit, active_analyses=PROGRESS.active)
+            )
+            database_file = (
+                FsPath(settings_.resolved_database_url.removeprefix("sqlite:///")) if settings_.is_sqlite else None
+            )
+            backup = await anyio.to_thread.run_sync(
+                manager.backup_database, database_file, settings_.data_dir / "backups", body.tag
+            )
+            previous = await anyio.to_thread.run_sync(manager.fast_forward, body.tag)
+        except ReleaseError as exc:
+            return JSONResponse(
+                status_code=exc.status_code, content={"error": {"code": exc.code, "message": str(exc), "hint": None}}
+            )
+        ledger: AuditLedger = request.app.state.ledger
+        await ledger.append(
+            event_type=AuditEventType.RELEASE_UPDATE,
+            document_id=SYSTEM_DOCUMENT_ID,
+            sha256_hash=release["commit"],
+            model_name=f"release {release['tag']}",
+            prompt_hash=PROMPT_HASH,
+            result_summary=f"Release-Wechsel v{APP_VERSION} -> {release['tag']} durch {body.admin_name}",
+            compliance_score=None,
+            risk_tier="none",
+            details={
+                "admin_name": body.admin_name, "from_version": APP_VERSION, "from_commit": previous,
+                "to_tag": release["tag"], "to_commit": release["commit"], "tag_signature": release["signature"],
+                "database_backup": backup.name if backup else None,
+            },
+        )
+        return JSONResponse({
+            "ok": True, "from_commit": previous, "to_tag": release["tag"], "to_commit": release["commit"],
+            "database_backup": backup.name if backup else None, "restart_required": True,
+            "message": "Code aktualisiert. Bitte Stop_Compliance_Agent.bat und danach Start_Compliance_Agent.bat "
+                       "ausfuehren - der Starter aktualisiert Abhaengigkeiten und baut das Frontend neu.",
+        })
+
+    # --- Data-Loss-Prevention ----------------------------------------------
+    @application.post(
+        "/api/v1/redact",
+        response_model=RedactResponse,
+        tags=["Data Loss Prevention"],
+        summary="Text vor dem Versand an ein Cloud-LLM endgueltig schwaerzen (DLP-Gateway)",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("redact", "rate_limit_redact_per_minute")),
+        ],
+    )
+    async def redact_text_endpoint(body: RedactRequest) -> RedactResponse:
+        """Schwaerzt Zugangsdaten, vertrauliche Dateinamen, geschuetzte Parameter, Sperrbegriffe
+        (``DLP_TERMS`` plus ``extra_terms``) und personenbezogene Daten zu ``[REDACTED_...]``.
+
+        Endgueltig und ohne Mapping; der Text wird weder gespeichert noch geloggt.
+        """
+        result = await anyio.to_thread.run_sync(
+            partial(
+                redact_text_dlp,
+                body.text,
+                extra_terms=body.extra_terms,
+                redact_pii=body.redact_pii,
+                redact_amounts=body.redact_amounts,
+            )
+        )
+        logger.info("DLP-Gateway: %s Schwaerzungen", result.total, extra={"counts": result.counts})
+        return RedactResponse(
+            redacted_text=result.text, counts=result.counts, total=result.total, ruleset_version=DLP_RULESET
+        )
 
     # --- Audit-Ledger ------------------------------------------------------
     @application.get(

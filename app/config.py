@@ -17,7 +17,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Projektwurzel (…/enterprise-compliance-agent), unabhaengig vom CWD.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 APP_TITLE = "Enterprise KI-Compliance- & Dokumenten-Agent"
 
 
@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     rate_limit_copilot_per_minute: int = Field(default=20, ge=0)
     rate_limit_settings_per_minute: int = Field(default=30, ge=0)
     rate_limit_vies_per_minute: int = Field(default=30, ge=0)
+    rate_limit_redact_per_minute: int = Field(default=120, ge=0)
+    # Release-Assistent: Git-Arbeitskopie (leer = Projektwurzel); Update nur von localhost.
+    release_repo_dir: str = Field(default="")
+    release_update_local_only: bool = Field(default=True)
 
     # --- USt-IdNr.-Pruefung (VIES, Europaeische Kommission) ----------------
     vies_url: str = Field(

@@ -110,6 +110,14 @@ class UploadTooLargeError(UploadValidationError):
     status_code = 413
 
 
+class ReleaseUpdateRunningError(ServiceError):
+    """Waehrend eines Release-Wechsels startet keine neue Analyse."""
+
+    code = "release_update_running"
+    status_code = 409
+    hint = "Das Update dauert nur Sekunden - danach erneut pruefen."
+
+
 class DocumentNotFoundError(ServiceError):
     """Es existiert kein Dokument mit der angefragten ID."""
 
@@ -353,6 +361,11 @@ class ProgressTracker:
 
     def clear(self, document_id: str) -> None:
         self._stages.pop(document_id, None)
+
+    @property
+    def active(self) -> int:
+        """Anzahl laufender Analysen (sperrt den Release-Wechsel)."""
+        return len(self._stages)
 
 
 PROGRESS = ProgressTracker()
