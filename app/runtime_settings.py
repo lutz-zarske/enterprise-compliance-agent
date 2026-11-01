@@ -95,10 +95,25 @@ class RuntimeSnapshot:
     enforce_ustg_check: bool
     ai_act_escalation: bool
     keys: dict[str, str | None] = field(repr=False)
+    #: Ausweich-Provider in Reihenfolge (ohne den primaeren), z. B. ``[anthropic, local]``.
+    fallbacks: tuple[InferenceMode, ...] = ()
 
     @property
     def active_model(self) -> str:
         return self.models[self.inference_mode.value]
+
+    @property
+    def chain(self) -> tuple[InferenceMode, ...]:
+        """Primaerer Provider plus Ausweich-Provider, ohne Dubletten."""
+        return (self.inference_mode, *(mode for mode in self.fallbacks if mode is not self.inference_mode))
+
+    def fingerprint(self) -> dict[str, Any]:
+        """Was eine Bewertung beeinflusst: Provider-Kette und Modell je Stufe (fuer das Ledger)."""
+        return {
+            "inference_mode": self.inference_mode.value,
+            "model": self.active_model,
+            "fallbacks": [{"provider": mode.value, "model": self.models[mode.value]} for mode in self.chain[1:]],
+        }
 
     def key_for(self, provider: str) -> str | None:
         return self.keys.get(provider)
@@ -141,6 +156,7 @@ class RuntimeSettingsStore:
             "pii_strictness": self._coerce_strictness(settings.pii_strictness),
             "enforce_ustg_check": True,
             "ai_act_escalation": True,
+            "fallbacks": (),
             "keys": {
                 "gemini": settings.gemini_api_key,
                 "anthropic": settings.anthropic_api_key,
@@ -168,6 +184,8 @@ class RuntimeSettingsStore:
                     self._state[key] = self._coerce_mode(value)
                 elif key == "pii_strictness":
                     self._state[key] = self._coerce_strictness(value)
+                elif key == "fallbacks":
+                    self._state[key] = self._coerce_fallbacks(json.loads(value))
             except (InvalidToken, ValueError, TypeError):
                 logger.warning("Gespeicherte Einstellung '%s' nicht lesbar - Startwert bleibt.", key)
 
@@ -189,6 +207,19 @@ class RuntimeSettingsStore:
             return InferenceMode.LOCAL
 
     @staticmethod
+    def _coerce_fallbacks(values: list[str]) -> tuple[InferenceMode, ...]:
+        """Je Provider hoechstens einmal; Unbekanntes wird verworfen."""
+        seen: list[InferenceMode] = []
+        for value in values:
+            try:
+                mode = InferenceMode(value)
+            except ValueError:
+                continue
+            if mode not in seen:
+                seen.append(mode)
+        return tuple(seen)
+
+    @staticmethod
     def _coerce_strictness(value: str) -> PIIStrictness:
         try:
             return PIIStrictness(value)
@@ -204,6 +235,7 @@ class RuntimeSettingsStore:
                 enforce_ustg_check=self._state["enforce_ustg_check"],
                 ai_act_escalation=self._state["ai_act_escalation"],
                 keys=dict(self._state["keys"]),
+                fallbacks=self._state["fallbacks"],
             )
 
     def _update(self, changes: dict[str, Any]) -> RuntimeSnapshot:
@@ -215,6 +247,9 @@ class RuntimeSettingsStore:
             if changes.get("pii_strictness") is not None:
                 self._state["pii_strictness"] = PIIStrictness(changes["pii_strictness"])
                 persisted["pii_strictness"] = self._state["pii_strictness"].value
+            if changes.get("fallbacks") is not None:
+                self._state["fallbacks"] = self._coerce_fallbacks(changes["fallbacks"])
+                persisted["fallbacks"] = json.dumps([mode.value for mode in self._state["fallbacks"]])
             for flag in ("enforce_ustg_check", "ai_act_escalation"):
                 if changes.get(flag) is not None:
                     self._state[flag] = bool(changes[flag])
@@ -256,6 +291,7 @@ class RuntimeSettingsStore:
             "pii_strictness": snap.pii_strictness.value,
             "enforce_ustg_check": snap.enforce_ustg_check,
             "ai_act_escalation": snap.ai_act_escalation,
+            "fallbacks": [mode.value for mode in snap.chain[1:]],
             "has_gemini_key": bool(snap.keys.get("gemini")),
             "has_anthropic_key": bool(snap.keys.get("anthropic")),
             "has_openai_key": bool(snap.keys.get("openai")),

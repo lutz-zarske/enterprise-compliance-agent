@@ -66,6 +66,9 @@ _EVENT_LABELS = {
     AuditEventType.ANALYSIS: "Analyse",
     AuditEventType.SIGN_OFF: "Prüfer-Siegel",
     AuditEventType.HUMAN_OVERRIDE: "Übersteuerung (Art. 14)",
+    AuditEventType.PROVIDER_FAILOVER: "Provider-Wechsel (Ausfall)",
+    AuditEventType.ARCHIVE: "Archiviert",
+    AuditEventType.UNARCHIVE: "Aus dem Archiv geholt",
 }
 
 
@@ -241,7 +244,7 @@ def build_report(
                 "entry_hash": entry.entry_hash,
                 "actor": (entry.details or {}).get("auditor_name"),
                 "signed": entry.signature is not None,
-                "milestone": entry.event_type in AuditEventType.HUMAN,
+                "milestone": entry.event_type in AuditEventType.MILESTONES,
             }
             for entry in entries
         ],

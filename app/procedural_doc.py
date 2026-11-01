@@ -40,6 +40,9 @@ _EVENT_LABELS = {
     AuditEventType.ANALYSIS: "Analyse",
     AuditEventType.SIGN_OFF: "Prüfer-Siegel",
     AuditEventType.HUMAN_OVERRIDE: "Übersteuerung durch Prüfperson",
+    AuditEventType.PROVIDER_FAILOVER: "Provider-Wechsel nach Ausfall",
+    AuditEventType.ARCHIVE: "Archiviert",
+    AuditEventType.UNARCHIVE: "Aus dem Archiv geholt",
 }
 
 _PATH_LABELS = {

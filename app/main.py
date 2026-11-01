@@ -31,7 +31,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.audit_ledger import AuditLedger
+from app.audit_ledger import NO_DOCUMENT_HASH, SYSTEM_DOCUMENT_ID, AuditEventType, AuditLedger
 from app.config import APP_TITLE, APP_VERSION, Settings, get_settings
 from app.db import build_repository, utcnow
 from app.gobd_export import build_gobd_package
@@ -39,14 +39,15 @@ from app.procedural_doc import build_procedural_doc
 from app.procedural_doc import render_html as render_procedural_html
 from app.procedural_doc import render_markdown as render_procedural_markdown
 from app.inference import InferenceRouter
-from app.llm import LLMError, OllamaClient, OllamaUnavailableError
+from app.llm import PROMPT_HASH, LLMError, OllamaClient, OllamaUnavailableError
 from app.providers import (
     ProviderNotConfiguredError,
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
 from app.reporting import REPORT_CSP, build_report, render_html, render_markdown
-from app.runtime_settings import CLOUD_PROVIDERS, InferenceMode, RuntimeSettingsStore
+from app.runtime_settings import CLOUD_PROVIDERS, SUGGESTED_MODELS, InferenceMode, RuntimeSettingsStore
+from app.model_catalog import parse_catalog, suggest_upgrade
 from app.logging_config import configure_logging, normalize_request_id, request_id_var
 from app.rate_limit import RateLimitExceededError, TokenBucketLimiter, rate_limit
 from app.pdf_reader import PdfReadError
@@ -66,6 +67,7 @@ from app.schemas import (
     HealthResponse,
     OllamaHealth,
     PinRequest,
+    ArchiveRequest,
     SettingsUpdate,
     SignOffRequest,
     UploadResponse,
@@ -744,6 +746,21 @@ def _register_routes(application: FastAPI) -> None:
         updated = await service.set_pinned(record, body.pinned)
         return to_detail(updated, pii_level=service.pii_level)
 
+    @application.put(
+        "/documents/{document_id}/archive",
+        response_model=DocumentDetail,
+        tags=["Dokumente"],
+        summary="Beleg archivieren bzw. aus dem Archiv holen (nur ausblenden, nie loeschen)",
+        dependencies=[Depends(require_api_key)],
+        responses=error_responses,
+    )
+    async def archive_document(
+        body: ArchiveRequest, document_id: str = Path(...), service: DocumentService = Depends(get_service)
+    ) -> DocumentDetail:
+        record = await service.require_document(document_id)
+        updated = await service.set_archived(record, body.archived)
+        return to_detail(updated, pii_level=service.pii_level)
+
     @application.post(
         "/documents/{document_id}/sign-off",
         response_model=DocumentDetail,
@@ -979,19 +996,20 @@ def _register_routes(application: FastAPI) -> None:
     @application.post(
         "/api/demo/seed",
         tags=["Dashboard"],
-        summary="Drei Referenzdokumente fuer Live-Demos anlegen",
+        summary="Vier Musterbelege (oder einen davon) ohne Sprachmodell anlegen und pruefen",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("upload", "rate_limit_upload_per_minute")),
         ],
     )
-    async def demo_seed(service: DocumentService = Depends(get_service)) -> dict[str, object]:
-        """Idempotent: bereits vorhandene Referenzdokumente (gleiche SHA-256) werden wiederverwendet.
-
-        Die Analyse startet bewusst separat (``POST /documents/{id}/extract``),
-        damit das Frontend den Live-Stepper je Dokument zeigen kann.
-        """
-        items = await service.seed_demo()
+    async def demo_seed(
+        only: str | None = Query(
+            default=None, max_length=120, description="Nur diesen Musterbeleg laden (Dateiname), sonst alle vier."
+        ),
+        service: DocumentService = Depends(get_service),
+    ) -> dict[str, object]:
+        """Idempotent: bereits vorhandene Referenzdokumente (gleiche SHA-256) werden wiederverwendet."""
+        items = await service.seed_demo(only)
         return {"items": items, "created": sum(1 for item in items if item["created"])}
 
     # --- Einstellungen ------------------------------------------------------
@@ -1014,15 +1032,74 @@ def _register_routes(application: FastAPI) -> None:
         ],
     )
     async def update_runtime_settings(
-        body: SettingsUpdate, runtime: RuntimeSettingsStore = Depends(get_runtime)
+        request: Request, body: SettingsUpdate, runtime: RuntimeSettingsStore = Depends(get_runtime)
     ) -> dict[str, object]:
-        """API-Keys werden Fernet-verschluesselt gespeichert und nur maskiert zurueckgegeben."""
-        await runtime.update(body.model_dump(exclude_none=True))
+        """API-Keys werden Fernet-verschluesselt gespeichert und nur maskiert zurueckgegeben.
+
+        Aendert sich der Provider, ein Modell der Kette oder die Ausweich-Reihenfolge, entsteht ein
+        signierter ``model_change``-Eintrag im Ledger (GoBD-Reproduzierbarkeit: kein stiller Modellwechsel).
+        """
+        before = runtime.snapshot().fingerprint()
+        after = (await runtime.update(body.model_dump(exclude_none=True))).fingerprint()
         logger.info(
             "Einstellungen geaendert: %s",
             ", ".join(sorted(body.model_dump(exclude_none=True).keys())),
         )
+        if after != before:
+            ledger: AuditLedger = request.app.state.ledger
+            await ledger.append(
+                event_type=AuditEventType.MODEL_CHANGE,
+                document_id=SYSTEM_DOCUMENT_ID,
+                sha256_hash=NO_DOCUMENT_HASH,
+                model_name=after["model"],
+                prompt_hash=PROMPT_HASH,
+                result_summary=(
+                    f"Modellwechsel {before['inference_mode']}/{before['model']} -> "
+                    f"{after['inference_mode']}/{after['model']}"
+                ),
+                compliance_score=None,
+                risk_tier="none",
+                details={"before": before, "after": after},
+            )
         return runtime.public_view()
+
+    @application.get(
+        "/api/settings/models",
+        tags=["Einstellungen"],
+        summary="Verfuegbare Modelle eines Providers, neueste zuerst, mit Upgrade-Vorschlag",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
+    )
+    async def list_provider_models(
+        request: Request,
+        provider: Literal["local", "gemini", "anthropic", "openai"] = Query(...),
+        runtime: RuntimeSettingsStore = Depends(get_runtime),
+        llm: OllamaClient = Depends(get_llm),
+    ) -> dict[str, object]:
+        """Liest die Modell-Liste ueber die API des Providers (ohne Dokumentinhalt).
+
+        Ohne Key oder bei einem Fehler kommt die eingebaute Vorschlagsliste zurueck (``source=suggested``).
+        Ein Upgrade wird nur vorgeschlagen, nie automatisch uebernommen.
+        """
+        snap = runtime.snapshot()
+        current = snap.models[provider]
+        fallback = {"provider": provider, "current": current, "models": SUGGESTED_MODELS[provider],
+                    "upgrade": None, "source": "suggested"}
+        try:
+            if provider == "local":
+                names = await llm.list_models()
+                return {**fallback, "models": sorted(names), "source": "api"}
+            if not snap.key_for(provider):
+                return {**fallback, "message": "Kein API-Key hinterlegt - Vorschlagsliste."}
+            router: InferenceRouter = request.app.state.router
+            client = router.cloud_client(InferenceMode(provider), snap)
+            catalog = parse_catalog(provider, await client.fetch_catalog())
+        except LLMError as exc:
+            return {**fallback, "message": str(exc)}
+        return {**fallback, "models": [model.id for model in catalog] or SUGGESTED_MODELS[provider],
+                "upgrade": suggest_upgrade(current, catalog), "source": "api"}
 
     @application.post(
         "/api/settings/test-connection",

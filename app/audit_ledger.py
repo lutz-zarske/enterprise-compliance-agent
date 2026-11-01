@@ -61,9 +61,24 @@ class AuditEventType:
     ANALYSIS = "analysis"
     SIGN_OFF = "sign_off"
     HUMAN_OVERRIDE = "human_override"
+    #: Seit v2.4: Provider-Wechsel bei Ausfall (maschinell), Modellwechsel,
+    #: Archivierung und Release-Wechsel (jeweils durch eine Person ausgeloest).
+    PROVIDER_FAILOVER = "provider_failover"
+    MODEL_CHANGE = "model_change"
+    ARCHIVE = "archive"
+    UNARCHIVE = "unarchive"
+    RELEASE_UPDATE = "release_update"
 
+    #: Pruefer-Entscheidungen - erscheinen im Zertifikat als Meilenstein.
+    MILESTONES = frozenset({SIGN_OFF, HUMAN_OVERRIDE})
     #: Ereignisse natuerlicher Personen - werden zusaetzlich Ed25519-signiert.
-    HUMAN = frozenset({SIGN_OFF, HUMAN_OVERRIDE})
+    HUMAN = frozenset({SIGN_OFF, HUMAN_OVERRIDE, MODEL_CHANGE, ARCHIVE, UNARCHIVE, RELEASE_UPDATE})
+
+
+#: ``document_id`` fuer Ereignisse ohne Belegbezug (Modell- und Release-Wechsel).
+SYSTEM_DOCUMENT_ID = "system"
+#: Platzhalter fuer ``sha256_hash`` ohne Belegbezug.
+NO_DOCUMENT_HASH = "0" * 64
 
 
 #: Schluessel der Signatur innerhalb von ``details``.

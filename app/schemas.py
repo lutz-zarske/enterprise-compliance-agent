@@ -783,6 +783,10 @@ class ComplianceAudit(ApiModel):
         default=None,
         description="Bei Cloud-Inferenz: Anzahl pseudonymisierter Werte je Kategorie (ohne Klartext).",
     )
+    failover: list[dict[str, str]] | None = Field(
+        default=None,
+        description="Provider-Wechsel waehrend der Analyse (Ausfall, 429, Zeitueberschreitung), je Wechsel im Ledger.",
+    )
 
     @computed_field(description="Kurzfazit fuer Uebersichtslisten und Dashboards.")  # type: ignore[prop-decorator]
     @property
@@ -827,6 +831,7 @@ class DocumentSummary(ApiModel):
     pii_findings: int | None = None
     sealed: bool = False
     pinned: bool = False
+    archived: bool = False
     provider: str | None = None
     einvoice_profile: str | None = Field(
         default=None, description="Profil der strukturierten E-Rechnung (z. B. 'XRECHNUNG 3.0'), sonst null."
@@ -869,6 +874,8 @@ class DocumentDetail(ApiModel):
         default=None, description="EN-16931-Datensatz (eingebettetes oder reines XML), sonst null."
     )
     pinned: bool = False
+    archived: bool = False
+    archived_at: datetime | None = None
     provider: str | None = None
     error: str | None = None
     created_at: datetime
@@ -1237,6 +1244,11 @@ class SettingsUpdate(ApiModel):
     pii_strictness: Literal["strict", "standard", "audit_only"] | None = None
     enforce_ustg_check: bool | None = None
     ai_act_escalation: bool | None = None
+    fallbacks: list[InferenceModeLiteral] | None = Field(
+        default=None,
+        max_length=3,
+        description="Ausweich-Provider in Reihenfolge, je Provider einmal (z. B. ['anthropic', 'local']).",
+    )
 
 
 class ConnectionTestRequest(ApiModel):
@@ -1245,6 +1257,10 @@ class ConnectionTestRequest(ApiModel):
 
 class PinRequest(ApiModel):
     pinned: bool
+
+
+class ArchiveRequest(ApiModel):
+    archived: bool
 
 
 class VatVerifyRequest(ApiModel):
