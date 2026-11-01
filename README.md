@@ -17,14 +17,14 @@ Zustand.
 | **Frontend** | Next.js 15 · React 19 · Tailwind CSS 4 · TypeScript (strict) |
 | **Inferenz** | Ollama `qwen2.5:14b-instruct` (Default) · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein LangChain |
 | **Persistenz** | SQLite (Default) · PostgreSQL über `DATABASE_URL` |
-| **Qualität** | 279 Pytest-Tests (ca. 20 s, ohne laufendes LLM, ohne Netz) · ESLint · `next build` · CI für Backend, Frontend, Docker |
+| **Qualität** | 296 Pytest-Tests (ca. 20 s, ohne laufendes LLM, ohne Netz) · ESLint · `next build` · CI für Backend, Frontend, Docker |
 | **Betrieb** | Ein-Klick-Start für Windows · Docker Compose (API `:8001`, Frontend `:3001`) · Non-Root-Container, Healthchecks |
 
-![Dashboard: KI-Recruiting-Vertrag, EU AI Act Anhang III Nr. 4, Score auf 59 gedeckelt](docs/screenshots/dashboard-hochrisiko-dark.png)
+![Dashboard v2.4: Glas-Kopfzeile mit Logo, kompakte KPI-Leiste, Dokumentliste mit Status-Badges, Steuerfalle mit Score 45](docs/screenshots/v24-dashboard.png)
 
-| Prüfzertifikat (A4, druckfertig) | Compliance Copilot |
+| Prüfzertifikat (A4, druckfertig) | Compliance-Copilot |
 |---|---|
-| ![Prüfzertifikat mit Hash-Kette und Siegel](docs/screenshots/pruefzertifikat.png) | ![Copilot mit Zeilen- und Normverweisen](docs/screenshots/copilot.png) |
+| ![Prüfzertifikat mit Hash-Kette und Siegel](docs/screenshots/pruefzertifikat.png) | ![Compliance-Copilot mit Zeilen- und Normverweisen](docs/screenshots/copilot.png) |
 | **E-Rechnung: XML-Datensatz (EN 16931)** | **Export-Center mit Prüfdatenpaket (ZIP)** |
 | ![ZUGFeRD-Rechnung: Business Terms aus dem XML, Abgleich mit dem PDF-Bildteil, Leitweg-ID](docs/screenshots/e-rechnung-xml-datensatz.png) | ![Export-Center: ZIP-Prüfdatenpaket, Zertifikat, JSON, Memo, Siegel](docs/screenshots/export-siegel.png) |
 | **Übersteuerung durch die Prüfperson (Art. 14)** | **Ledger-Historie mit Ed25519-Status** |
@@ -51,7 +51,9 @@ Voraussetzung: Python 3.11+ und Node.js 20+.
 
 **Docker:** `docker compose up --build` → <http://localhost:3001>
 
-Dann oben rechts **„Musterdaten laden“** klicken. Das Dashboard ist sofort
+Beim ersten Start begrüßt ein Willkommens-Dialog mit einer einminütigen Tour
+(jederzeit erneut über `?` oben rechts). Dann oben rechts **„Musterdaten“**
+öffnen und einen Beleg oder alle vier laden. Das Dashboard ist sofort
 vollständig – **auch ohne installiertes Sprachmodell**. Mit laufendem Ollama
 oder hinterlegtem Cloud-Key lässt sich jedes Musterdokument über
 „Live neu prüfen“ echt analysieren.
@@ -110,15 +112,18 @@ Rechtsquellen: [`docs/RECHTSQUELLEN.md`](docs/RECHTSQUELLEN.md).
 | **EU AI Act** | Risikostufe (Art. 5 / Anhang III / Art. 50 / minimal), automatische Eskalation bei belegter Anhang-III-Kategorie, Artikel-Pflichtenliste |
 | **DSGVO** | LLM-Befund + Regex-Zweitmeinung, Art.-9/10-Erkennung, Maskierungszwang vor dem Speichern, drei Schwärzungsstufen für die Textansicht |
 | **Compliance-Score** | Deterministisch 0–100, vier Kacheln, Deckelung bei Hochrisiko, Freigabeempfehlung, Ein-Satz-Risikoerklärung je Abzug |
-| **Musterdaten** | Drei PDF-Referenzdokumente mit vorberechneter KI-Antwort plus eine hybride ZUGFeRD-Rechnung an eine Kommune, die live aus dem XML geprüft wird – sofort nutzbar ohne Modell |
+| **Musterdaten** | Drei PDF-Referenzdokumente mit vorberechneter KI-Antwort plus eine hybride ZUGFeRD-Rechnung an eine Kommune, die live aus dem XML geprüft wird – einzeln oder alle vier, mit Rechtsfakten-Vorschau, sofort nutzbar ohne Modell |
 | **Prüfprotokoll** | Append-only-Tabelle `audit_trails` mit SHA-256-Hash-Kette, DB-Trigger gegen UPDATE/DELETE, Kettenprüfung per API |
 | **Human Oversight** | Prüfer-Siegel und **Übersteuerung der KI-Einstufung** (Art. 14 Abs. 4 lit. d AI Act) mit Begründung, Rechtsnorm und Score vorher/nachher; beide als Ed25519-signierte Ledger-Einträge. Eine Übersteuerung hebt ein bestehendes Siegel auf, eine erneute Analyse verwirft Übersteuerung und Siegel |
 | **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 in vier Teilen aus dem echten Systemzustand (Version, Regelwerk, Prompt-Hash, Schlüssel-Fingerabdruck, Kettenstatus) plus Anhang je Beleg; HTML (A4) und Markdown, auch im Prüfdatenpaket |
 | **Aufbewahrung** | Aufbewahrungsende je Rechnung nach BEG IV (8 Jahre ab Ende des Kalenderjahres, Finanzsektor 10 Jahre) in Scorecard, Zertifikat und Tooltip |
 | **Prüfzertifikat** | A4-HTML (druckfertig, CSP-gehärtet), Markdown-Memo, JSON für ERP-Archivierung; Übersteuerungen als Prüfer-Meilenstein und vollständiger Ledger-Auszug |
 | **Prüfdatenpaket (ZIP)** | Originalbeleg, XML-Datensatz, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und `manifest.json` mit SHA-256 je Datei und Ed25519-Systemsignatur; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
-| **Multi-Provider** | Ollama / Gemini / Claude / GPT zur Laufzeit umschaltbar; API-Keys Fernet-verschlüsselt gespeichert, nur maskiert ausgeliefert |
-| **Compliance Copilot** | Dokumentbezogene Fragen, geerdet auf nummeriertem Text und Prüfergebnis, mit Zeilen- und Normverweisen |
+| **Multi-Provider** | Ollama / Gemini / Claude / GPT zur Laufzeit umschaltbar; API-Keys Fernet-verschlüsselt gespeichert, nur maskiert ausgeliefert. **Ausweich-Kaskade** (Primär → Backup → Lokal) bei 429, Serverfehler oder Zeitüberschreitung, jeder Wechsel im Ledger. Modell-Liste über die API des Anbieters mit Upgrade-Vorschlag – nie stiller Wechsel |
+| **Compliance-Copilot** | Dokumentbezogene Fragen, geerdet auf nummeriertem Text und Prüfergebnis, mit Zeilen- und Normverweisen; **Korrekturanforderung** an den Lieferanten als editierbarer Entwurf aus den Mängeln nach § 14 UStG |
+| **Archiv** | Belege ausblenden statt löschen (GoBD), Filter „Archiviert“, jeder Wechsel als signierter Ledger-Eintrag |
+| **DLP-Gateway** | `POST /api/v1/redact`: endgültige Schwärzung von Zugangsdaten, vertraulichen Dateinamen, geschützten Parametern, Sperrbegriffen und PII – für andere Anwendungen vor jedem Cloud-LLM-Aufruf |
+| **Release-Assistent** | Neue Version über `git fetch --tags` prüfen, Einspielen nur nach Bestätigung des Commit-Hashes als Fast-Forward, mit Datenbanksicherung und Ledger-Eintrag |
 | **Betrieb** | JSON-Logs mit `request_id`, PII-Filter im Log, Token-Bucket-Rate-Limit, Mehrfach-Upload per Drag & Drop, Ledger-Integritätsanzeige, KPI-Endpunkt |
 
 ---
@@ -234,6 +239,9 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 
 | | |
 |---|---|
+| ![Musterdaten-Menü](docs/screenshots/v24-musterdaten.png) | **Musterdaten-Menü (v2.4)** – jeder Referenzbeleg einzeln oder alle vier; das Auge zeigt vorab die Rechtsfakten (hier: Anhang III Nr. 4, Deckel 59, Stichtag 02.12.2027). |
+| ![Spotlight-Tour](docs/screenshots/v24-tour.png) | **Spotlight-Tour (v2.4)** – vier Schritte (Upload, Musterdaten, Inspektor, Action-Leiste), abgedunkelter, weichgezeichneter Hintergrund mit Aussparung; `Esc` oder Klick ins Dunkle beendet. |
+| ![Korrekturanforderung](docs/screenshots/v24-korrekturanforderung.png) | **Korrekturanforderung (v2.4)** – der Compliance-Copilot erzeugt aus den Mängeln einen editierbaren Entwurf an den Lieferanten, ohne Sprachmodell; kopieren oder als `.txt` speichern. |
 | ![Fundstellen-Kopplung](docs/screenshots/workbench-fundstellen.png) | **Prüf-Workbench (v2.3)** – Kriterium „Zulässiger Umsatzsteuersatz“ angeklickt: Die Zeile „MwSt. 16 %“ ist im Beleg rot umrandet (Verstoß), alle PII-Fundstellen einheitlich Indigo. Unten die Action-Leiste mit „GoBD & Ledger intakt“, Aufbewahrungsende und „Prüfentscheid siegeln“ (`Strg` + `Enter`). |
 | ![Start ohne Modell](docs/screenshots/start-ohne-modell.png) | **Start ohne Sprachmodell** – das Banner bietet direkt die Inferenz-Einstellungen und den Befehl `ollama serve` an und erklärt, dass die Pseudonymisierung lokal im Backend läuft. |
 | ![Steuerfalle](docs/screenshots/steuerfalle-dark.png) | **Fehlerhafte Rechnung (45/100)** – fehlende USt-IdNr. (−20), fehlendes Leistungsdatum (−10), ungültige IBAN (−15), Steuersatz 16 % (−10). Der Tooltip an der Kachel erklärt jeden Abzug in einem Satz. |
@@ -244,17 +252,13 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 | ![Übersteuerung](docs/screenshots/human-override.png) | **Übersteuerung der KI-Einstufung** – Tab „AI Act“, Schaltfläche „Einstufung übersteuern“: neue Risikostufe, Rechtsnorm (Vorschläge zu Art. 6 Abs. 3 lit. a–d), Begründung ab 20 Zeichen, Prüfperson. Der Score wird neu berechnet (hier 59 → 95), der Hinweis oben im Tab zeigt den Hash des signierten Ledger-Eintrags. |
 | ![Ledger-Historie](docs/screenshots/ledger-historie.png) | **Ledger-Historie** – alle Einträge des Belegs, Prüfer-Meilensteine hervorgehoben, Ed25519-Status je Prüfer-Eintrag („Ed25519 gültig“ bzw. „Signatur ungültig“; maschinelle Einträge sind unsigniert), Hashes mit Kopierschaltfläche. |
 | ![Verfahrensdokumentation](docs/screenshots/verfahrensdokumentation.png) | **GoBD-Verfahrensdokumentation** – Entwurf in vier Teilen; vom Unternehmen zu ergänzende Stellen sind markiert. A4-druckfertig, als PDF speicherbar. |
-| ![Einstellungen](docs/screenshots/einstellungen.png) | **Einstellungen** – Provider, Modell, API-Key (maskiert), Privacy-Gateway-Hinweis, PII-Strenge, Toggles, X-API-Key. |
+| ![Einstellungen](docs/screenshots/einstellungen.png) | **Einstellungen (v2.4)** – Lokal/Cloud, Anbieter, Hauptmodell aus der Modell-Liste des Anbieters, API-Key mit `(i)`-Hinweis, einklappbares Privacy Gateway, Ausweich-Kaskade mit „Weiteren Schlüssel / Fallback hinzufügen“. Weitere Reiter: Compliance & Audit-Strenge, System & Verbindung, Über & Regulatorik (Version, Release-Assistent). |
 | ![Mobil](docs/screenshots/mobil.png) | **Mobil (390 px)** – ohne horizontales Scrollen. |
 
 ### Prüf-Workbench (v2.3)
 
-* **Kopfzeile** nur mit Titel und Versions-Badge, einem ruhigen
-  Betriebsstatus (Tooltip: Ledger-Integrität, nachgerechnete und signierte
-  Einträge, Kopf-Hash), „Musterdaten laden“, Modell-Pille (Lokal/Cloud) und
-  Einstellungen. Das Farbschema (Dunkel/Hell) liegt in den Einstellungen unter
-  „Darstellung“. Daten laden beim Zurückkehren ins Fenster neu – einen
-  Aktualisieren-Knopf gibt es nicht mehr.
+* **Kopfzeile** (seit v2.4 siehe unten). Daten laden beim Zurückkehren ins
+  Fenster neu – einen Aktualisieren-Knopf gibt es nicht.
 * **Breitbild:** Inhalt bis 1920 px, ab 2xl bis 2400 px; die Dokument-Queue ist
   340 bzw. 400 px breit, der Rest gehört der Workbench. Auf WQHD hat jede
   Inspektor-Spalte über 900 px.
@@ -274,12 +278,43 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 * Scrollbereiche reservieren ihre Scrollbalken-Spur (`scrollbar-gutter: stable`),
   der Balken überdeckt nie Status-Chips oder Text.
 
+### Enterprise Refinement (v2.4)
+
+* **Logo & Kaltstart-Splash:** eigenes Siegel-Logo (`frontend/public/compliance-logo*.png|svg`)
+  in Kopfzeile, Favicon und Splash. Der Splash steht im Server-HTML, deckt den
+  ersten Paint ab und blendet weich aus, sobald die Startdaten da sind
+  (spätestens nach 2,5 s) – kein Springen beim Kaltstart.
+* **Kopfzeile (Liquid Glass):** `backdrop-blur-xl backdrop-saturate-150` auf
+  Slate-950/60; Belegtext schimmert beim Scrollen weichgezeichnet durch. Status
+  nur bei Bedarf (Analyse läuft, Eingeschränkt, Offline, Ledger-Befund), sonst
+  Ruhe. Rechts: Release-Pille (nur bei neuer Version), Musterdaten-Menü,
+  Modell-Pille, `?` (Tour), Sonne/Mond, Einstellungen. Die Versionsnummer steht
+  unter Einstellungen › Über & Regulatorik.
+* **Feste Workbench-Höhe:** Inspektor-Spalten `h-[560px]` bzw.
+  `calc(100vh − 320px)`; die Action-Leiste bleibt beim Reiterwechsel stehen
+  (gemessen: identische Position für alle Reiter).
+* **KPI-Leiste 64 px:** Zahl und Titel, Kontext im `(i)`-Tooltip.
+* **Dokumentliste:** Glas-Dropdown für die Sortierung (Portal, Pfeiltasten,
+  Enter, Escape), Filter `Alle` · `Offen` · `Versiegelt` · `Archiviert`
+  (+ `Hochrisiko`) mit Zählern, Archivieren neben dem Pin, Status-Badges
+  „Versiegelt (Ed25519)“, „In Prüfung“, „Vorsteuer gefährdet“ (Rechnung mit
+  Revisionssperre), „Konformität offen“ (Anhang III). Zeile 1 Belegnummer,
+  Zeile 2 Belegart · Lieferant · Betrag · Datum – ganze Angaben brechen um,
+  nichts wird mitten im Wort abgeschnitten.
+* **Toasts** oben rechts, Erfolg/Hinweis 3 s, Warnung/Fehler 6 s, Überfahren
+  pausiert; bei Ausweich-Wechsel: „Fallback auf Modell … ausgelöst“.
+* **Dialoge** mit `backdrop-blur-md`, neutrale Platzhalter („Prüferkürzel oder
+  Name eingeben…“).
+
 | Taste | Wirkung |
 |---|---|
-| `J` / `K` | Nächstes / vorheriges Dokument (in Filter- und Sortierreihenfolge; nicht beim Tippen) |
-| `↑` / `↓`, `Pos1` / `Ende` | Dasselbe, wenn die Dokumentliste den Fokus hat |
+| `J` / `K`, `↓` / `↑` | Nächstes / vorheriges Dokument (in Filter- und Sortierreihenfolge; Pfeiltasten, solange kein anderes Bedienelement den Fokus hat) |
+| `1` – `6` | Reiter § 14 UStG · AI Act · PII · Kerndaten · XML (nur E-Rechnung) · Ledger |
 | `Strg` + `Enter` (macOS `⌘` + `Enter`) | Siegel-Dialog öffnen; im Dialog versiegeln |
-| `Esc` | Dialog, Copilot oder gepinnte Fundstelle schließen |
+| `?` | Übersicht der Tastaturkürzel |
+| `Esc` | Dialog, Menü, Tour, Copilot oder gepinnte Fundstelle schließen |
+
+Kürzel greifen nie, solange ein Eingabefeld den Fokus hat oder ein Dialog offen ist.
 
 Designprinzipien: semantische Farbtokens (Grün = konform, Bernstein = Prüfung,
 Rose = Verstoß/Hochrisiko, Indigo = Datenschutz), WCAG-AA-Kontraste in beiden
@@ -313,6 +348,7 @@ Ersatzdaten angezeigt.**
 | `GET` | `/documents/{id}/progress` | Aktuelle Pipeline-Stufe |
 | `GET` | `/documents` · `/documents/{id}` | Liste (Pins zuerst) · Detail inkl. geschwärzter Textansicht |
 | `PUT` | `/documents/{id}/pin` | Anpinnen |
+| `PUT` | `/documents/{id}/archive` | Archivieren bzw. zurückholen (nur ausblenden, signierter Ledger-Eintrag) |
 | `POST` | `/documents/{id}/sign-off` | Prüfer-Siegel (Art. 14), Ed25519-signierter Ledger-Eintrag |
 | `POST` | `/api/documents/{id}/override` | Übersteuerung der KI-Einstufung (Art. 14 Abs. 4 lit. d): Score neu, signierter Ledger-Eintrag |
 | `GET` | `/documents/{id}/report?format=html\|markdown\|json` | Prüfzertifikat |
@@ -322,9 +358,12 @@ Ersatzdaten angezeigt.**
 | `POST` | `/api/vat/verify` | USt-IdNr. live bei VIES (EU-Kommission) prüfen: `valid`, Name, Behördenzeitstempel; nicht gespeichert |
 | `GET` | `/api/audit/trail` · `/api/audit/verify` · `/api/audit/head` | Ledger lesen (mit `signature_status` je Eintrag), Kette und Signaturen prüfen, Kopf-Hash zur Verankerung |
 | `GET` | `/api/audit/signing-key` | Öffentlicher Schlüssel und Fingerabdruck der Systemsignatur |
-| `GET`/`POST` | `/api/settings` · `/api/settings/test-connection` | Laufzeit-Einstellungen (Keys maskiert), Verbindungstest |
+| `GET`/`POST` | `/api/settings` · `/api/settings/test-connection` | Laufzeit-Einstellungen inkl. Ausweich-Kaskade (`fallbacks`), Keys maskiert; Verbindungstest |
+| `GET` | `/api/settings/models?provider=…` | Modell-Liste des Anbieters (neueste zuerst) und Upgrade-Vorschlag derselben Klasse |
+| `GET` · `POST` | `/api/system/release` · `/api/system/release/apply` | Neue Version prüfen (git fetch --tags, Signatur, Änderungen) · einspielen (Commit-Hash bestätigen, Fast-Forward, DB-Sicherung, nur localhost) |
+| `POST` | `/api/v1/redact` | DLP-Gateway: Text vor einem Cloud-LLM-Aufruf endgültig schwärzen |
 | `GET` | `/api/dashboard/kpis` | Portfolio-Kennzahlen |
-| `POST` | `/api/demo/seed` | Vier Musterdokumente, ohne Inferenz analysiert (idempotent, überschreibt keine Live-Audits) |
+| `POST` | `/api/demo/seed?only=<Datei>` | Vier Musterdokumente (oder eines), ohne Inferenz analysiert (idempotent, überschreibt keine Live-Audits) |
 
 ```bash
 API=http://localhost:8001
@@ -372,6 +411,17 @@ curl -s -X POST $API/api/settings -H "Content-Type: application/json" \
 
 curl -s -X POST $API/documents/$ID/copilot -H "Content-Type: application/json" \
      -d '{"question":"Welche Pflichtangaben fehlen?"}' | jq -r .answer
+
+# Ausweich-Kaskade: Gemini primär, bei Ausfall Claude, zuletzt lokal
+curl -s -X POST $API/api/settings -H "Content-Type: application/json" \
+     -d '{"inference_mode":"gemini","fallbacks":["anthropic","local"]}' | jq .fallbacks
+
+# DLP-Gateway (z. B. vor einem Cloud-Aufruf)
+curl -s -X POST $API/api/v1/redact -H "Content-Type: application/json" \
+     -d '{"text":"Siehe pricing_algorithm.py, threshold=0.73, Projekt Nordlicht","extra_terms":["Nordlicht"]}' \
+     | jq '{redacted_text, counts}'
+
+curl -s "$API/api/system/release?fetch=true" | jq '{current_version, update_available, latest: .latest.tag}'
 ```
 
 Ist `API_KEY` gesetzt, verlangen alle Endpunkte außer `/health` den Header
@@ -382,7 +432,10 @@ Fehlerformat (einheitlich): `{"error": {"code", "message", "hint"}}`. Wichtige
 Codes: `invalid_upload` 415 · `file_too_large` 413 · `no_text_layer` 422 ·
 `invalid_einvoice` 422 · `override_without_change` 422 · `document_not_analyzed` 409 · `original_missing` 410 · `rate_limited` 429 (+ `Retry-After`) ·
 `provider_not_configured` 400 · `provider_auth_failed` 502 ·
-`ollama_unavailable`/`provider_unavailable` 503 · `provider_timeout` 504.
+`ollama_unavailable`/`provider_unavailable` 503 · `provider_timeout` 504 ·
+`release_update_running` 409. Der Release-Assistent meldet zusätzlich
+`local_only` 403, `hash_mismatch`, `dirty_worktree`, `not_fast_forward`,
+`analysis_running`, `signature_invalid` (je 409).
 
 ---
 
@@ -539,6 +592,14 @@ Jede Analyse, jedes Siegel und jede Übersteuerung schreibt einen Eintrag in `au
   auf – es sei denn, er hat auch den privaten Schlüssel. Maschinelle Einträge
   (`analysis`) bleiben unsigniert.
 
+Seit v2.4 kommen hinzu: `provider_failover` (maschinell, je Wechsel der
+Ausweich-Kaskade mit Grund), `model_change` (Provider, Modell oder Kaskade
+geändert; Vorher/Nachher und Prompt-Hash), `archive`/`unarchive` und
+`release_update` (Tag, Commit, Tag-Signatur, Datenbanksicherung, freigebende
+Person). Die vier von Personen ausgelösten Ereignisse sind Ed25519-signiert;
+Ereignisse ohne Beleg tragen `document_id = "system"`
+(`GET /api/audit/trail?document_id=system`).
+
 Die Übersteuerung speichert Prüfperson, alte und neue Risikostufe, Score
 vorher/nachher, Begründung, Rechtsnorm, Zeitpunkt (ISO 8601) und den Verweis
 auf Art. 14 Abs. 4 lit. d AI Act. Der Score wird nicht von Hand gesetzt,
@@ -577,6 +638,43 @@ Systems ablegen (Ticket, WORM-Speicher, qualifizierter Zeitstempel nach eIDAS).
   Liegt der Schlüssel neben der DB, schützt das ein geleaktes DB-Backup, nicht
   einen kompromittierten Server – produktiv gehört er in einen Secret-Store.
 
+### Data-Loss-Prevention-Gateway (`/api/v1/redact`)
+
+Externe Anwendungen schicken Text **vor** einem
+Cloud-LLM-Aufruf an das Gateway. Anders als der Privacy Vault schwärzt es
+**endgültig**: kein Mapping, keine Re-Identifizierung, die Antwort enthält nur
+den geschwärzten Text und Zähler je Kategorie – nie die gefundenen Werte. Der
+Text wird weder gespeichert noch geloggt.
+
+| Regel | Beispiel | Ersatz |
+|---|---|---|
+| Zugangsdaten | `sk-ant-…`, `AIza…`, `ghp_…`, `password=…`, private Schlüssel | `[REDACTED_SECRET]` |
+| Vertrauliche Dateinamen | `internal_audit_memo.md`, `pricing_algorithm.py` | `[REDACTED_CONFIDENTIAL]` |
+| Geschützte Parameter (nur der Wert) | `threshold=0.73`, `stop_loss: 4.5%`, `lookback = 20` | `threshold=[REDACTED_CONFIDENTIAL]` |
+| Sperrbegriffe | `DLP_TERMS` (Umgebung, kommagetrennt) plus `extra_terms` je Anfrage | `[REDACTED_CONFIDENTIAL]` |
+| Personenbezogene Daten | E-Mail, IBAN, USt-IdNr., Telefon, Adresse, Firma, Person (Muster des Privacy Gateways); Beträge nur mit `redact_amounts=true` | `[REDACTED_<KATEGORIE>]` |
+
+Parameter: `text` (1–200 000 Zeichen), `extra_terms` (bis 50), `redact_pii`
+(Standard `true`), `redact_amounts` (Standard `false`). Antwort:
+`redacted_text`, `counts`, `total`, `ruleset_version`. Rate-Limit
+`RATE_LIMIT_REDACT_PER_MINUTE` (120). Auch als CLI:
+`python -m app.redact < eingabe.txt`.
+
+### Release-Assistent
+
+Kein Auto-Pulling. Die Pille „Release v… verfügbar (Changelog prüfen)“
+erscheint nur, wenn `git fetch --tags` einen höheren SemVer-Tag als die
+laufende Version findet (mit den Git-Zugangsdaten des Rechners, kein Token
+nötig). Das Update-Fenster zeigt Commit-Hash, Tag-Signatur (gültig, ungültig
+oder unsigniert) und die Änderungen. Eingespielt wird nur, wenn die
+Administration Namen und Commit-Hash bestätigt, der Stand per Fast-Forward
+erreichbar ist, keine lokalen Änderungen und keine laufenden Analysen
+vorliegen – standardmäßig nur von `localhost`
+(`RELEASE_UPDATE_LOCAL_ONLY`). Vorher entsteht eine konsistente Kopie von
+`data/agent.db` unter `data/backups/`; der Wechsel landet als
+`release_update` im Ledger. Abhängigkeiten und Frontend-Build aktualisiert der
+anschließende Neustart über `Start_Compliance_Agent.bat`.
+
 ---
 
 ## Betrieb
@@ -609,6 +707,9 @@ gehört das Limit in Redis oder an das API-Gateway.
 | `VIES_TIMEOUT_SECONDS` | `3` | Kurzes Timeout für die VIES-Abfrage; danach 503 mit Hinweis |
 | `SETTINGS_ENCRYPTION_KEY` | leer | Fernet-Schlüssel für gespeicherte Provider-Keys |
 | `CORS_ORIGINS` | `*` | Produktiv auf die Frontend-Origin beschränken |
+| `DLP_TERMS` | leer | Kommagetrennte Sperrbegriffe für `/api/v1/redact` |
+| `RELEASE_REPO_DIR` | Projektwurzel | Git-Arbeitskopie für den Release-Assistenten |
+| `RELEASE_UPDATE_LOCAL_ONLY` | `true` | Updates nur von `localhost` einspielen |
 
 **PostgreSQL:** `pip install "psycopg[binary]"` und `DATABASE_URL` setzen. Neue
 Spalten werden beim Start additiv ergänzt; für echte Schemaänderungen gehört
@@ -619,7 +720,7 @@ Alembic dazu.
 ## Tests
 
 ```bash
-python -m pytest            # 279 Tests, ca. 20 s, kein LLM und kein Netz nötig
+python -m pytest            # 296 Tests, ca. 20 s, kein LLM und kein Netz nötig
 cd frontend && npm run lint && npm run build
 ```
 
@@ -640,6 +741,8 @@ VIES-Mock, und eine lokale `.env` (etwa mit Cloud-Keys) wird in Tests ignoriert.
 | `test_procedural_doc.py` | 14 | Vier Teile nach Rz. 153, Systemstand, Platzhalter, HTML-Escaping, Endpunkt HTML/Markdown, Vier-Augen-Prüfung im Anhang, BEG-IV-Fristen inkl. Finanzsektor, Fristende in Scorecard und Zertifikat, Verfahrensdokumentation im ZIP |
 | `test_human_override.py` | 12 | Neuberechnung 59 → 95, Ledger-Verkettung und Ed25519-Signatur, Siegel aufgehoben, neue Analyse verwirft Übersteuerung, 422/409-Fälle, Prüfer-Meilenstein im Zertifikat, neu gehashte Kette und fremder Schlüssel werden erkannt |
 | `test_reference_demo.py` | 12 | Musterdaten ohne Modell (100/45/59 + ZUGFeRD 100), Demo-Siegel, Ledger-Kennzeichnung, kein Überschreiben von Live-Audits, Copilot-Musterantworten |
+| `test_v24_backend.py` | 9 | Archiv mit signierten Ledger-Einträgen, einzelner Musterbeleg, Ausweich-Kaskade bei 429 (inkl. übersprungener Stufe ohne Key), Fehler ohne Kaskade, `model_change` im Ledger, Modell-Liste mit Upgrade-Vorschlag, Katalog-Heuristik |
+| `test_dlp_release.py` | 8 | DLP-Schwärzung (Dateinamen, Parameter, Zugangsdaten, PII, Sperrbegriffe aus Umgebung, Settings und Anfrage, kein Mapping), Endpunkt und OpenAPI; Release-Status ohne Netz, nur localhost, Hash-Abgleich, lokale Änderungen, Fast-Forward mit DB-Sicherung und signiertem Ledger-Eintrag, Betrieb ohne Git |
 | `test_vies.py` | 23 | VIES-Abfrage: gültig/ungültig, fehlender Name bei DE, Normalisierung (Präfix, Trennzeichen, GR → EL), Eingabefehler ohne Netzaufruf, Ausfall des Mitgliedstaats, Timeout, Offline, Auth, Rate-Limit |
 | `test_observability.py` | 13 | JSON-Logs, PII-Filter, Request-ID, Token-Bucket, 429 |
 | `test_audit_ledger.py` | 7 | Verkettung, Trigger, Manipulations- und Löschnachweis, Migration |
@@ -699,8 +802,8 @@ Steuerberatung. Maßgeblich bleibt die Freigabe durch die Prüfperson.
   zu dokumentieren – das ist Sache des Anbieters, nicht dieses Systems.
 * **Verfahrensdokumentation ist ein Entwurf.** Sie beschreibt nur, was das
   System über sich weiß; Organisation, Archiv und IT-Betrieb ergänzt das
-  Unternehmen. Änderungen an den Laufzeit-Einstellungen (Modell, Provider)
-  stehen nur in den Anwendungslogs, nicht im Ledger.
+  Unternehmen. Modell- und Provider-Wechsel stehen seit v2.4 im Ledger
+  (`model_change`); PII-Strenge und Prüfschalter nur in den Anwendungslogs.
 * **Schlüsselwechsel.** Wird `data/.signing.key` ersetzt, meldet `verify` alle
   bisher signierten Prüfer-Einträge als „fremder Schlüssel“. Eine Rotation mit
   Schlüsselhistorie ist nicht umgesetzt – den Schlüssel sichern.
@@ -722,6 +825,22 @@ Steuerberatung. Maßgeblich bleibt die Freigabe durch die Prüfperson.
   folgt Feldbezeichnern und markierten Werten im Textlayer; bei ungewöhnlichen
   Layouts kann eine Zeile fehlen. Fehlende Pflichtangaben haben naturgemäß
   keine Fundstelle.
+
+* **DLP-Gateway ist regelbasiert.** Geheimnisse ohne erkennbares Muster
+  (Freitext, ungewöhnliche Parameternamen) bleiben stehen; das Gateway senkt das
+  Abflussrisiko, garantiert aber keine Vertraulichkeit. Namen ohne Anrede oder
+  Rolle erkennt es wie der Privacy Vault nicht.
+* **Ausweich-Kaskade und Datenschutz.** Springt eine Analyse auf einen zweiten
+  Cloud-Anbieter, gehen pseudonymisierte Daten auch dorthin – für jeden
+  Anbieter der Kaskade sind AV-Vertrag und Transfergrundlage nötig.
+* **Release-Assistent nur mit Git-Arbeitskopie.** Docker-Installationen
+  aktualisieren über ein neues Image. Die Release-Tags sind bisher annotiert,
+  aber nicht GPG-signiert; die Oberfläche zeigt das als „unsigniert“ und
+  verlangt den Abgleich des Commit-Hashes. Neustart und Abhängigkeiten
+  übernimmt der Starter, nicht die Weboberfläche.
+* **Einzeltasten-Kürzel** (`J`, `K`, `1`–`6`, `?`) lassen sich nicht
+  abschalten (WCAG 2.1.4 verlangt das, wenn sie global greifen); sie wirken nie
+  in Eingabefeldern oder Dialogen.
 
 ## Lizenz
 
