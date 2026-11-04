@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     "Revisionssichere Prüfung von Rechnungen und Verträgen: EU AI Act, § 14 UStG, DSGVO – lokal oder über ein Privacy Gateway.",
   icons: {
     icon: [
-      { url: "/compliance-logo.svg", type: "image/svg+xml" },
+      { url: "/compliance-logo-transparent.png", type: "image/png", sizes: "512x512" },
       { url: "/compliance-logo.png", type: "image/png", sizes: "512x512" },
     ],
     apple: "/compliance-logo.png",
@@ -42,7 +42,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <div id="eca-splash" className="eca-splash no-print" aria-hidden="true">
           <div className="eca-splash-inhalt">
             {/* eslint-disable-next-line @next/next/no-img-element -- vor der Hydration, ohne next/image-Laufzeit */}
-            <img src="/compliance-logo.png" alt="" width={48} height={48} className="eca-splash-logo" />
+            <img src="/compliance-logo-transparent.png" alt="" width={48} height={48} className="eca-splash-logo" />
             <span className="eca-splash-name">Enterprise Compliance Agent</span>
             <span className="eca-splash-linie" />
           </div>

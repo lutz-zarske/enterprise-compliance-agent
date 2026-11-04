@@ -27,7 +27,7 @@ export function WelcomeModal({ open, onStartTour, onSkip }: { open: boolean; onS
   return (
     <Modal open={open} onClose={onSkip} title="Willkommen beim Enterprise Compliance Agent" width="max-w-lg">
       <div className="flex items-start gap-4">
-        <Image src="/compliance-logo.png" alt="" width={48} height={48} unoptimized className="h-12 w-12 shrink-0 rounded-xl" />
+        <Image src="/compliance-logo-transparent.png" alt="" width={48} height={48} unoptimized className="h-12 w-12 shrink-0 object-contain" />
         <div>
           <p className="text-sm font-medium text-fg">Revisionssichere KI-Dokumentenprüfung nach GoBD &amp; EU AI Act</p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted">
