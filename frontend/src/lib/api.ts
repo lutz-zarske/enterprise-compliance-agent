@@ -17,8 +17,11 @@ import type {
   KpiResponse,
   LedgerEntry,
   LedgerVerification,
+  ModelCatalog,
   OverrideRequest,
   ProgressResponse,
+  ReleaseApplyResult,
+  ReleaseStatus,
   RuntimeSettings,
   SeedResponse,
   SettingsUpdate,
@@ -196,6 +199,8 @@ export const api = {
   extract: (id: string) => request<ExtractionResponse>(`/documents/${id}/extract`, { method: "POST" }),
   progress: (id: string) => request<ProgressResponse>(`/documents/${id}/progress`),
   pin: (id: string, pinned: boolean) => request<DocumentDetail>(`/documents/${id}/pin`, json({ pinned }, "PUT")),
+  archive: (id: string, archived: boolean) =>
+    request<DocumentDetail>(`/documents/${id}/archive`, json({ archived }, "PUT")),
   signOff: (id: string, auditor_name: string, note: string, decision: SignOffDecision) =>
     request<DocumentDetail>(`/documents/${id}/sign-off`, json({ auditor_name, note, decision })),
   reportJson: (id: string) => request<Record<string, unknown>>(`/documents/${id}/report?format=json`),
@@ -213,7 +218,12 @@ export const api = {
   verifyVat: (country_code: string, vat_number: string) =>
     request<VatVerification>("/api/vat/verify", json({ country_code, vat_number })),
   kpis: () => request<KpiResponse>("/api/dashboard/kpis"),
-  seed: () => request<SeedResponse>("/api/demo/seed", { method: "POST" }),
+  seed: (only?: string) =>
+    request<SeedResponse>(`/api/demo/seed${only ? `?only=${encodeURIComponent(only)}` : ""}`, { method: "POST" }),
+  models: (provider: string) => request<ModelCatalog>(`/api/settings/models?provider=${encodeURIComponent(provider)}`),
+  release: (fetchRemote = true) => request<ReleaseStatus>(`/api/system/release?fetch=${fetchRemote}`),
+  applyRelease: (tag: string, commit: string, admin_name: string) =>
+    request<ReleaseApplyResult>("/api/system/release/apply", json({ tag, commit, admin_name })),
   settings: () => request<RuntimeSettings>("/api/settings"),
   updateSettings: (update: SettingsUpdate) => request<RuntimeSettings>("/api/settings", json(update)),
   testConnection: (provider?: string) =>

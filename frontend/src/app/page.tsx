@@ -22,11 +22,13 @@ import {
   Zap,
 } from "../components/icons";
 import { KpiStrip } from "../components/KpiStrip";
+import { markOnboardingDone, onboardingDone, ShortcutsModal, SpotlightTour, WelcomeModal } from "../components/Onboarding";
 import { OverrideModal } from "../components/OverrideModal";
 import { Scorecard } from "../components/Scorecard";
 import { SettingsModal } from "../components/SettingsModal";
 import { SealModal } from "../components/SignOffPanel";
-import { EmptyState, HashBadge, isModEnter, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
+import { meldeBereit } from "../components/SplashAbbau";
+import { EmptyState, HashBadge, isModEnter, isTypingTarget, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
 import { api, ApiError, fetchHealth, getApiBase } from "../lib/api";
 import { cx, formatBytes, formatDate, formatModel, PROVIDER_NAMES } from "../lib/format";
 import type {
@@ -34,6 +36,7 @@ import type {
   DocumentDetail,
   DocumentSummary,
   HealthResponse,
+  InferenceMode,
   KpiResponse,
   LedgerVerification,
   ProgressStage,
@@ -47,6 +50,9 @@ const TILE_TO_TAB: Record<ScoreTile["key"], InspectorTab> = {
   privacy: "pii",
   math: "facts",
 };
+
+/** Tasten 1-6 der Reiter (5 = XML nur bei E-Rechnungen). */
+const TAB_KEYS: InspectorTab[] = ["ustg", "aiact", "pii", "facts", "xml", "ledger"];
 
 const STATUS_LABELS: Record<string, string> = {
   uploaded: "Hochgeladen",
@@ -78,7 +84,10 @@ export default function DashboardPage() {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [sealOpen, setSealOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
-  const { toasts, push, dismiss } = useToasts();
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const { toasts, push, dismiss, pause, resume } = useToasts();
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
 
@@ -137,13 +146,17 @@ export default function DashboardPage() {
         setOffline(true);
         setHealth(null);
       } else if (error.status === 401) {
-        notify("warn", "Zugang verweigert", "Backend verlangt einen X-API-Key – unter Einstellungen › Verbindung hinterlegen.");
+        notify("warn", "Zugang verweigert", "Backend verlangt einen X-API-Key – unter Einstellungen › System & Verbindung hinterlegen.");
       }
     }
   }, [refreshData, loadDetail, notify]);
 
+  // Erster Ladevorgang: Splash abbauen, Erstbesucher begruessen.
   useEffect(() => {
-    void loadAll();
+    void loadAll().finally(() => {
+      meldeBereit();
+      if (!onboardingDone()) setWelcomeOpen(true);
+    });
   }, [loadAll]);
 
   // Reaktiv statt Aktualisieren-Button: Rueckkehr ins Fenster laedt den Stand neu
@@ -189,6 +202,13 @@ export default function DashboardPage() {
       try {
         const result = await api.extract(id);
         ok = true;
+        result.compliance.failover?.forEach((switched) =>
+          notify(
+            "warn",
+            `Fallback auf Modell ${formatModel(switched.to_model)} ausgelöst: ${switched.reason_code === "provider_timeout" ? "Zeitüberschreitung" : "Anbieter nicht verfügbar"}`,
+            `${PROVIDER_NAMES[switched.from_provider as InferenceMode] ?? switched.from_provider} → ${PROVIDER_NAMES[switched.to_provider as InferenceMode] ?? switched.to_provider} · im Ledger protokolliert`,
+          ),
+        );
         notify(
           result.scorecard?.release_blocked ? "warn" : "ok",
           `Audit abgeschlossen: ${filename}`,
@@ -211,12 +231,12 @@ export default function DashboardPage() {
     [notify, reportError, refreshData, loadDetail],
   );
 
-  async function handleSeed() {
+  async function handleSeed(file?: string) {
     setSeeding(true);
     try {
       // Die Musterdaten kommen bereits geprueft zurueck (Referenz-Audits) -
       // es ist keine Inferenz noetig, das Dashboard ist sofort vollstaendig.
-      const result = await api.seed();
+      const result = await api.seed(file);
       await refreshData();
       const audited = result.items.filter((item) => item.reference_audit).length;
       const structured = result.items.filter((item) => item.structured_audit).length;
@@ -231,7 +251,7 @@ export default function DashboardPage() {
           : "Die Musterdokumente sind bereits vorhanden; bestehende Prüfergebnisse bleiben unverändert.",
       );
       const preferred =
-        result.items.find((item) => item.filename.startsWith("Rechnung_Fehlerhaft")) ?? result.items[0];
+        (file ? result.items[0] : result.items.find((item) => item.filename.startsWith("Rechnung_Fehlerhaft"))) ?? result.items[0];
       if (preferred) setSelectedId(preferred.id);
     } catch (err) {
       reportError("Musterdaten konnten nicht geladen werden", err);
@@ -259,6 +279,16 @@ export default function DashboardPage() {
       .forEach((item) => notify("bad", `Upload abgelehnt: ${item.filename}`, item.error?.message));
   }
 
+  async function handleToggleArchive(doc: DocumentSummary) {
+    try {
+      await api.archive(doc.id, !doc.archived);
+      await refreshData();
+      notify("info", doc.archived ? "Aus dem Archiv geholt" : "Archiviert", `${doc.filename} · nur ausgeblendet, nie gelöscht (GoBD) · im Ledger protokolliert`);
+    } catch (err) {
+      reportError("Archivieren fehlgeschlagen", err);
+    }
+  }
+
   async function handleTogglePin(doc: DocumentSummary) {
     try {
       await api.pin(doc.id, !doc.pinned);
@@ -280,7 +310,8 @@ export default function DashboardPage() {
   );
   const canAnalyze = !offline && (inferenceAvailable || structuredReady);
   const isXml = detail?.content_type === "application/xml";
-  const overlayOpen = settingsOpen || exportOpen || overrideOpen || copilotOpen || sealOpen;
+  const overlayOpen =
+    settingsOpen || exportOpen || overrideOpen || copilotOpen || sealOpen || welcomeOpen || tourOpen || shortcutsOpen;
   const canSeal = Boolean(detail?.scorecard) && !offline && extractingId === null;
 
   // Strg/⌘ + Enter oeffnet den Siegel-Dialog; dort versiegelt ein zweites Strg/⌘ + Enter.
@@ -294,6 +325,25 @@ export default function DashboardPage() {
     window.document.addEventListener("keydown", onKey);
     return () => window.document.removeEventListener("keydown", onKey);
   }, [overlayOpen, canSeal]);
+
+  // 1-6 wechseln den Reiter, ? oeffnet die Kuerzel-Uebersicht - nie beim Tippen, nie bei offenem Dialog.
+  useEffect(() => {
+    if (overlayOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || isTypingTarget(event.target)) return;
+      if (event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+      const target = TAB_KEYS[Number(event.key) - 1];
+      if (!target || !detail || (target === "xml" && !detail.einvoice)) return;
+      event.preventDefault();
+      setTab(target);
+    };
+    window.document.addEventListener("keydown", onKey);
+    return () => window.document.removeEventListener("keydown", onKey);
+  }, [overlayOpen, detail]);
 
   // Den XML-Tab nicht stehen lassen, wenn das neue Dokument keinen Datensatz hat.
   useEffect(() => {
@@ -309,8 +359,14 @@ export default function DashboardPage() {
         settings={settings}
         ledger={ledger}
         seeding={seeding}
-        onSeed={handleSeed}
+        busy={extractingId !== null}
+        onSeed={(file) => void handleSeed(file)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onStartTour={() => {
+          setWelcomeOpen(false);
+          setTourOpen(true);
+        }}
+        notify={notify}
       />
 
       <main
@@ -373,6 +429,7 @@ export default function DashboardPage() {
               extractingId={extractingId}
               onSelect={setSelectedId}
               onTogglePin={handleTogglePin}
+              onToggleArchive={handleToggleArchive}
               shortcutsEnabled={!overlayOpen}
             />
           </div>
@@ -386,7 +443,7 @@ export default function DashboardPage() {
                     eine gültige Rechnung, eine Steuerfalle, einen KI-Recruiting-Vertrag nach Anhang III und eine hybride
                     ZUGFeRD-E-Rechnung an eine Kommune.
                   </p>
-                  <button className="btn btn-primary mt-3" onClick={handleSeed} disabled={offline || seeding}>
+                  <button className="btn btn-primary mt-3" onClick={() => void handleSeed()} disabled={offline || seeding}>
                     {seeding ? <Spinner size={13} /> : <Layers size={14} aria-hidden="true" />} Musterdaten laden
                   </button>
                   <p className="mt-3">Oder eigene PDFs und XRechnungen links hochladen.</p>
@@ -454,7 +511,7 @@ export default function DashboardPage() {
                       </button>
                     </Tooltip>
                     <button className="btn" onClick={() => setCopilotOpen(true)} disabled={offline}>
-                      <MessageSquare size={14} aria-hidden="true" /> Copilot
+                      <MessageSquare size={14} aria-hidden="true" /> Compliance-Copilot
                     </button>
                     <button className="btn" onClick={() => setExportOpen(true)} disabled={offline}>
                       <Download size={14} aria-hidden="true" /> Prüfbericht exportieren
@@ -497,7 +554,7 @@ export default function DashboardPage() {
 
       <footer className="border-t border-line py-4 no-print">
         <div className="mx-auto flex w-full max-w-[1920px] flex-col items-center justify-between gap-1 px-4 text-xs text-subtle sm:flex-row sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
-          <span>Enterprise Compliance Agent <span className="font-mono tabular-nums">v{health?.version ?? "2.3.0"}</span></span>
+          <span>Enterprise Compliance Agent <span className="font-mono tabular-nums">v{health?.version ?? "2.4.0"}</span></span>
           <span>VO (EU) 2024/1689 · § 14 UStG · DSGVO · GoBD-Hash-Kette</span>
           <span>{settings?.is_cloud ? "Cloud-Inferenz über Privacy Gateway" : "Lokale Inferenz · Zero Data Leakage"}</span>
         </div>
@@ -506,6 +563,7 @@ export default function DashboardPage() {
       <SettingsModal
         open={settingsOpen}
         settings={settings}
+        version={health?.version ?? "2.4.0"}
         onClose={() => setSettingsOpen(false)}
         onSaved={(updated) => {
           setSettings(updated);
@@ -545,7 +603,20 @@ export default function DashboardPage() {
         notify={notify}
       />
       <CopilotDrawer document={detail} open={copilotOpen} onClose={() => setCopilotOpen(false)} modelLabel={modelLabel} />
-      <Toaster toasts={toasts} onDismiss={dismiss} />
+      <WelcomeModal
+        open={welcomeOpen}
+        onStartTour={() => {
+          setWelcomeOpen(false);
+          setTourOpen(true);
+        }}
+        onSkip={() => {
+          markOnboardingDone();
+          setWelcomeOpen(false);
+        }}
+      />
+      <SpotlightTour open={tourOpen} onClose={() => setTourOpen(false)} />
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <Toaster toasts={toasts} onDismiss={dismiss} onPause={pause} onResume={resume} />
     </div>
   );
 }

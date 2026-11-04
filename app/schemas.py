@@ -783,6 +783,10 @@ class ComplianceAudit(ApiModel):
         default=None,
         description="Bei Cloud-Inferenz: Anzahl pseudonymisierter Werte je Kategorie (ohne Klartext).",
     )
+    failover: list[dict[str, str]] | None = Field(
+        default=None,
+        description="Provider-Wechsel waehrend der Analyse (Ausfall, 429, Zeitueberschreitung), je Wechsel im Ledger.",
+    )
 
     @computed_field(description="Kurzfazit fuer Uebersichtslisten und Dashboards.")  # type: ignore[prop-decorator]
     @property
@@ -816,6 +820,7 @@ class DocumentSummary(ApiModel):
     page_count: int | None = None
     doc_type: DocType | None = None
     sender: str | None = None
+    document_number: str | None = None
     document_date: date | None = None
     total_amount: Decimal | None = None
     currency: str | None = None
@@ -827,6 +832,7 @@ class DocumentSummary(ApiModel):
     pii_findings: int | None = None
     sealed: bool = False
     pinned: bool = False
+    archived: bool = False
     provider: str | None = None
     einvoice_profile: str | None = Field(
         default=None, description="Profil der strukturierten E-Rechnung (z. B. 'XRECHNUNG 3.0'), sonst null."
@@ -869,6 +875,8 @@ class DocumentDetail(ApiModel):
         default=None, description="EN-16931-Datensatz (eingebettetes oder reines XML), sonst null."
     )
     pinned: bool = False
+    archived: bool = False
+    archived_at: datetime | None = None
     provider: str | None = None
     error: str | None = None
     created_at: datetime
@@ -1237,6 +1245,11 @@ class SettingsUpdate(ApiModel):
     pii_strictness: Literal["strict", "standard", "audit_only"] | None = None
     enforce_ustg_check: bool | None = None
     ai_act_escalation: bool | None = None
+    fallbacks: list[InferenceModeLiteral] | None = Field(
+        default=None,
+        max_length=3,
+        description="Ausweich-Provider in Reihenfolge, je Provider einmal (z. B. ['anthropic', 'local']).",
+    )
 
 
 class ConnectionTestRequest(ApiModel):
@@ -1245,6 +1258,10 @@ class ConnectionTestRequest(ApiModel):
 
 class PinRequest(ApiModel):
     pinned: bool
+
+
+class ArchiveRequest(ApiModel):
+    archived: bool
 
 
 class VatVerifyRequest(ApiModel):
@@ -1363,3 +1380,31 @@ class ErrorResponse(ApiModel):
     """Einheitliches Fehlerformat aller Endpunkte."""
 
     error: ErrorDetail
+
+
+class RedactRequest(ApiModel):
+    """Text fuer das DLP-Gateway (``POST /api/v1/redact``)."""
+
+    text: str = Field(min_length=1, max_length=200_000, description="Zu schwaerzender Text (wird nicht gespeichert).")
+    extra_terms: list[Annotated[str, Field(min_length=2, max_length=100)]] = Field(
+        default_factory=list, max_length=50, description="Zusaetzliche Sperrbegriffe nur fuer diese Anfrage."
+    )
+    redact_pii: bool = Field(default=True, description="Personenbezogene Daten schwaerzen (ohne Betraege).")
+    redact_amounts: bool = Field(default=False, description="Auch Geldbetraege schwaerzen.")
+
+
+class RedactResponse(ApiModel):
+    """Geschwaerzter Text und Treffer je Kategorie - nie die gefundenen Werte."""
+
+    redacted_text: str
+    counts: dict[str, int]
+    total: int
+    ruleset_version: str
+
+
+class ReleaseApplyRequest(ApiModel):
+    """Bestaetigung eines Release-Wechsels durch die Administration."""
+
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.4.1'.")
+    commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestaetigter Commit-Hash des Tags (40 Zeichen).")
+    admin_name: str = Field(min_length=2, max_length=120, description="Wer das Update freigibt.")

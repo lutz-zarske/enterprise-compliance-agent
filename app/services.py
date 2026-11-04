@@ -39,7 +39,7 @@ from app.extractors import (
 from app.extractors.einvoice import looks_like_xml
 from app.llm import PROMPT_HASH, ComplianceAuditPayload, StructuredLLMClient
 from app.pdf_reader import PdfExtraction, extract_text_async
-from app.privacy_vault import VaultedClient
+from app.privacy_vault import PrivacyVault
 from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
 from app.runtime_settings import RuntimeSettingsStore
 from app.scoring import RULESET_VERSION, compute_scorecard
@@ -108,6 +108,14 @@ class UploadTooLargeError(UploadValidationError):
 
     code = "file_too_large"
     status_code = 413
+
+
+class ReleaseUpdateRunningError(ServiceError):
+    """Waehrend eines Release-Wechsels startet keine neue Analyse."""
+
+    code = "release_update_running"
+    status_code = 409
+    hint = "Das Update dauert nur Sekunden - danach erneut pruefen."
 
 
 class DocumentNotFoundError(ServiceError):
@@ -354,6 +362,11 @@ class ProgressTracker:
     def clear(self, document_id: str) -> None:
         self._stages.pop(document_id, None)
 
+    @property
+    def active(self) -> int:
+        """Anzahl laufender Analysen (sperrt den Release-Wechsel)."""
+        return len(self._stages)
+
 
 PROGRESS = ProgressTracker()
 
@@ -374,6 +387,12 @@ class ExtractionOutcome:
     scorecard: Scorecard | None = None
     provider: str = "local"
     audit_entry_id: str | None = None
+
+
+def _vault_of(client: object) -> PrivacyVault | None:
+    """Vault des Privacy Gateways - beim einfachen Cloud-Client wie in der Ausweich-Kaskade."""
+    vault = getattr(client, "vault", None)
+    return vault if isinstance(vault, PrivacyVault) else None
 
 
 class DocumentService:
@@ -562,12 +581,13 @@ class DocumentService:
             raise
         await self._repository.mark_processing(record.id)
 
+        vault = _vault_of(client)
         try:
             progress.set(record.id, "pii_scan")
             rule_findings = scan_text(text)
-            if isinstance(client, VaultedClient):
+            if vault is not None:
                 # Mapping vorab aufbauen: gleiche Platzhalter fuer beide LLM-Aufrufe.
-                client.vault.pseudonymize(prompt_text)
+                vault.pseudonymize(prompt_text)
 
             progress.set(record.id, "ustg_check")
             extraction, extraction_ms = await client.extract_document(prompt_text)
@@ -578,12 +598,14 @@ class DocumentService:
         except Exception as exc:
             await self._repository.mark_failed(record.id, f"{type(exc).__name__}: {exc}")
             progress.clear(record.id)
+            await self._log_failover(record, client)
             raise
 
         provider = getattr(client, "provider", "local")
-        vault_report = client.vault.report if isinstance(client, VaultedClient) else None
-        if isinstance(client, VaultedClient):
-            client.vault.clear()
+        vault_report = vault.report if vault is not None else None
+        if vault is not None:
+            vault.clear()
+        switches = await self._log_failover(record, client)
         return await self._finalize_analysis(
             record,
             extraction=extraction,
@@ -597,7 +619,28 @@ class DocumentService:
             enforce_ustg=enforce_ustg,
             escalate=escalate,
             einvoice=einvoice,
+            failover=switches or None,
         )
+
+    async def _log_failover(self, record: DocumentRecord, client: object) -> list[dict[str, str]]:
+        """Schreibt jeden Provider-Wechsel als eigenen Ledger-Eintrag (auch bei spaeterem Fehlschlag)."""
+        switches: list[dict[str, str]] = list(getattr(client, "switches", None) or [])
+        if self._ledger is not None:
+            for switch in switches:
+                await self._ledger.append(
+                    event_type=AuditEventType.PROVIDER_FAILOVER,
+                    document_id=record.id,
+                    sha256_hash=record.sha256,
+                    model_name=switch["to_model"],
+                    prompt_hash=PROMPT_HASH,
+                    result_summary=(
+                        f"Wechsel {switch['from_provider']} -> {switch['to_provider']} ({switch['reason_code']})"
+                    ),
+                    compliance_score=None,
+                    risk_tier="unknown",
+                    details=switch,
+                )
+        return switches
 
     async def _structured_analysis(self, record: DocumentRecord, einvoice: EInvoiceData) -> ExtractionOutcome:
         """Deterministischer Pfad fuer E-Rechnungen: XML ist massgeblich, kein Sprachmodell.
@@ -679,6 +722,7 @@ class DocumentService:
         escalate: bool,
         ledger_details: dict[str, object] | None = None,
         einvoice: EInvoiceData | None = None,
+        failover: list[dict[str, str]] | None = None,
     ) -> ExtractionOutcome:
         """Gemeinsamer Abschluss fuer Live- und Referenz-Audits.
 
@@ -716,6 +760,7 @@ class DocumentService:
             duration_ms=audit_ms,
             provider=provider,
             privacy_gateway=vault_report,
+            failover=failover,
         )
 
         pdf_bytes = await anyio.to_thread.run_sync(self._read_pdf, record)
@@ -756,6 +801,7 @@ class DocumentService:
                     "ruleset_version": scorecard.ruleset_version,
                     "pii_findings": len(masked),
                     "privacy_gateway": vault_report,
+                    **({"failover": failover} if failover else {}),
                     **(ledger_details or {}),
                 },
             )
@@ -809,7 +855,7 @@ class DocumentService:
         )
 
     # --- Demo-Daten ---------------------------------------------------------
-    async def seed_demo(self) -> list[dict[str, object]]:
+    async def seed_demo(self, only: str | None = None) -> list[dict[str, object]]:
         """Legt die vier Musterdokumente an und analysiert sie ohne Sprachmodell.
 
         Die drei PDF-Musterdokumente erhalten Referenz-Audits (vorberechnete
@@ -823,8 +869,13 @@ class DocumentService:
         """
         from app.demo import DEMO_AUDITOR, DEMO_SEAL_NOTE, REFERENCE_AUDITS, demo_documents
 
+        documents = demo_documents()
+        if only is not None:
+            documents = [(name, data) for name, data in documents if name == only]
+            if not documents:
+                raise DocumentNotFoundError(f"Unbekannter Musterbeleg '{only}'.")
         results: list[dict[str, object]] = []
-        for filename, data in demo_documents():
+        for filename, data in documents:
             record = await self._repository.get_by_sha256(compute_sha256(data))
             created = record is None
             if record is None:
@@ -986,6 +1037,29 @@ class DocumentService:
     async def set_pinned(self, record: DocumentRecord, pinned: bool) -> DocumentRecord:
         return await self._repository.set_pinned(record.id, pinned)
 
+    async def set_archived(self, record: DocumentRecord, archived: bool) -> DocumentRecord:
+        """Blendet einen Beleg aus der Arbeitsliste aus bzw. holt ihn zurueck.
+
+        Archivieren loescht nichts (GoBD-Unveraenderbarkeit): Beleg, Ergebnis und
+        Ledger bleiben vollstaendig erhalten; der Wechsel selbst wird protokolliert.
+        """
+        if record.archived == archived:
+            return record
+        updated = await self._repository.set_archived(record.id, archived)
+        if self._ledger is not None:
+            await self._ledger.append(
+                event_type=AuditEventType.ARCHIVE if archived else AuditEventType.UNARCHIVE,
+                document_id=record.id,
+                sha256_hash=record.sha256,
+                model_name=record.model or "",
+                prompt_hash=PROMPT_HASH,
+                result_summary="Beleg archiviert" if archived else "Beleg aus dem Archiv geholt",
+                compliance_score=(record.scorecard or {}).get("score"),
+                risk_tier=((record.compliance or {}).get("ai_act") or {}).get("overall_risk_level", "unknown"),
+                details={"archived": archived},
+            )
+        return updated
+
     def progress_of(self, record: DocumentRecord) -> dict[str, object]:
         stage = self._progress.get(record.id)
         keys = [key for key, _ in PIPELINE_STAGES]
@@ -1039,8 +1113,9 @@ class DocumentService:
         ]
         answer, duration_ms = await client.chat_text(system_prompt=COPILOT_SYSTEM_PROMPT, messages=messages)
         provider = getattr(client, "provider", "local")
-        if isinstance(client, VaultedClient):
-            client.vault.clear()
+        vault = _vault_of(client)
+        if vault is not None:
+            vault.clear()
         return {"answer": answer, "model": client.model, "provider": provider, "duration_ms": duration_ms,
                 "reference": False}
 
@@ -1194,6 +1269,7 @@ def to_summary(record: DocumentRecord) -> DocumentSummary:
         page_count=record.page_count,
         doc_type=extraction.doc_type if extraction else None,
         sender=extraction.sender if extraction else None,
+        document_number=extraction.document_number if extraction else None,
         document_date=extraction.document_date if extraction else None,
         total_amount=extraction.total_amount if extraction else None,
         currency=extraction.currency if extraction else None,
@@ -1207,6 +1283,7 @@ def to_summary(record: DocumentRecord) -> DocumentSummary:
         pii_findings=len(compliance.gdpr.findings) if compliance else None,
         sealed=bool(record.sign_off),
         pinned=record.pinned,
+        archived=record.archived,
         provider=record.provider,
         einvoice_profile=(record.einvoice or {}).get("profile") if not (record.einvoice or {}).get("error") else None,
         created_at=record.created_at,
@@ -1270,6 +1347,8 @@ def to_detail(record: DocumentRecord, *, pii_level: str = "standard") -> Documen
         text_view=text_view,
         einvoice=parse_einvoice(record),
         pinned=record.pinned,
+        archived=record.archived,
+        archived_at=record.archived_at,
         provider=record.provider,
         error=record.error,
         created_at=record.created_at,

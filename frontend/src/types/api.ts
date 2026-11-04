@@ -57,7 +57,19 @@ export interface ComplianceAudit {
   duration_ms: number;
   provider: InferenceMode | string;
   privacy_gateway: Record<string, number> | null;
+  /** Provider-Wechsel waehrend der Analyse (Ausweich-Kaskade, seit v2.4). */
+  failover?: FailoverSwitch[] | null;
   headline: string;
+}
+
+export interface FailoverSwitch {
+  from_provider: string;
+  from_model: string;
+  to_provider: string;
+  to_model: string;
+  reason_code: string;
+  reason: string;
+  at: string;
 }
 
 export type Money = number | string | null;
@@ -283,6 +295,7 @@ export interface DocumentSummary {
   page_count: number | null;
   doc_type: DocType | null;
   sender: string | null;
+  document_number: string | null;
   document_date: string | null;
   total_amount: Money;
   currency: string | null;
@@ -294,6 +307,7 @@ export interface DocumentSummary {
   pii_findings: number | null;
   sealed: boolean;
   pinned: boolean;
+  archived: boolean;
   provider: string | null;
   einvoice_profile: string | null;
   created_at: string;
@@ -325,6 +339,8 @@ export interface DocumentDetail {
   text_view: TextView | null;
   einvoice: EInvoiceData | null;
   pinned: boolean;
+  archived: boolean;
+  archived_at: string | null;
   provider: string | null;
   error: string | null;
   created_at: string;
@@ -413,6 +429,51 @@ export interface RuntimeSettings {
   has_anthropic_key: boolean;
   has_openai_key: boolean;
   masked_keys: Record<string, string | null>;
+  /** Ausweich-Provider in Reihenfolge (ohne den primaeren). */
+  fallbacks: InferenceMode[];
+}
+
+export interface ModelCatalog {
+  provider: InferenceMode;
+  current: string;
+  /** Neueste zuerst. */
+  models: string[];
+  /** Neueres Modell derselben Klasse - nur Vorschlag, nie automatisch. */
+  upgrade: string | null;
+  source: "api" | "suggested";
+  message?: string;
+}
+
+export interface ReleaseInfo {
+  tag: string;
+  version: string;
+  commit: string;
+  signature: "valid" | "invalid" | "unsigned";
+  message: string;
+  changelog: string[];
+  fast_forward: boolean;
+}
+
+export interface ReleaseStatus {
+  git: boolean;
+  current_version: string;
+  current_commit: string | null;
+  latest: ReleaseInfo | null;
+  update_available: boolean;
+  dirty?: boolean;
+  busy?: boolean;
+  checked_at?: string;
+  message: string | null;
+}
+
+export interface ReleaseApplyResult {
+  ok: boolean;
+  from_commit: string;
+  to_tag: string;
+  to_commit: string;
+  database_backup: string | null;
+  restart_required: boolean;
+  message: string;
 }
 
 export interface SettingsUpdate {
@@ -422,6 +483,7 @@ export interface SettingsUpdate {
   pii_strictness?: PiiStrictness;
   enforce_ustg_check?: boolean;
   ai_act_escalation?: boolean;
+  fallbacks?: InferenceMode[];
 }
 
 export interface ConnectionTestResult {

@@ -110,6 +110,10 @@ class CloudLLMClient(StructuredLLMClient):
         """Leichter Erreichbarkeits-/Auth-Test ohne Dokumentinhalt."""
         raise NotImplementedError  # pragma: no cover
 
+    async def fetch_catalog(self) -> dict[str, Any]:
+        """Rohantwort der Modell-Liste des Providers (ohne Dokumentinhalt)."""
+        raise NotImplementedError  # pragma: no cover
+
 
 def _split_system(messages: list[dict[str, str]]) -> tuple[str, list[dict[str, str]]]:
     system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
@@ -159,6 +163,11 @@ class GeminiClient(CloudLLMClient):
         )
         return f"{self.label} erreichbar, Modell {self._model} verfuegbar."
 
+    async def fetch_catalog(self) -> dict[str, Any]:
+        return await self._send(
+            "GET", f"{self._base_url}/models", params={"pageSize": 200}, headers={"x-goog-api-key": self._api_key}
+        )
+
 
 class AnthropicClient(CloudLLMClient):
     """Anthropic Claude ueber die Messages API."""
@@ -193,6 +202,9 @@ class AnthropicClient(CloudLLMClient):
         await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers())
         return f"{self.label} erreichbar, Modell {self._model} verfuegbar."
 
+    async def fetch_catalog(self) -> dict[str, Any]:
+        return await self._send("GET", f"{self._base_url}/models", params={"limit": 100}, headers=self._headers())
+
 
 class OpenAIClient(CloudLLMClient):
     """OpenAI Chat Completions mit JSON-Mode."""
@@ -226,3 +238,6 @@ class OpenAIClient(CloudLLMClient):
     async def test_connection(self) -> str:
         await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers())
         return f"{self.label} erreichbar, Modell {self._model} verfuegbar."
+
+    async def fetch_catalog(self) -> dict[str, Any]:
+        return await self._send("GET", f"{self._base_url}/models", headers=self._headers())

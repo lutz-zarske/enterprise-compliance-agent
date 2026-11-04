@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, downloadBlob } from "../lib/api";
+import { buildCorrectionRequest, correctionDefects } from "../lib/correction";
 import type { CopilotTurn, DocumentDetail } from "../types/api";
 import { cx, formatModel } from "../lib/format";
-import { MessageSquare, Send, X } from "./icons";
-import { Spinner } from "./ui";
+import { Download, Mail, MessageSquare, Send, X } from "./icons";
+import { CopyButton, Spinner } from "./ui";
 
 const SUGGESTIONS = [
   "Welche Pflichtangaben fehlen in dieser Rechnung?",
@@ -45,7 +46,9 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
   const [threads, setThreads] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const defects = correctionDefects(document);
   const messages = document ? threads[document.id] ?? [] : [];
   const isReference = document?.provider === "reference";
 
@@ -53,13 +56,20 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length, busy]);
 
+  // Anderer Beleg: Entwurf verwerfen.
+  useEffect(() => setDraft(null), [document?.id]);
+
   // Escape schliesst den Drawer wie jedes Modal.
   useEffect(() => {
     if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (draft !== null) setDraft(null);
+      else onClose();
+    };
     window.document.addEventListener("keydown", onKey);
     return () => window.document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, draft]);
 
   if (!open) return null;
 
@@ -90,7 +100,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
         err instanceof ApiError && NO_MODEL_CODES.has(err.code)
           ? "Für freie Fragen wird ein Sprachmodell benötigt: lokal mit „ollama serve“ oder über einen Cloud-Key in den Einstellungen. " +
             (isReference
-              ? "Die drei Standardfragen oben beantwortet der Copilot bei Musterdaten auch ohne Modell."
+              ? "Die drei Standardfragen oben beantwortet der Compliance-Copilot bei Musterdaten auch ohne Modell."
               : `(${err.message})`)
           : err instanceof ApiError
             ? `${err.message}${err.hint ? ` – ${err.hint}` : ""}`
@@ -108,27 +118,71 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
   return (
     <aside
       className="anim-fade fixed inset-y-0 right-0 z-50 flex w-full max-w-[440px] flex-col overscroll-contain border-l border-line bg-surface-solid shadow-2xl no-print"
-      aria-label="Compliance Copilot"
+      aria-label="Compliance-Copilot"
     >
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="rounded-lg border border-line bg-surface-2 p-1.5 text-accent"><MessageSquare size={15} aria-hidden="true" /></div>
           <div>
-            <p className="text-sm font-semibold text-fg">Compliance Copilot</p>
+            <p className="text-sm font-semibold text-fg">Compliance-Copilot</p>
             <p className="font-mono text-xs text-subtle">{modelLabel}</p>
           </div>
         </div>
-        <button className="btn btn-icon" onClick={onClose} aria-label="Copilot schließen"><X size={15} /></button>
+        <button className="btn btn-icon" onClick={onClose} aria-label="Compliance-Copilot schließen"><X size={15} /></button>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      {document && defects.length > 0 && draft === null && (
+        <div className="flex items-center justify-between gap-3 border-b border-line bg-warn-soft px-4 py-2.5">
+          <p className="text-xs text-fg">
+            <span className="font-mono tabular-nums">{defects.length}</span> Mangel{defects.length === 1 ? "" : "punkte"} nach § 14 UStG – Lieferant um Korrektur bitten.
+          </p>
+          <button className="btn shrink-0" onClick={() => setDraft(buildCorrectionRequest(document))}>
+            <Mail size={14} aria-hidden="true" /> Korrekturanforderung generieren
+          </button>
+        </div>
+      )}
+
+      {document && draft !== null && (
+        <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 py-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-fg">Korrekturanforderung (Entwurf)</p>
+            <span className="flex items-center gap-1">
+              <CopyButton value={draft} label="Entwurf" />
+              <button
+                type="button"
+                className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-subtle transition-colors duration-150 hover:bg-surface-2 hover:text-fg"
+                onClick={() => downloadBlob(draft, `Korrekturanforderung_${document.extraction?.document_number ?? document.id.slice(0, 8)}.txt`, "text/plain;charset=utf-8")}
+              >
+                <Download size={13} aria-hidden="true" /> .txt
+              </button>
+            </span>
+          </div>
+          <textarea
+            className="input min-h-0 flex-1 resize-none font-sans leading-relaxed"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            aria-label="Entwurf der Korrekturanforderung bearbeiten"
+            name="correction-draft"
+            spellCheck
+          />
+          <p className="text-xs leading-relaxed text-subtle">
+            Erzeugt aus dem Prüfergebnis, ohne Sprachmodell. Vor dem Versand prüfen und ergänzen – die Entscheidung liegt bei der
+            Prüfperson (menschliche Aufsicht, Art. 14 VO (EU) 2024/1689).
+          </p>
+          <div className="flex justify-end">
+            <button className="btn" onClick={() => setDraft(null)}>Zurück zum Chat</button>
+          </div>
+        </div>
+      )}
+
+      <div className={cx("flex-1 space-y-3 overflow-y-auto px-4 py-4", draft !== null && "hidden")}>
         {!document && <p className="text-sm text-subtle">Bitte zuerst ein Dokument auswählen.</p>}
         {document && messages.length === 0 && (
           <div className="space-y-3">
             <p className="text-xs text-subtle">
               Fragen zu <span className="font-medium text-fg">{document.filename}</span>. Antworten stützen sich ausschließlich auf den
               Dokumenttext und das Prüfergebnis und verweisen auf Zeilen ([Z. n]) und Normen.
-              {isReference && " Bei Musterdaten beantwortet der Copilot die drei Standardfragen auch ohne Modell mit hinterlegten, gekennzeichneten Antworten."}
+              {isReference && " Bei Musterdaten beantwortet der Compliance-Copilot die drei Standardfragen auch ohne Modell mit hinterlegten, gekennzeichneten Antworten."}
             </p>
             {SUGGESTIONS.map((suggestion) => (
               <button
@@ -160,12 +214,12 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
           </div>
         ))}
         {busy && (
-          <div className="flex items-center gap-2 text-xs text-subtle" role="status"><Spinner size={12} /> Copilot analysiert das Dokument…</div>
+          <div className="flex items-center gap-2 text-xs text-subtle" role="status"><Spinner size={12} /> Compliance-Copilot analysiert das Dokument…</div>
         )}
         <div ref={endRef} />
       </div>
 
-      {document && isReference && messages.length > 0 && (
+      {document && isReference && messages.length > 0 && draft === null && (
         <div className="border-t border-line px-3 pt-2.5" aria-label="Standardfragen">
           <p className="mb-1.5 text-xs text-subtle">Standardfragen – bei Musterdaten auch ohne Modell:</p>
           <div className="flex flex-wrap gap-1.5">
@@ -185,7 +239,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
       )}
 
       <form
-        className="border-t border-line p-3"
+        className={cx("border-t border-line p-3", draft !== null && "hidden")}
         onSubmit={(event) => {
           event.preventDefault();
           void ask(input);
@@ -198,7 +252,7 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
             value={input}
             disabled={!document}
             placeholder="Frage zum Dokument…"
-            aria-label="Frage an den Copilot"
+            aria-label="Frage an den Compliance-Copilot"
             name="copilot-question"
             autoComplete="off"
             onChange={(event) => setInput(event.target.value)}
@@ -213,8 +267,8 @@ export function CopilotDrawer({ document, open, onClose, modelLabel }: {
             <Send size={15} />
           </button>
         </div>
-        <p className="mt-1.5 flex items-center gap-1 text-xs text-subtle">
-          <MessageSquare size={11} /> Keine Rechts- oder Steuerberatung. Cloud-Modelle erhalten den Text nur pseudonymisiert.
+        <p className="mt-1.5 text-xs text-subtle">
+          Keine Rechts- oder Steuerberatung. Cloud-Modelle erhalten den Text nur pseudonymisiert.
         </p>
       </form>
     </aside>

@@ -59,7 +59,12 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
         /* ignorieren */
       }
       onSealed(updated);
-      notify("ok", "Prüfung versiegelt", `${auditor.trim()} · Ledger-Eintrag geschrieben`);
+      const reference = updated.extraction?.document_number ?? updated.filename;
+      notify(
+        "ok",
+        `Dokument ${reference} erfolgreich Ed25519-versiegelt & im Ledger verankert`,
+        `${decision === "SEALED_APPROVED" ? "Freigabe" : "Ablehnung"} durch ${auditor.trim()}`,
+      );
     } catch (err) {
       notify("bad", "Siegel fehlgeschlagen", err instanceof ApiError ? err.message : String(err));
     } finally {
@@ -106,7 +111,7 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
             autoComplete="name"
             value={auditor}
             onChange={(e) => setAuditor(e.target.value)}
-            placeholder="z. B. Lutz Zarske…"
+            placeholder="Prüferkürzel oder Name eingeben…"
           />
         </label>
         <div>
@@ -143,7 +148,7 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
           value={note}
           onChange={(e) => setNote(e.target.value)}
           name="audit-note"
-          placeholder="z. B. USt-IdNr. beim Lieferanten nachgefordert…"
+          placeholder="Optionale Prüfungsnotiz eingeben…"
         />
       </label>
       <p className="mt-2 text-xs leading-relaxed text-subtle">

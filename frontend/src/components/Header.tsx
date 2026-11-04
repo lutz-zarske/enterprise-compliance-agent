@@ -1,11 +1,15 @@
 "use client";
 
+import Image from "next/image";
 import React from "react";
 import type { HealthResponse, LedgerVerification, RuntimeSettings } from "../types/api";
 import { getApiBase } from "../lib/api";
 import { cx, formatModel, PROVIDER_NAMES } from "../lib/format";
-import { Database, FileText, Lock, Settings, ShieldCheck } from "./icons";
-import { Spinner, Tooltip } from "./ui";
+import { AlertTriangle, Database, HelpCircle, Lock, Moon, Settings, ShieldAlert, Sun, WifiOff } from "./icons";
+import { GitSyncButton } from "./ReleaseAssistant";
+import { SampleMenu } from "./SampleMenu";
+import { useTheme } from "./ThemeProvider";
+import { Tooltip } from "./ui";
 
 interface HeaderProps {
   health: HealthResponse | null;
@@ -13,119 +17,115 @@ interface HeaderProps {
   settings: RuntimeSettings | null;
   ledger: LedgerVerification | null;
   seeding: boolean;
-  onSeed: () => void;
+  /** Analyse laeuft gerade (dezenter Puls statt Dauer-Statuspille). */
+  busy: boolean;
+  onSeed: (file?: string) => void;
   onOpenSettings: () => void;
+  onStartTour: () => void;
+  notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 }
 
-type StatusTone = "ok" | "warn" | "bad" | "neutral";
-
-const DOT: Record<StatusTone, string> = {
-  ok: "text-ok",
-  warn: "text-warn",
-  bad: "text-bad",
-  neutral: "text-subtle",
-};
-
-/** Ein ruhiger Betriebszustand statt Telemetrie: Details stehen im Tooltip. */
-function systemStatus(health: HealthResponse | null, offline: boolean, ledger: LedgerVerification | null): {
-  tone: StatusTone;
-  label: string;
-  detail: React.ReactNode;
-} {
+/**
+ * Status nur, wenn es etwas zu sagen gibt: laufende Analyse, Warnung oder
+ * Offline. Im Normalbetrieb bleibt die Kopfzeile ruhig.
+ */
+function StatusSignal({ health, offline, ledger, busy }: Pick<HeaderProps, "health" | "offline" | "ledger" | "busy">) {
   if (offline) {
-    return {
-      tone: "bad",
-      label: "Offline",
-      detail: `Keine Verbindung zu ${getApiBase()} – erneuter Versuch alle 10 s.`,
-    };
+    return (
+      <Tooltip content={`Keine Verbindung zu ${getApiBase()} – erneuter Versuch alle 10 s.`} side="bottom">
+        <span tabIndex={0} role="status" className="chip cursor-help border-bad-line bg-bad-soft text-bad">
+          <WifiOff size={12} aria-hidden="true" /> Offline
+        </span>
+      </Tooltip>
+    );
   }
-  if (!health) return { tone: "neutral", label: "Verbinde…", detail: "Backend wird gesucht." };
   if (ledger && !ledger.valid) {
-    return {
-      tone: "bad",
-      label: "Ledger-Befund",
-      detail: (
-        <>
-          <span className="block font-semibold text-bad">Hash-Kette gebrochen{ledger.broken_at_seq != null ? ` bei #${ledger.broken_at_seq}` : ""}</span>
-          <span className="mt-0.5 block text-subtle">{ledger.reason ?? "Ein Eintrag passt nicht zur Kette."}</span>
-        </>
-      ),
-    };
+    return (
+      <Tooltip
+        side="bottom"
+        content={
+          <>
+            <span className="block font-semibold text-bad">Hash-Kette gebrochen{ledger.broken_at_seq != null ? ` bei #${ledger.broken_at_seq}` : ""}</span>
+            <span className="mt-0.5 block text-subtle">{ledger.reason ?? "Ein Eintrag passt nicht zur Kette."}</span>
+          </>
+        }
+      >
+        <span tabIndex={0} role="status" className="chip cursor-help border-bad-line bg-bad-soft text-bad">
+          <ShieldAlert size={12} aria-hidden="true" /> Ledger-Befund
+        </span>
+      </Tooltip>
+    );
   }
-  const ledgerLine = !ledger ? (
-    "Ledger-Prüfung nicht verfügbar."
-  ) : ledger.entries === 0 ? (
-    "Prüfprotokoll noch leer."
-  ) : (
-    <>
-      Hash-Kette intakt: <span className="font-mono tabular-nums">{ledger.entries}</span> Einträge vollständig nachgerechnet,
-      davon <span className="font-mono tabular-nums">{ledger.signed_entries}</span> Ed25519-signiert.
-      <span className="mt-1 block font-mono tabular-nums text-subtle">Kopf-Hash {ledger.head_hash.slice(0, 16)}…</span>
-    </>
-  );
-  if (health.status === "degraded") {
-    return {
-      tone: "warn",
-      label: "Eingeschränkt",
-      detail: (
-        <>
-          <span className="block">{health.ollama.detail ?? health.database.detail ?? "Eine Abhängigkeit antwortet nicht."}</span>
-          <span className="mt-1 block text-subtle">{ledgerLine}</span>
-        </>
-      ),
-    };
+  if (health?.status === "degraded") {
+    return (
+      <Tooltip side="bottom" content={health.ollama.detail ?? health.database.detail ?? "Eine Abhängigkeit antwortet nicht."}>
+        <span tabIndex={0} role="status" className="chip cursor-help border-warn-line bg-warn-soft text-warn">
+          <AlertTriangle size={12} aria-hidden="true" /> Eingeschränkt
+        </span>
+      </Tooltip>
+    );
   }
-  return { tone: "ok", label: "Betriebsbereit", detail: ledgerLine };
+  if (busy) {
+    return (
+      <span role="status" className="inline-flex items-center gap-2 text-xs font-medium text-accent">
+        <span className="relative inline-flex h-2 w-2" aria-hidden="true">
+          <span className="status-pulse" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
+        </span>
+        <span className="hidden sm:inline">Analyse läuft</span>
+      </span>
+    );
+  }
+  return null;
 }
 
-export function Header({ health, offline, settings, ledger, seeding, onSeed, onOpenSettings }: HeaderProps) {
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const dark = theme === "dark";
+  return (
+    <Tooltip content="Farbschema wechseln: Hell / Dunkel" side="bottom" align="right">
+      <button
+        type="button"
+        className="btn btn-icon"
+        onClick={() => setTheme(dark ? "light" : "dark")}
+        aria-label={dark ? "Helles Farbschema" : "Dunkles Farbschema"}
+      >
+        <span className="relative inline-flex h-[15px] w-[15px]">
+          <Sun
+            size={15}
+            aria-hidden="true"
+            className={cx("absolute inset-0 transition-[opacity,transform] duration-200 ease-out", dark ? "rotate-90 scale-75 opacity-0" : "opacity-100")}
+          />
+          <Moon
+            size={15}
+            aria-hidden="true"
+            className={cx("absolute inset-0 transition-[opacity,transform] duration-200 ease-out", dark ? "opacity-100" : "-rotate-90 scale-75 opacity-0")}
+          />
+        </span>
+      </button>
+    </Tooltip>
+  );
+}
+
+export function Header({ health, offline, settings, ledger, seeding, busy, onSeed, onOpenSettings, onStartTour, notify }: HeaderProps) {
   const mode = settings?.inference_mode ?? health?.inference?.mode ?? "local";
   const model = settings?.active_model ?? health?.inference?.model ?? "";
   const local = mode === "local";
-  const status = systemStatus(health, offline, ledger);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-[var(--header-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl no-print">
-      <div className="mx-auto grid w-full max-w-[1920px] grid-cols-[1fr_auto] items-center gap-3 px-4 py-2.5 sm:grid-cols-[1fr_auto_1fr] sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-accent-line bg-accent-soft text-accent">
-            <ShieldCheck size={17} aria-hidden="true" />
-          </div>
+    <header className="sticky top-0 z-40 border-b border-line bg-[var(--header-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 no-print">
+      <div className="mx-auto flex w-full max-w-[1920px] items-center gap-3 px-4 py-2.5 sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <Image src="/compliance-logo-transparent.png" alt="" width={32} height={32} priority unoptimized className="h-8 w-8 shrink-0 object-contain" />
           <h1 className="truncate text-[15px] font-semibold tracking-tight text-fg" title="Enterprise Compliance Agent">
             Compliance Agent
           </h1>
-          {health?.version && (
-            <span className="chip border-line bg-surface-2 font-mono font-medium tabular-nums text-subtle">v{health.version}</span>
-          )}
-        </div>
-
-        <div className="hidden justify-center sm:flex">
-          <Tooltip content={status.detail} side="bottom" align="center">
-            <span
-              tabIndex={0}
-              role="status"
-              className="inline-flex cursor-help items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium text-muted outline-none transition-colors duration-150 hover:bg-surface-2 focus-visible:bg-surface-2"
-            >
-              <span className={cx("relative inline-flex h-2 w-2", DOT[status.tone])} aria-hidden="true">
-                {status.tone === "ok" && <span className="status-pulse" />}
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
-              </span>
-              {status.label}
-            </span>
-          </Tooltip>
+          <StatusSignal health={health} offline={offline} ledger={ledger} busy={busy} />
         </div>
 
         <div className="flex items-center justify-end gap-2">
-          <button
-            className="btn"
-            onClick={onSeed}
-            disabled={offline || seeding}
-            aria-label="Musterdaten laden"
-            title="Standardisierte Prüfbelege laden (§ 14 UStG, Steuerfalle, EU AI Act, ZUGFeRD-E-Rechnung) – funktioniert ohne KI-Modell"
-          >
-            {seeding ? <Spinner size={13} /> : <FileText size={14} aria-hidden="true" />}
-            <span className="hidden md:inline">Musterdaten laden</span>
-          </button>
+          <GitSyncButton online={!offline && Boolean(health)} notify={notify} />
+          <SampleMenu busy={seeding} disabled={offline} onLoad={onSeed} />
 
           {model && (
             <Tooltip
@@ -135,6 +135,11 @@ export function Header({ health, offline, settings, ledger, seeding, onSeed, onO
                 <>
                   <span className="block font-semibold">{PROVIDER_NAMES[mode]}</span>
                   <span className="block font-mono text-subtle">{model}</span>
+                  {settings?.fallbacks?.length ? (
+                    <span className="mt-1 block text-subtle">
+                      Ausweich-Kaskade: {settings.fallbacks.map((fallback) => PROVIDER_NAMES[fallback]).join(" → ")}
+                    </span>
+                  ) : null}
                   <span className="mt-1 block text-subtle">
                     {local
                       ? "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner."
@@ -154,9 +159,17 @@ export function Header({ health, offline, settings, ledger, seeding, onSeed, onO
             </Tooltip>
           )}
 
-          <button className="btn btn-icon" onClick={onOpenSettings} aria-label="Einstellungen" title="Einstellungen">
-            <Settings size={15} />
-          </button>
+          <Tooltip content="Interaktive Tour erneut starten" side="bottom" align="right">
+            <button type="button" className="btn btn-icon" onClick={onStartTour} aria-label="Hilfe und Tour">
+              <HelpCircle size={15} aria-hidden="true" />
+            </button>
+          </Tooltip>
+          <ThemeToggle />
+          <Tooltip content="Einstellungen" side="bottom" align="right">
+            <button type="button" className="btn btn-icon" onClick={onOpenSettings} aria-label="Einstellungen">
+              <Settings size={15} aria-hidden="true" />
+            </button>
+          </Tooltip>
         </div>
       </div>
     </header>

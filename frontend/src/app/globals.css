@@ -38,7 +38,10 @@
   --pii-line: #c7d2fe;
 
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
-  --header-bg: rgba(255, 255, 255, 0.75);
+  --header-bg: rgba(255, 255, 255, 0.7);
+  --menu-bg: rgba(255, 255, 255, 0.95);
+  --backdrop: rgba(15, 23, 42, 0.35);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --scroll-thumb: rgba(148, 163, 184, 0.45);
   --scroll-thumb-hover: rgba(100, 116, 139, 0.65);
   color-scheme: light;
@@ -78,7 +81,10 @@
   --pii-line: rgba(129, 140, 248, 0.4);
 
   --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  --header-bg: rgba(2, 6, 23, 0.7);
+  /* Liquid Glass: slate-950/60 - der Belegtext darunter schimmert weichgezeichnet durch. */
+  --header-bg: rgba(2, 6, 23, 0.6);
+  --menu-bg: rgba(15, 21, 36, 0.94);
+  --backdrop: rgba(2, 6, 23, 0.6);
   /* slate-700/40, beim Ueberfahren slate-600/60 */
   --scroll-thumb: rgba(51, 65, 85, 0.4);
   --scroll-thumb-hover: rgba(71, 85, 105, 0.6);
@@ -159,8 +165,12 @@ body {
     font-size: 0.8125rem;
     font-weight: 500;
     line-height: 1.25rem;
-    transition: background-color 150ms, border-color 150ms, color 150ms;
+    transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms var(--ease-out);
     white-space: nowrap;
+  }
+  /* Druckgefuehl (0.97, 150 ms): die Oberflaeche bestaetigt den Klick sofort. */
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
   }
   .btn:hover:not(:disabled) {
     background: var(--surface-2);
@@ -423,6 +433,126 @@ a,
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* --- Kaltstart-Splash (layout.tsx + SplashAbbau) ------------------------- */
+.eca-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(60% 50% at 50% 42%, rgba(34, 211, 238, 0.08), transparent 70%), var(--bg);
+  transition: opacity 320ms var(--ease-out, ease-out);
+  /* Notaus ohne JavaScript: nach 4 s weg. */
+  animation: eca-splash-notaus 0s linear 4s forwards;
+}
+.eca-splash.ist-weg { opacity: 0; pointer-events: none; }
+.eca-splash.ist-aus { display: none; }
+.eca-splash-inhalt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: eca-splash-ein 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.eca-splash-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  animation: eca-splash-glow 1.8s ease-in-out infinite;
+}
+.eca-splash-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.eca-splash-linie {
+  position: relative;
+  width: 112px;
+  height: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--surface-2);
+}
+.eca-splash-linie::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: eca-splash-lauf 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes eca-splash-ein {
+  from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes eca-splash-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+  50% { box-shadow: 0 0 28px 2px rgba(34, 211, 238, 0.28); }
+}
+@keyframes eca-splash-lauf {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(240%); }
+}
+@keyframes eca-splash-notaus {
+  to { opacity: 0; visibility: hidden; pointer-events: none; }
+}
+
+/* --- Glas-Menues (Select, Musterdaten) -------------------------------------- */
+.glass-menu {
+  background: var(--menu-bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.75rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 16px 40px -12px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  transform-origin: var(--origin, top);
+  animation: eca-menu-in 150ms var(--ease-out, ease-out) both;
+}
+@keyframes eca-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- Toasts: von rechts oben herein, sanft hinaus ------------------------- */
+.toast {
+  animation: none;
+  transition: opacity 180ms var(--ease-out, ease-out), transform 180ms var(--ease-out, ease-out);
+}
+@starting-style {
+  .toast { opacity: 0; transform: translateX(16px); }
+}
+.toast[data-leaving="true"] {
+  opacity: 0;
+  transform: translateX(16px);
+}
+
+/* --- Spotlight-Tour --------------------------------------------------------- */
+.tour-ring {
+  position: fixed;
+  z-index: 91;
+  border-radius: 0.875rem;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft);
+  pointer-events: none;
+  transition: top 220ms var(--ease-out, ease-out), left 220ms var(--ease-out, ease-out),
+    width 220ms var(--ease-out, ease-out), height 220ms var(--ease-out, ease-out);
+}
+
+/* --- Next.js-Entwicklerhinweise ausblenden (devIndicators: false genuegt im Normalfall) ---
+ * Das Fehler-Overlay (data-nextjs-dialog-overlay) bleibt bewusst sichtbar: Es zeigt
+ * Laufzeitfehler waehrend der Entwicklung und erscheint im Produktionsbuild ohnehin nie. */
+nextjs-portal [data-nextjs-dev-tools-button],
+[data-nextjs-dev-tools-button],
+#nextjs-dev-tools-button,
+[data-nextjs-toast] {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
 @media print {

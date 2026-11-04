@@ -66,6 +66,9 @@ documents_table: Table = Table(
     sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
     # --- seit v2.1: EN-16931-Datensatz (ZUGFeRD/Factur-X/XRechnung) ---
     sa.Column("einvoice", sa.JSON, nullable=True),
+    # --- seit v2.4: Archiv (nur ausgeblendet, nie geloescht - GoBD) ---
+    sa.Column("archived", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
 )
 
 #: Append-only-Pruefprotokoll (siehe app/audit_ledger.py).
@@ -106,6 +109,8 @@ _MIGRATED_COLUMNS: dict[str, str] = {
     "sign_off": "JSON",
     "pinned": "BOOLEAN NOT NULL DEFAULT FALSE",
     "einvoice": "JSON",
+    "archived": "BOOLEAN NOT NULL DEFAULT FALSE",
+    "archived_at": "TIMESTAMP WITH TIME ZONE",
 }
 
 
@@ -152,6 +157,8 @@ class DocumentRecord:
     sign_off: dict[str, Any] | None = None
     pinned: bool = False
     einvoice: dict[str, Any] | None = None
+    archived: bool = False
+    archived_at: datetime | None = None
 
     @classmethod
     def from_row(cls, row: Row[Any]) -> DocumentRecord:
@@ -179,6 +186,8 @@ class DocumentRecord:
             sign_off=mapping["sign_off"],
             pinned=bool(mapping["pinned"]),
             einvoice=mapping["einvoice"],
+            archived=bool(mapping["archived"]),
+            archived_at=_ensure_utc(mapping["archived_at"]),
         )
 
 
@@ -242,6 +251,8 @@ class DocumentRepository(Protocol):
 
     async def set_pinned(self, document_id: str, pinned: bool) -> DocumentRecord: ...
 
+    async def set_archived(self, document_id: str, archived: bool) -> DocumentRecord: ...
+
     async def list_all(self) -> list[DocumentRecord]: ...
 
     async def mark_failed(self, document_id: str, error: str) -> None: ...
@@ -286,6 +297,8 @@ class SqlDocumentRepository:
             "sign_off": None,
             "pinned": False,
             "einvoice": document.einvoice,
+            "archived": False,
+            "archived_at": None,
         }
         with self._engine.begin() as connection:
             connection.execute(sa.insert(documents_table).values(**values))
@@ -405,6 +418,11 @@ class SqlDocumentRepository:
 
     async def set_pinned(self, document_id: str, pinned: bool) -> DocumentRecord:
         return await self._update_and_get(document_id, {"pinned": pinned})
+
+    async def set_archived(self, document_id: str, archived: bool) -> DocumentRecord:
+        return await self._update_and_get(
+            document_id, {"archived": archived, "archived_at": utcnow() if archived else None}
+        )
 
     async def list_all(self) -> list[DocumentRecord]:
         records, _ = await anyio.to_thread.run_sync(partial(self._select_many, 100_000, 0, None))

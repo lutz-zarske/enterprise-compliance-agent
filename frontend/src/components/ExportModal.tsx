@@ -12,7 +12,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSealed: (document: DocumentDetail) => void;
-  notify: (tone: "ok" | "bad", title: string, message?: string) => void;
+  notify: (tone: "ok" | "bad" | "info", title: string, message?: string) => void;
 }
 
 /** Druckt HTML ueber ein unsichtbares iframe - funktioniert auch mit X-API-Key. */
@@ -94,7 +94,7 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
             run("zip", async () => {
               const { blob, filename } = await api.gobdPackage(document.id);
               downloadBlob(blob, filename ?? `Pruefdatenpaket_${stem}.zip`, "application/zip");
-              notify("ok", "Prüfdatenpaket erstellt", "Prüfen mit: python scripts/verify_pruefpaket.py <paket.zip>");
+              notify("info", "Verfahrensdokumentation & Prüfbericht erfolgreich als ZIP exportiert", "Prüfen mit: python scripts/verify_pruefpaket.py <paket.zip>");
             })
           }
         />
