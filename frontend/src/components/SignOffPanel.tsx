@@ -29,6 +29,7 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
   const [decision, setDecision] = useState<SignOffDecision>("SEALED_APPROVED");
   const [busy, setBusy] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const mod = useModifierLabel();
   const blocked = Boolean(document.scorecard?.release_blocked);
   const analyzed = Boolean(document.scorecard);
@@ -42,6 +43,7 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
     }
     setAuditor(stored);
     setNote("");
+    if (noteRef.current) noteRef.current.style.height = "auto";
     setDecision(blocked ? "SEALED_REJECTED" : "SEALED_APPROVED");
     if (autoFocus && !stored) nameRef.current?.focus();
   }, [document.id, blocked, autoFocus]);
@@ -144,9 +146,14 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
       <label className="mt-3 block">
         <span className="label-caps">Prüfungsnotiz</span>
         <textarea
-          className="input mt-1 min-h-[70px]"
+          ref={noteRef}
+          className="input mt-1 min-h-[70px] max-h-[160px] resize-none overflow-y-auto leading-relaxed"
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={(e) => {
+            setNote(e.target.value);
+            e.target.style.height = "auto";
+            e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+          }}
           name="audit-note"
           placeholder="Optionale Prüfungsnotiz eingeben…"
         />

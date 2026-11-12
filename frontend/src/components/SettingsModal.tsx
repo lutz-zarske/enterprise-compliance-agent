@@ -371,7 +371,7 @@ export function SettingsModal({ open, settings, version, onClose, onSaved, onAcc
   );
 
   return (
-    <Modal open={open} onClose={onClose} title="Einstellungen" subtitle="Inferenz, Prüfstrenge, Verbindung und Version" width="max-w-3xl">
+    <Modal open={open} onClose={onClose} title="Einstellungen" width="max-w-3xl">
       <Tabs<Tab>
         active={tab}
         onChange={setTab}

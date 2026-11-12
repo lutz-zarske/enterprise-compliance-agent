@@ -101,7 +101,7 @@ class ReleaseManager:
             "checked_at": datetime.now(UTC).isoformat(), "message": None,
         }
         if not self._is_checkout():
-            return {**base, "message": "Keine Git-Arbeitskopie (z. B. Docker-Image) - Update ueber ein neues Image."}
+            return {**base, "message": "Keine Git-Arbeitskopie (z. B. Docker-Image) - Update über ein neues Image."}
         message = None
         if fetch:
             fetched = self._git("fetch", "--tags", "--quiet", "origin", check=False)
@@ -136,7 +136,7 @@ class ReleaseManager:
         if active_analyses:
             raise ReleaseError("analysis_running", f"{active_analyses} Analyse(n) laufen noch - bitte abwarten.")
         if not self._is_checkout():
-            raise ReleaseError("no_git_checkout", "Keine Git-Arbeitskopie - Update ueber ein neues Image.")
+            raise ReleaseError("no_git_checkout", "Keine Git-Arbeitskopie - Update über ein neues Image.")
         latest = self.latest()
         if latest is None or latest["tag"] != tag:
             raise ReleaseError("release_not_found", f"{tag} ist nicht die neueste verfuegbare Version.")

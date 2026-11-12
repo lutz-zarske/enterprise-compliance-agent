@@ -173,6 +173,9 @@ def test_katalog_heuristik() -> None:
     gemini = parse_catalog("gemini", {"models": [
         {"name": "models/gemini-2.5-pro", "supportedGenerationMethods": ["generateContent"]},
         {"name": "models/gemini-3-pro", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/gemini-4-argon", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/gemini-4-carbon", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/lyria-3.5", "supportedGenerationMethods": ["generateContent"]},
         {"name": "models/gemini-3-pro-preview-06", "supportedGenerationMethods": ["generateContent"]},
         {"name": "models/text-embedding-004", "supportedGenerationMethods": ["embedContent"]},
     ]})

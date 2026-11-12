@@ -20,6 +20,7 @@ NOISE = (
     "audio", "realtime", "tts", "transcribe", "image", "imagen", "embedding", "search", "moderation",
     "whisper", "dall-e", "codex", "computer-use", "preview", "exp", "instruct", "learnlm", "gemma",
     "aqa", "veo", "live", "native", "tuning", "babbage", "davinci",
+    "argon", "carbon", "lyria", "music", "deep-research",
 )
 
 

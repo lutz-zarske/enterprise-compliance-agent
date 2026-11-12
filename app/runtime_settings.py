@@ -62,7 +62,7 @@ CLOUD_PROVIDERS: tuple[InferenceMode, ...] = (
 #: Auswahl im Einstellungsdialog (freie Eingabe bleibt moeglich).
 SUGGESTED_MODELS: dict[str, list[str]] = {
     "local": ["qwen2.5:14b-instruct", "qwen2.5:7b-instruct", "llama3.1:8b-instruct-q8_0"],
-    "gemini": ["gemini-2.5-pro", "gemini-2.5-flash"],
+    "gemini": ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"],
     "anthropic": ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5-20251001"],
     "openai": ["gpt-4o", "gpt-4o-mini"],
 }
@@ -177,7 +177,10 @@ class RuntimeSettingsStore:
                         self._fernet.decrypt(value.encode()).decode() if value else None
                     )
                 elif key == "models":
-                    self._state["models"].update(json.loads(value))
+                    loaded_models = json.loads(value)
+                    if loaded_models.get("gemini") == "gemini-2.5-pro":
+                        loaded_models["gemini"] = "gemini-3.8-flash"
+                    self._state["models"].update(loaded_models)
                 elif key in {"enforce_ustg_check", "ai_act_escalation"}:
                     self._state[key] = json.loads(value)
                 elif key == "inference_mode":

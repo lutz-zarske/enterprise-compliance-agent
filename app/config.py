@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     #: local | gemini | anthropic | openai (Startwert; zur Laufzeit aenderbar).
     inference_mode: str = Field(default="local")
     gemini_api_key: str | None = Field(default=None)
-    gemini_model: str = Field(default="gemini-2.5-pro")
+    gemini_model: str = Field(default="gemini-3.8-flash")
     gemini_base_url: str = Field(default="https://generativelanguage.googleapis.com/v1beta")
     anthropic_api_key: str | None = Field(default=None)
     anthropic_model: str = Field(default="claude-sonnet-5-5")

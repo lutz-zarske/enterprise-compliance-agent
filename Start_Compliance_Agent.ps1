@@ -44,7 +44,7 @@ function Http-Ok([string]$url, [int]$timeoutSec = 3) {
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "   Enterprise Compliance Agent -- Institutional Launcher   " -ForegroundColor Cyan
+Write-Host "   Enterprise Compliance Agent Launcher   " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 

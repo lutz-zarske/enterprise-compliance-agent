@@ -116,9 +116,11 @@ export function Header({ health, offline, settings, ledger, seeding, busy, onSee
     <header className="sticky top-0 z-40 border-b border-line bg-[var(--header-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 no-print">
       <div className="mx-auto flex w-full max-w-[1920px] items-center gap-3 px-4 py-2.5 sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <Image src="/compliance-logo-transparent.png" alt="" width={32} height={32} priority unoptimized className="h-8 w-8 shrink-0 object-contain" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 p-1 shadow-xs dark:border-white/10 dark:bg-slate-900/80">
+            <Image src="/compliance-logo-transparent.png" alt="" width={24} height={24} priority unoptimized className="h-full w-full object-contain" />
+          </div>
           <h1 className="truncate text-[15px] font-semibold tracking-tight text-fg" title="Enterprise Compliance Agent">
-            Compliance Agent
+            Enterprise Compliance Agent
           </h1>
           <StatusSignal health={health} offline={offline} ledger={ledger} busy={busy} />
         </div>

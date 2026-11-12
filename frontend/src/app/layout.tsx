@@ -6,7 +6,7 @@ import { SplashAbbau } from "../components/SplashAbbau";
 import { ThemeProvider } from "../components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Enterprise Compliance Agent | VO (EU) 2024/1689 · § 14 UStG",
+  title: "Enterprise Compliance Agent",
   description:
     "Revisionssichere Prüfung von Rechnungen und Verträgen: EU AI Act, § 14 UStG, DSGVO – lokal oder über ein Privacy Gateway.",
   icons: {
