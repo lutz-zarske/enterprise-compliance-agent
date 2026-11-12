@@ -554,7 +554,7 @@ export default function DashboardPage() {
 
       <footer className="border-t border-line py-4 no-print">
         <div className="mx-auto flex w-full max-w-[1920px] flex-col items-center justify-between gap-1 px-4 text-xs text-subtle sm:flex-row sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
-          <span>Enterprise Compliance Agent <span className="font-mono tabular-nums">v{health?.version ?? "2.4.0"}</span></span>
+          <span>Enterprise Compliance Agent <span className="font-mono tabular-nums">v{health?.version ?? "2.4.1"}</span></span>
           <span>VO (EU) 2024/1689 · § 14 UStG · DSGVO · GoBD-Hash-Kette</span>
           <span>{settings?.is_cloud ? "Cloud-Inferenz über Privacy Gateway" : "Lokale Inferenz · Zero Data Leakage"}</span>
         </div>
@@ -563,7 +563,7 @@ export default function DashboardPage() {
       <SettingsModal
         open={settingsOpen}
         settings={settings}
-        version={health?.version ?? "2.4.0"}
+        version={health?.version ?? "2.4.1"}
         onClose={() => setSettingsOpen(false)}
         onSaved={(updated) => {
           setSettings(updated);

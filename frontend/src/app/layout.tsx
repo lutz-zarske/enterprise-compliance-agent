@@ -11,8 +11,8 @@ export const metadata: Metadata = {
     "Revisionssichere Prüfung von Rechnungen und Verträgen: EU AI Act, § 14 UStG, DSGVO – lokal oder über ein Privacy Gateway.",
   icons: {
     icon: [
-      { url: "/compliance-logo-transparent.png", type: "image/png", sizes: "512x512" },
-      { url: "/compliance-logo.png", type: "image/png", sizes: "512x512" },
+      { url: "/compliance-logo-transparent.png", type: "image/png", sizes: "256x256" },
+      { url: "/compliance-logo.png", type: "image/png", sizes: "256x256" },
     ],
     apple: "/compliance-logo.png",
   },

@@ -280,8 +280,9 @@ python scripts/smoke_test_ollama.py  # Erreichbarkeit, Modell, echter Inferenzla
 
 ### Enterprise Refinement (v2.4)
 
-* **Logo & Kaltstart-Splash:** eigenes Siegel-Logo (`frontend/public/compliance-logo*.png|svg`)
-  in Kopfzeile, Favicon und Splash. Der Splash steht im Server-HTML, deckt den
+* **Logo & Kaltstart-Splash:** Siegel-Logo (`frontend/public/compliance-logo-transparent.png`,
+  freigestellt; `compliance-logo.png` mit Hintergrund für Favicon und Apple-Touch-Icon,
+  je 256 × 256 px, palettenkomprimiert) in Kopfzeile, Favicon und Splash. Der Splash steht im Server-HTML, deckt den
   ersten Paint ab und blendet weich aus, sobald die Startdaten da sind
   (spätestens nach 2,5 s) – kein Springen beim Kaltstart.
 * **Kopfzeile (Liquid Glass):** `backdrop-blur-xl backdrop-saturate-150` auf
