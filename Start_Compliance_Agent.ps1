@@ -77,7 +77,13 @@ $PythonExe = (Get-Item $VenvPython).FullName
 
 $PyMarker = Join-Path $RunDir "requirements.sha256"
 $py = Hash-Geaendert (Join-Path $AppDir "requirements.txt") $PyMarker
-if ($py.Geaendert) {
+$paketeFehlen = $false
+try {
+    & $PythonExe -c "import uvicorn, fastapi" 2>$null
+    if ($LASTEXITCODE -ne 0) { $paketeFehlen = $true }
+} catch { $paketeFehlen = $true }
+
+if ($py.Geaendert -or $paketeFehlen) {
     Write-Host "[>] Installiere bzw. aktualisiere Python-Abhängigkeiten..." -ForegroundColor Cyan
     & $PythonExe -m pip install --disable-pip-version-check -q -r (Join-Path $AppDir "requirements.txt")
     if ($LASTEXITCODE -ne 0) {
