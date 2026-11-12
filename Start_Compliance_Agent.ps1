@@ -61,7 +61,17 @@ $VenvPython = Join-Path $AppDir ".venv\Scripts\python.exe"
 if (-not (Test-Path $VenvPython)) {
     Write-Host "[>] Lege Python-Umgebung (.venv) an (einmalig)..." -ForegroundColor Cyan
     if (Get-Command py.exe -ErrorAction SilentlyContinue) {
-        & py.exe -3 -m venv (Join-Path $AppDir ".venv")
+        # Bevorzuge stabile Python-Versionen (3.12 / 3.11), fuer die fertige pre-built Wheels existieren
+        $pyTarget = "-3"
+        try {
+            & py.exe -3.12 -c "exit(0)" 2>$null
+            if ($LASTEXITCODE -eq 0) { $pyTarget = "-3.12" }
+            else {
+                & py.exe -3.11 -c "exit(0)" 2>$null
+                if ($LASTEXITCODE -eq 0) { $pyTarget = "-3.11" }
+            }
+        } catch {}
+        & py.exe $pyTarget -m venv (Join-Path $AppDir ".venv")
     } elseif (Get-Command python.exe -ErrorAction SilentlyContinue) {
         & python.exe -m venv (Join-Path $AppDir ".venv")
     } else {
