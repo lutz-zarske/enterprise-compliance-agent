@@ -49,6 +49,26 @@ DEFAULT_SEED = 42
 #: Kurzes Timeout fuer Verfuegbarkeitspruefungen, damit /health schnell bleibt.
 HEALTH_TIMEOUT_SECONDS = 1.5
 
+#: Fehlt das eingestellte lokale Modell, wird das erste installierte aus dieser Liste
+#: *vorgeschlagen* - nie still gewechselt (GoBD: Modellwechsel nur per Klick, im Ledger).
+MODEL_PRIORITY = ("qwen2.5:14b-instruct", "qwen2.5:7b-instruct", "llama3.1:8b-instruct-q8_0")
+_NO_CHAT_MODEL = ("embed", "nomic", "bge-", "minilm", "rerank")
+
+
+def suggest_local_model(configured: str, installed: list[str]) -> str | None:
+    """Ersatzvorschlag, wenn ``configured`` fehlt: Vorrangliste, sonst erstes Chat-Modell."""
+
+    def present(name: str) -> str | None:
+        return next((item for item in installed if item in {name, f"{name}:latest"}), None)
+
+    if not installed or present(configured) or present(configured.removesuffix(":latest")):
+        return None
+    for name in MODEL_PRIORITY:
+        if found := present(name):
+            return found
+    chat = [name for name in installed if not any(marker in name.lower() for marker in _NO_CHAT_MODEL)]
+    return chat[0] if chat else None
+
 
 # ---------------------------------------------------------------------------
 # Ausnahmen
@@ -56,17 +76,30 @@ HEALTH_TIMEOUT_SECONDS = 1.5
 
 
 class LLMError(Exception):
-    """Basisklasse aller Inferenzfehler."""
+    """Basisklasse aller Inferenzfehler.
+
+    ``failover``: Die naechste Stufe der Kaskade darf uebernehmen (Ueberlast, Ausfall,
+    Zeitueberschreitung, Budget).  ``retry``: Vorher lohnt eine kurze Wiederholung
+    derselben Stufe.  Abgelehnte Keys (401/403) und Schemafehler setzen beides nicht -
+    eine Fehlkonfiguration soll sichtbar bleiben statt still umgangen zu werden.
+    """
 
     code = "llm_error"
     hint: str | None = None
+    failover = False
+    retry = False
 
 
 class OllamaUnavailableError(LLMError):
-    """Der Ollama-Dienst ist nicht erreichbar."""
+    """Der Ollama-Dienst ist nicht erreichbar oder ueberlastet."""
 
     code = "ollama_unavailable"
-    hint = "Laeuft 'ollama serve'? Erreichbarkeit mit scripts/smoke_test_ollama.py pruefen."
+    hint = (
+        "Lokale KI starten (Einstellungen › KI-Modelle) oder im Terminal 'ollama serve' ausfuehren; "
+        "Erreichbarkeit mit scripts/smoke_test_ollama.py pruefen."
+    )
+    failover = True
+    retry = True
 
 
 class OllamaModelNotFoundError(LLMError):
@@ -77,10 +110,15 @@ class OllamaModelNotFoundError(LLMError):
 
 
 class OllamaTimeoutError(LLMError):
-    """Die Inferenz hat das konfigurierte Zeitlimit ueberschritten."""
+    """Die Inferenz hat das konfigurierte Zeitlimit ueberschritten.
+
+    Lokal keine Wiederholung: Ein Modell, das fuer diesen Beleg zu langsam ist,
+    wird beim zweiten Versuch nicht schneller - die Kaskade geht weiter.
+    """
 
     code = "llm_timeout"
     hint = "OLLAMA_TIMEOUT_SECONDS erhoehen oder ein kleineres Modell verwenden."
+    failover = True
 
 
 class LLMResponseError(LLMError):
@@ -474,11 +512,12 @@ class OllamaClient(StructuredLLMClient):
             response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise OllamaUnavailableError(
-                f"Zeitueberschreitung bei {self._settings.ollama_tags_url}."
+                f"Ollama unter {self._settings.ollama_base_url} antwortet nicht rechtzeitig."
             ) from exc
         except httpx.HTTPError as exc:
+            logger.debug("Ollama-Statusabfrage gescheitert: %r", exc)
             raise OllamaUnavailableError(
-                f"Ollama unter {self._settings.ollama_base_url} nicht erreichbar: {exc}"
+                f"Ollama unter {self._settings.ollama_base_url} ist nicht erreichbar."
             ) from exc
 
         payload = response.json()
@@ -510,20 +549,25 @@ class OllamaClient(StructuredLLMClient):
             response = await self._client.post(self._settings.ollama_chat_url, json=payload)
         except httpx.TimeoutException as exc:
             raise OllamaTimeoutError(
-                f"Die Inferenz hat {self._settings.ollama_timeout_seconds:.0f}s ueberschritten."
+                f"Das lokale Modell hat {self._settings.ollama_timeout_seconds:.0f} s ueberschritten."
             ) from exc
         except httpx.HTTPError as exc:
+            logger.debug("Ollama-Aufruf gescheitert: %r", exc)
             raise OllamaUnavailableError(
-                f"Ollama unter {self._settings.ollama_base_url} nicht erreichbar: {exc}"
+                f"Ollama unter {self._settings.ollama_base_url} ist nicht erreichbar."
             ) from exc
 
         if response.status_code == 404:
             raise OllamaModelNotFoundError(
                 f"Das Modell '{self.model}' ist auf dem Ollama-Host nicht installiert."
             )
+        if response.status_code in (408, 429) or response.status_code >= 500:
+            raise OllamaUnavailableError(
+                f"Ollama ist ausgelastet oder gestoert (HTTP {response.status_code})."
+            )
         if response.status_code >= 400:
             raise LLMResponseError(
-                f"Ollama antwortete mit HTTP {response.status_code}: {response.text[:500]}"
+                f"Ollama antwortete mit HTTP {response.status_code}: {response.text[:300]}"
             )
 
         body = response.json()

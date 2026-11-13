@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "../lib/format";
-import { popoverStyle } from "../lib/popover";
+import { popoverStyle, usePopoverExclusive } from "../lib/popover";
 import { ChevronDown, Eye, FileText, Package } from "./icons";
 import { Spinner } from "./ui";
 
@@ -77,6 +77,8 @@ export function SampleMenu({ busy, disabled, onLoad }: {
   const [style, setStyle] = useState<React.CSSProperties>({ position: "fixed", visibility: "hidden" });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  usePopoverExclusive(open, close, "sample-menu");
 
   useEffect(() => {
     if (!open) return;
@@ -164,7 +166,7 @@ export function SampleMenu({ busy, disabled, onLoad }: {
                   <span className="min-w-0">
                     <span className="flex items-baseline gap-2">
                       <span className="text-[13px] font-medium leading-snug text-fg">{sample.title}</span>
-                      <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-subtle">{sample.score} Pkt.</span>
+                      <span className="ml-auto shrink-0 text-xs tabular-nums text-subtle">{sample.score} Pkt.</span>
                     </span>
                     <span className="mt-0.5 block text-xs leading-snug text-subtle">{sample.subtitle}</span>
                   </span>

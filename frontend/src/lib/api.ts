@@ -8,24 +8,30 @@
 import type {
   BatchUploadResponse,
   ConnectionTestResult,
+  CopilotProgress,
   CopilotResponse,
   CopilotTurn,
   DocumentDetail,
   DocumentListResponse,
-  ExtractionResponse,
   HealthResponse,
+  JobListResponse,
+  JobSnapshot,
   KpiResponse,
   LedgerEntry,
   LedgerVerification,
+  LocalAiResult,
+  LocalAiStatus,
   ModelCatalog,
   OverrideRequest,
   ProgressResponse,
+  RedactResult,
   ReleaseApplyResult,
   ReleaseStatus,
   RuntimeSettings,
   SeedResponse,
   SettingsUpdate,
   SignOffDecision,
+  ThinkingLevel,
   VatVerification,
 } from "../types/api";
 
@@ -113,17 +119,27 @@ async function toApiError(response: Response): Promise<ApiError> {
   return new ApiError(`Anfrage fehlgeschlagen (HTTP ${response.status}).`, response.status, "http_error");
 }
 
+function portOf(base: string): string {
+  return /:(\d+)(?:\/|$)/.exec(base.replace(/^https?:\/\//, ""))?.[1] ?? "8001";
+}
+
+/** Ruhige, konkrete Meldung statt "Failed to fetch". */
+function offlineError(base: string): ApiError {
+  const port = portOf(base);
+  return new ApiError(
+    `Backend nicht erreichbar (Port ${port}).`,
+    0,
+    "network",
+    `Start_Compliance_Agent.bat ausführen bzw. „uvicorn app.main:app --port ${port}“ starten – die Verbindung wird automatisch neu geprüft.`,
+  );
+}
+
 async function request<T>(path: string, init: RequestInit = {}, base = activeBase): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${base}${path}`, { cache: "no-store", ...init, headers: headers(init.headers) });
   } catch {
-    throw new ApiError(
-      `Backend unter ${base} nicht erreichbar.`,
-      0,
-      "network",
-      "Backend starten: uvicorn app.main:app --port 8001",
-    );
+    throw offlineError(base);
   }
   if (!response.ok) throw await toApiError(response);
   return (await response.json()) as T;
@@ -134,7 +150,7 @@ async function requestBlob(path: string): Promise<{ blob: Blob; filename: string
   try {
     response = await fetch(`${activeBase}${path}`, { cache: "no-store", headers: headers() });
   } catch {
-    throw new ApiError(`Backend unter ${activeBase} nicht erreichbar.`, 0, "network");
+    throw offlineError(activeBase);
   }
   if (!response.ok) throw await toApiError(response);
   return { blob: await response.blob(), filename: filenameFrom(response.headers.get("Content-Disposition")) };
@@ -159,7 +175,7 @@ async function requestText(path: string): Promise<string> {
   try {
     response = await fetch(`${activeBase}${path}`, { cache: "no-store", headers: headers() });
   } catch {
-    throw new ApiError(`Backend unter ${activeBase} nicht erreichbar.`, 0, "network");
+    throw offlineError(activeBase);
   }
   if (!response.ok) throw await toApiError(response);
   return response.text();
@@ -190,13 +206,22 @@ export async function fetchHealth(): Promise<HealthResponse> {
       if (!lastError.isOffline) throw lastError;
     }
   }
-  throw lastError ?? new ApiError("Backend nicht erreichbar.", 0, "network");
+  throw lastError ?? offlineError(activeBase);
 }
 
 export const api = {
   documents: (limit = 200) => request<DocumentListResponse>(`/documents?limit=${limit}`),
   document: (id: string) => request<DocumentDetail>(`/documents/${id}`),
-  extract: (id: string) => request<ExtractionResponse>(`/documents/${id}/extract`, { method: "POST" }),
+  /** Startet die Pruefung als Hintergrund-Job (HTTP 202) - kein Request wartet auf das Modell. */
+  extract: (id: string) => request<JobSnapshot>(`/documents/${id}/extract`, { method: "POST" }),
+  submitJobs: (documentIds: string[]) =>
+    request<{ jobs: JobSnapshot[]; rejected: { document_id: string; code: string; message: string }[] }>(
+      "/api/v1/jobs",
+      json({ document_ids: documentIds }),
+    ),
+  jobs: (active = false) => request<JobListResponse>(`/api/v1/jobs?active=${active}`),
+  job: (jobId: string) => request<JobSnapshot>(`/api/v1/jobs/${encodeURIComponent(jobId)}`),
+  cancelJob: (jobId: string) => request<JobSnapshot>(`/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }),
   progress: (id: string) => request<ProgressResponse>(`/documents/${id}/progress`),
   pin: (id: string, pinned: boolean) => request<DocumentDetail>(`/documents/${id}/pin`, json({ pinned }, "PUT")),
   archive: (id: string, archived: boolean) =>
@@ -206,14 +231,26 @@ export const api = {
   reportJson: (id: string) => request<Record<string, unknown>>(`/documents/${id}/report?format=json`),
   reportMarkdown: (id: string) => requestText(`/documents/${id}/report?format=markdown`),
   reportHtml: (id: string) => requestText(`/documents/${id}/report?format=html`),
-  copilot: (id: string, question: string, history: CopilotTurn[]) =>
-    request<CopilotResponse>(`/documents/${id}/copilot`, json({ question, history })),
+  copilot: (id: string, question: string, history: CopilotTurn[], thinking: ThinkingLevel = "medium", progressId?: string) =>
+    request<CopilotResponse>(
+      `/documents/${id}/copilot`,
+      json({ question, history, thinking, ...(progressId ? { progress_id: progressId } : {}) }),
+    ),
+  copilotProgress: (progressId: string) =>
+    request<CopilotProgress>(`/api/v1/copilot/progress/${encodeURIComponent(progressId)}`),
+  localAi: () => request<LocalAiStatus>("/api/v1/ai/local"),
+  startOllama: () => request<LocalAiResult>("/api/v1/ai/start-ollama", { method: "POST" }),
+  stopLocalAi: () => request<LocalAiResult>("/api/v1/ai/stop-local", { method: "POST" }),
+  redact: (text: string) => request<RedactResult>("/api/v1/redact", json({ text })),
   gobdPackage: (id: string) => requestBlob(`/api/documents/${id}/export/gobd`),
   proceduralDoc: (id: string) => requestText(`/api/documents/${id}/export/procedural-doc?format=html`),
   override: (id: string, body: OverrideRequest) =>
     request<DocumentDetail>(`/api/documents/${id}/override`, json(body)),
   trail: (id: string) =>
     request<{ items: LedgerEntry[]; count: number }>(`/api/audit/trail?document_id=${encodeURIComponent(id)}&limit=200`),
+  /** Gesamte Hash-Kette (neueste zuerst), inklusive Systemereignisse. */
+  fullTrail: (limit = 500) => request<{ items: LedgerEntry[]; count: number }>(`/api/audit/trail?limit=${limit}`),
+  signingKey: () => request<{ algorithm?: string; fingerprint: string; public_key?: string; [key: string]: unknown }>("/api/audit/signing-key"),
   verifyLedger: () => request<LedgerVerification>("/api/audit/verify"),
   verifyVat: (country_code: string, vat_number: string) =>
     request<VatVerification>("/api/vat/verify", json({ country_code, vat_number })),

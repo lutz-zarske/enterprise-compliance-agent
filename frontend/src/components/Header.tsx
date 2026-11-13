@@ -1,179 +1,218 @@
 "use client";
 
 import Image from "next/image";
-import React from "react";
-import type { HealthResponse, LedgerVerification, RuntimeSettings } from "../types/api";
+import React, { useCallback, useRef, useState } from "react";
+import type { HealthResponse, JobSnapshot, LedgerVerification, RuntimeSettings } from "../types/api";
 import { getApiBase } from "../lib/api";
 import { cx, formatModel, PROVIDER_NAMES } from "../lib/format";
-import { AlertTriangle, Database, HelpCircle, Lock, Moon, Settings, ShieldAlert, Sun, WifiOff } from "./icons";
+import { useDismiss, usePopoverExclusive } from "../lib/popover";
+import { HelpCircle, Moon, Settings, Sun, WifiOff } from "./icons";
+import { JobMonitor, type FinishedJob } from "./JobMonitor";
+import { Notifications } from "./Notifications";
+import { OfflineBadge } from "./OfflineBadge";
 import { GitSyncButton } from "./ReleaseAssistant";
 import { SampleMenu } from "./SampleMenu";
 import { useTheme } from "./ThemeProvider";
-import { Tooltip } from "./ui";
+import { PillTabs, Tooltip } from "./ui";
+
+/** Drei fokussierte Ansichten statt einer ueberfrachteten Einzelseite. */
+export type View = "workspace" | "copilot" | "protocol";
+
+export const VIEW_LABELS: Record<View, string> = {
+  workspace: "Prüf-Workspace",
+  copilot: "Compliance Copilot",
+  protocol: "Protokoll & Regelwerk",
+};
+
+type Notify = (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 
 interface HeaderProps {
+  view: View;
+  onViewChange: (view: View) => void;
   health: HealthResponse | null;
   offline: boolean;
   settings: RuntimeSettings | null;
   ledger: LedgerVerification | null;
+  ruleset: string | null;
   seeding: boolean;
-  /** Analyse laeuft gerade (dezenter Puls statt Dauer-Statuspille). */
-  busy: boolean;
+  jobs: JobSnapshot[];
+  finished: FinishedJob | null;
+  copilotBusy: boolean;
+  onCancelJob: (jobId: string) => Promise<void>;
   onSeed: (file?: string) => void;
   onOpenSettings: () => void;
   onStartTour: () => void;
-  notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
+  onChanged: () => void;
+  notify: Notify;
 }
 
 /**
- * Status nur, wenn es etwas zu sagen gibt: laufende Analyse, Warnung oder
- * Offline. Im Normalbetrieb bleibt die Kopfzeile ruhig.
+ * Kein dauerhaftes Versions-Badge: Ein Klick auf Logo oder Schriftzug zeigt Version
+ * und Regelwerk in einem schlanken Popover (Escape oder Klick daneben schliesst es).
  */
-function StatusSignal({ health, offline, ledger, busy }: Pick<HeaderProps, "health" | "offline" | "ledger" | "busy">) {
-  if (offline) {
-    return (
-      <Tooltip content={`Keine Verbindung zu ${getApiBase()} – erneuter Versuch alle 10 s.`} side="bottom">
-        <span tabIndex={0} role="status" className="chip cursor-help border-bad-line bg-bad-soft text-bad">
-          <WifiOff size={12} aria-hidden="true" /> Offline
-        </span>
-      </Tooltip>
-    );
-  }
-  if (ledger && !ledger.valid) {
-    return (
-      <Tooltip
-        side="bottom"
-        content={
-          <>
-            <span className="block font-semibold text-bad">Hash-Kette gebrochen{ledger.broken_at_seq != null ? ` bei #${ledger.broken_at_seq}` : ""}</span>
-            <span className="mt-0.5 block text-subtle">{ledger.reason ?? "Ein Eintrag passt nicht zur Kette."}</span>
-          </>
-        }
+function LogoVersion({ version, ruleset }: { version: string | null; ruleset: string | null }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  usePopoverExclusive(open, close, "logo-version");
+  useDismiss(open, close, [ref]);
+  return (
+    <div ref={ref} className="relative flex min-w-0 items-center">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label="Enterprise Compliance Agent – Version anzeigen"
+        className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-0.5 transition-colors duration-150 hover:bg-surface-hover"
       >
-        <span tabIndex={0} role="status" className="chip cursor-help border-bad-line bg-bad-soft text-bad">
-          <ShieldAlert size={12} aria-hidden="true" /> Ledger-Befund
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#0b0e15] p-1">
+          <Image src="/compliance-logo-transparent.png" alt="" width={24} height={24} priority unoptimized className="h-full w-full object-contain" />
         </span>
-      </Tooltip>
-    );
-  }
-  if (health?.status === "degraded") {
-    return (
-      <Tooltip side="bottom" content={health.ollama.detail ?? health.database.detail ?? "Eine Abhängigkeit antwortet nicht."}>
-        <span tabIndex={0} role="status" className="chip cursor-help border-warn-line bg-warn-soft text-warn">
-          <AlertTriangle size={12} aria-hidden="true" /> Eingeschränkt
-        </span>
-      </Tooltip>
-    );
-  }
-  if (busy) {
-    return (
-      <span role="status" className="inline-flex items-center gap-2 text-xs font-medium text-accent">
-        <span className="relative inline-flex h-2 w-2" aria-hidden="true">
-          <span className="status-pulse" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
-        </span>
-        <span className="hidden sm:inline">Analyse läuft</span>
-      </span>
-    );
-  }
-  return null;
+        <span className="truncate text-[15px] font-semibold tracking-tight text-fg">Enterprise Compliance Agent</span>
+      </button>
+      {open && (
+        <div role="dialog" aria-label="Version" className="glass-menu absolute left-0 top-full z-[70] mt-2 w-72 p-3 text-sm">
+          <p className="font-semibold text-fg">Enterprise Compliance Agent</p>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            <dt className="text-subtle">Version</dt>
+            <dd className="tabular-nums text-fg">{version ? `v${version}` : "–"}</dd>
+            <dt className="text-subtle">Regelwerk</dt>
+            <dd className="tabular-nums text-fg">{ruleset ?? "–"}</dd>
+            <dt className="text-subtle">Backend</dt>
+            <dd className="truncate text-fg">{getApiBase()}</dd>
+          </dl>
+          <p className="mt-2 text-xs leading-relaxed text-subtle">Technische Vorprüfung – keine Rechts- oder Steuerberatung.</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
   return (
-    <Tooltip content="Farbschema wechseln: Hell / Dunkel" side="bottom" align="right">
-      <button
-        type="button"
-        className="btn btn-icon"
-        onClick={() => setTheme(dark ? "light" : "dark")}
-        aria-label={dark ? "Helles Farbschema" : "Dunkles Farbschema"}
-      >
-        <span className="relative inline-flex h-[15px] w-[15px]">
-          <Sun
-            size={15}
-            aria-hidden="true"
-            className={cx("absolute inset-0 transition-[opacity,transform] duration-200 ease-out", dark ? "rotate-90 scale-75 opacity-0" : "opacity-100")}
-          />
-          <Moon
-            size={15}
-            aria-hidden="true"
-            className={cx("absolute inset-0 transition-[opacity,transform] duration-200 ease-out", dark ? "opacity-100" : "-rotate-90 scale-75 opacity-0")}
-          />
-        </span>
+    <Tooltip content="Farbschema wechseln (Hell / Dunkel; System unter Einstellungen › Darstellung)" side="bottom" align="right">
+      <button type="button" className="btn btn-ghost btn-icon" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Helles Farbschema" : "Dunkles Farbschema"}>
+        {dark ? <Moon size={15} aria-hidden="true" /> : <Sun size={15} aria-hidden="true" />}
       </button>
     </Tooltip>
   );
 }
 
-export function Header({ health, offline, settings, ledger, seeding, busy, onSeed, onOpenSettings, onStartTour, notify }: HeaderProps) {
-  const mode = settings?.inference_mode ?? health?.inference?.mode ?? "local";
-  const model = settings?.active_model ?? health?.inference?.model ?? "";
+/** Modellname und Statuspunkt - ohne dauerhafte Pille; die Kaskade steht im Tooltip. */
+function ModelStatus({ health, settings }: { health: HealthResponse | null; settings: RuntimeSettings | null }) {
+  const mode = settings?.inference_mode ?? health?.inference?.mode;
+  const model = settings?.active_model ?? health?.inference?.model;
+  if (!mode || !model) return null;
   const local = mode === "local";
+  const ready = local ? health?.ollama.status === "ok" : Boolean(health?.inference?.configured);
+  const chain = settings?.chain ?? [];
+  return (
+    <Tooltip
+      side="bottom"
+      align="right"
+      content={
+        <>
+          <span className="block font-semibold">{PROVIDER_NAMES[mode]} · {formatModel(model)}</span>
+          {chain.length > 1 && (
+            <span className="mt-1 block text-subtle">
+              Kaskade: {chain.map((stage) => formatModel(stage.model)).join(" → ")} → Regelwerk
+            </span>
+          )}
+          <span className="mt-1 block text-subtle">
+            {local
+              ? "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner."
+              : "Cloud-Inferenz über das Privacy Gateway (Pseudonymisierung nach Art. 4 Nr. 5 DSGVO)."}
+          </span>
+          {!ready && <span className="mt-1 block text-warn">Nicht erreichbar – das Regelwerk schließt Prüfungen gekennzeichnet ab.</span>}
+        </>
+      }
+    >
+      <span tabIndex={0} className="hidden cursor-help items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-xs text-muted xl:inline-flex">
+        {formatModel(model)}
+        <span className="text-subtle">· {local ? "Lokal" : "Cloud"}</span>
+        <span className={cx("h-2 w-2 rounded-full", ready ? "bg-ok" : "bg-subtle")} aria-label={ready ? "bereit" : "nicht erreichbar"} />
+      </span>
+    </Tooltip>
+  );
+}
+
+export function Header(props: HeaderProps) {
+  const { view, onViewChange, health, offline, settings, ledger, seeding, jobs, finished, copilotBusy } = props;
+  const online = !offline && Boolean(health);
+  const analysing = jobs.some((job) => job.status === "running" || job.status === "queued");
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-[var(--header-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 no-print">
-      <div className="mx-auto flex w-full max-w-[1920px] items-center gap-3 px-4 py-2.5 sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 p-1 shadow-xs dark:border-white/10 dark:bg-slate-900/80">
-            <Image src="/compliance-logo-transparent.png" alt="" width={24} height={24} priority unoptimized className="h-full w-full object-contain" />
-          </div>
-          <h1 className="truncate text-[15px] font-semibold tracking-tight text-fg" title="Enterprise Compliance Agent">
-            Enterprise Compliance Agent
-          </h1>
-          <StatusSignal health={health} offline={offline} ledger={ledger} busy={busy} />
-        </div>
+    <header className="sticky top-0 z-40 border-b border-line bg-[var(--header-bg)] backdrop-blur-xl backdrop-saturate-150 no-print">
+      {/* Die Bereiche bleiben mittig, solange Platz ist; wird die rechte Gruppe breiter (Job-Monitor,
+          Hinweise), gibt die linke Spalte nach - die Kapsel ueberdeckt nie ein Bedienelement. */}
+      <div className="mx-auto grid h-14 w-full max-w-[1920px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] 2xl:max-w-[2400px] 2xl:px-10">
+        <LogoVersion version={health?.version ?? null} ruleset={props.ruleset} />
 
-        <div className="flex items-center justify-end gap-2">
-          <GitSyncButton online={!offline && Boolean(health)} notify={notify} />
-          <SampleMenu busy={seeding} disabled={offline} onLoad={onSeed} />
+        <nav aria-label="Bereiche" className="order-3 col-span-2 hidden min-w-0 justify-center lg:order-none lg:col-span-1 lg:flex">
+          <PillTabs<View>
+            ariaLabel="Bereiche"
+            className="kopf-kapsel"
+            value={view}
+            onChange={onViewChange}
+            items={[
+              { key: "workspace", label: VIEW_LABELS.workspace, dot: analysing && view !== "workspace" ? "live" : null },
+              { key: "copilot", label: VIEW_LABELS.copilot, dot: copilotBusy && view !== "copilot" ? "live" : null },
+              { key: "protocol", label: VIEW_LABELS.protocol, dot: ledger && !ledger.valid ? "warn" : null },
+            ]}
+          />
+        </nav>
 
-          {model && (
-            <Tooltip
-              side="bottom"
-              align="right"
-              content={
-                <>
-                  <span className="block font-semibold">{PROVIDER_NAMES[mode]}</span>
-                  <span className="block font-mono text-subtle">{model}</span>
-                  {settings?.fallbacks?.length ? (
-                    <span className="mt-1 block text-subtle">
-                      Ausweich-Kaskade: {settings.fallbacks.map((fallback) => PROVIDER_NAMES[fallback]).join(" → ")}
-                    </span>
-                  ) : null}
-                  <span className="mt-1 block text-subtle">
-                    {local
-                      ? "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner."
-                      : "Cloud-Inferenz über das Privacy Gateway (Pseudonymisierung nach Art. 4 Nr. 5 DSGVO)."}
-                  </span>
-                </>
-              }
-            >
-              <span
-                tabIndex={0}
-                className={cx("chip cursor-help py-1", local ? "border-ok-line bg-ok-soft text-ok" : "border-pii-line bg-pii-soft text-pii")}
-              >
-                {local ? <Database size={12} aria-hidden="true" /> : <Lock size={12} aria-hidden="true" />}
-                {local ? "Lokal" : "Cloud"}
-                <span className="hidden font-mono font-medium opacity-80 2xl:inline">· {formatModel(model)}</span>
+        <div className="flex min-w-0 items-center justify-end gap-1.5">
+          <JobMonitor jobs={jobs} finished={finished} onCancel={props.onCancelJob} />
+          <Notifications
+            health={health}
+            settings={settings}
+            ledger={ledger}
+            online={online}
+            onOpenSettings={props.onOpenSettings}
+            onChanged={props.onChanged}
+            notify={props.notify}
+          />
+          <OfflineBadge />
+          {offline && (
+            <Tooltip side="bottom" align="right" content={`Keine Verbindung zu ${getApiBase()} – erneuter Versuch alle 10 s.`}>
+              <span tabIndex={0} role="status" className="chip cursor-help border-bad-line bg-bad-soft py-1 text-bad">
+                <WifiOff size={12} aria-hidden="true" /> Backend offline
               </span>
             </Tooltip>
           )}
-
+          <GitSyncButton online={online} notify={props.notify} />
+          <SampleMenu busy={seeding} disabled={offline} onLoad={props.onSeed} />
+          <ModelStatus health={health} settings={settings} />
           <Tooltip content="Interaktive Tour erneut starten" side="bottom" align="right">
-            <button type="button" className="btn btn-icon" onClick={onStartTour} aria-label="Hilfe und Tour">
+            <button type="button" className="btn btn-ghost btn-icon" onClick={props.onStartTour} aria-label="Hilfe und Tour">
               <HelpCircle size={15} aria-hidden="true" />
             </button>
           </Tooltip>
           <ThemeToggle />
           <Tooltip content="Einstellungen" side="bottom" align="right">
-            <button type="button" className="btn btn-icon" onClick={onOpenSettings} aria-label="Einstellungen">
+            <button type="button" className="btn btn-ghost btn-icon" onClick={props.onOpenSettings} aria-label="Einstellungen">
               <Settings size={15} aria-hidden="true" />
             </button>
           </Tooltip>
         </div>
       </div>
+      {/* Schmale Fenster: Bereiche als zweite Zeile. */}
+      <nav aria-label="Bereiche (kompakt)" className="flex justify-center border-t border-line px-4 py-2 lg:hidden">
+        <PillTabs<View>
+          size="sm"
+          value={view}
+          onChange={onViewChange}
+          items={[
+            { key: "workspace", label: "Prüfung" },
+            { key: "copilot", label: "Copilot" },
+            { key: "protocol", label: "Protokoll" },
+          ]}
+        />
+      </nav>
     </header>
   );
 }

@@ -105,8 +105,8 @@ def test_extraktion_schreibt_ledger_eintrag_und_api_verifiziert(
     client: TestClient, invoice_pdf: bytes
 ) -> None:
     document_id = uploaded_document_id(client, invoice_pdf)
-    assert client.post(f"/documents/{document_id}/extract").status_code == 200
-    assert client.post(f"/documents/{document_id}/extract").status_code == 200
+    assert client.post(f"/documents/{document_id}/extract?wait=true").status_code == 200
+    assert client.post(f"/documents/{document_id}/extract?wait=true").status_code == 200
 
     trail = client.get("/api/audit/trail", params={"document_id": document_id}).json()
     assert trail["count"] == 2

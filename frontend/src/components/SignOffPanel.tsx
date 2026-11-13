@@ -5,7 +5,7 @@ import { api, ApiError } from "../lib/api";
 import type { DocumentDetail, SignOffDecision } from "../types/api";
 import { cx, formatDate } from "../lib/format";
 import { Check, Stamp } from "./icons";
-import { HashBadge, isModEnter, Kbd, Modal, Spinner, useModifierLabel } from "./ui";
+import { AutoTextarea, HashBadge, isModEnter, Kbd, Modal, Spinner, useModifierLabel } from "./ui";
 
 const AUDITOR_STORAGE = "eca-auditor-name";
 
@@ -43,7 +43,6 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
     }
     setAuditor(stored);
     setNote("");
-    if (noteRef.current) noteRef.current.style.height = "auto";
     setDecision(blocked ? "SEALED_REJECTED" : "SEALED_APPROVED");
     if (autoFocus && !stored) nameRef.current?.focus();
   }, [document.id, blocked, autoFocus]);
@@ -98,7 +97,7 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
         >
           <p className="font-semibold">
             {existing.status === "SEALED_APPROVED" ? "Freigegeben" : "Freigabe verweigert"} durch {existing.auditor_name} am{" "}
-            <span className="font-mono tabular-nums">{formatDate(existing.sealed_at, true)}</span>
+            <span className="tabular-nums">{formatDate(existing.sealed_at, true)}</span>
           </p>
           <HashBadge className="mt-2" value={existing.ledger_entry_hash} label="Siegel" verified verifiedLabel="Ed25519-signiert" />
         </div>
@@ -145,15 +144,13 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
       )}
       <label className="mt-3 block">
         <span className="label-caps">Prüfungsnotiz</span>
-        <textarea
+        <AutoTextarea
           ref={noteRef}
-          className="input mt-1 min-h-[70px] max-h-[160px] resize-none overflow-y-auto leading-relaxed"
+          className="mt-1 leading-relaxed"
+          minRows={3}
+          maxRows={7}
           value={note}
-          onChange={(e) => {
-            setNote(e.target.value);
-            e.target.style.height = "auto";
-            e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
-          }}
+          onChange={(e) => setNote(e.target.value)}
           name="audit-note"
           placeholder="Optionale Prüfungsnotiz eingeben…"
         />
@@ -188,8 +185,8 @@ export function SealModal({ document, open, onClose, onSealed, notify }: {
       {card && (
         <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
           <span className="text-subtle">
-            Score <span className="font-mono font-semibold tabular-nums text-fg">{card.score}</span>
-            <span className="font-mono tabular-nums"> / 100</span>
+            Score <span className="font-semibold tabular-nums text-fg">{card.score}</span>
+            <span className="tabular-nums"> / 100</span>
           </span>
           <span className={card.release_blocked ? "text-bad" : "text-ok"}>{card.release_recommendation}</span>
         </div>

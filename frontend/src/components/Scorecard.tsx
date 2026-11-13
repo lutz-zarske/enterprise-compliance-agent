@@ -36,8 +36,8 @@ function ScoreRing({ score, tone }: { score: number; tone: "ok" | "warn" | "bad"
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={cx("font-mono text-[32px] font-semibold leading-none", TONE_TEXT[tone])}>{score}</span>
-        <span className="mt-1 font-mono text-xs text-subtle">/ 100</span>
+        <span className={cx("zahl-display text-[32px] font-semibold leading-none tabular-nums", TONE_TEXT[tone])}>{score}</span>
+        <span className="mt-1 text-xs tabular-nums text-subtle">/ 100</span>
       </div>
     </div>
   );
@@ -103,12 +103,12 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
                   </>
                 }
               >
-                <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 font-mono tabular-nums text-muted">
+                <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 tabular-nums text-muted">
                   <Clock size={11} aria-hidden="true" /> Aufbewahren bis {formatDate(scorecard.retention.until)}
                 </span>
               </Tooltip>
             )}
-            <span className="font-mono text-xs text-subtle">
+            <span className="text-xs tabular-nums text-subtle">
               Regelwerk {scorecard.ruleset_version}
               {scorecard.small_amount_invoice && " · Kleinbetragsrechnung (§ 33 UStDV)"}
               {scorecard.structured_einvoice_detected && " · E-Rechnung (XML) erkannt"}
@@ -135,7 +135,7 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
               <p className={cx("mt-1.5 text-sm font-semibold", tileTone === "neutral" ? "text-fg" : TONE_TEXT[tileTone])}>
                 {tile.headline || "–"}
               </p>
-              <p className={cx("mt-0.5 font-mono text-xs", tile.deduction > 0 ? "text-bad" : "text-subtle")}>
+              <p className={cx("mt-0.5 text-xs tabular-nums", tile.deduction > 0 ? "text-bad" : "text-subtle")}>
                 {tile.deduction > 0 ? (
                   <span className={cx(risks.length > 0 && "underline decoration-dotted underline-offset-2")}>−{tile.deduction} Punkte</span>
                 ) : (
@@ -150,7 +150,7 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
                 >
                   {risks.map((check) => (
                     <span key={check.id} className="block py-0.5">
-                      <span className="font-mono text-bad">−{check.deduction}</span> {check.risk_note}
+                      <span className="tabular-nums text-bad">−{check.deduction}</span> {check.risk_note}
                     </span>
                   ))}
                 </span>

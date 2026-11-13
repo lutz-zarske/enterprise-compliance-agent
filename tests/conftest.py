@@ -332,6 +332,8 @@ def settings(tmp_path: Path) -> Settings:
         max_prompt_chars=8000,
         mask_pii_in_storage=True,
         log_json=False,
+        # Wiederholungen ja, Wartezeit nein: die Kaskade laeuft in Tests ohne Backoff-Pausen.
+        llm_retry_delays="0,0",
     )
 
 

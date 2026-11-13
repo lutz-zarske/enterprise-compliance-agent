@@ -1,196 +1,470 @@
-# Rechtliche & Regulatorische Analyse: Enterprise Compliance Agent (Stand 2026)
-
-Tiefgehende juristische und regulatorische Analyse zu compliance-relevanten Rechtsnormen für automatisierte Dokumentenprüfung in Deutschland und der EU
-
-## 1. Paradigmenwechsel in der regulatorischen Architektur der automatisierten DokumentenverarbeitungDie Architektur, die Implementierung und der Betrieb von Systemen zur automatisierten Dokumentenprüfung durchlaufen in den Jahren 2025 und 2026 eine historische Zäsur. Die Digitalisierung geschäftskritischer Prozesse, insbesondere in den Domänen des Personalwesens (Recruiting), des Finanz- und Rechnungswesens sowie der juristischen Vertragsanalyse, wird von einer beispiellosen Konvergenz dreier massiver Regulierungsregime flankiert. Die automatisierte Extraktion, Klassifizierung und Bewertung von Dokumenteninhalten mittels fortschrittlicher Technologien – insbesondere durch den Einsatz von Large Language Models (LLMs) und Optical Character Recognition (OCR) – operiert im Epizentrum des europäischen Daten- und Technologierechts.
-
-Eine isolierte juristische Betrachtung einzelner Rechtsgebiete erweist sich in der gegenwärtigen Praxis als unzureichend. Die Extraktion von Rechnungs- oder Bewerbungsdaten durch eine in der Cloud gehostete Künstliche Intelligenz berührt simultan die strenge Produktsicherheits- und Grundrechtsdogmatik der Verordnung (EU) 2024/1689 (EU AI Act), die fundamental transformierten umsatzsteuerlichen Dokumentationspflichten infolge des Wachstumschancengesetzes und des Bürokratieentlastungsgesetzes IV (BEG IV) sowie die fortwährend rigiden Anforderungen der Datenschutz-Grundverordnung (DSGVO) an die Rechtmäßigkeit der Verarbeitung und den transatlantischen Datentransfer nach der Schrems II-Rechtsprechung. Die vorliegende umfassende Analyse dekonstruiert den aktuellen Rechtsstand (2025/2026) in diesen drei essenziellen Domänen, analysiert die Dogmatik der zugrundeliegenden Paragraphen sowie Leiturteile und synthetisiert diese zu handlungsorientierten, architektonischen Leitplanken für das Software-Engineering.
-
-## 2. Der EU AI Act: Produktsicherheit und Grundrechtsschutz bei der AutomatisierungMit dem Inkrafttreten der Verordnung (EU) 2024/1689 (EU AI Act) am 
-
-1. August 2024 hat der europäische Gesetzgeber den weltweit ersten umfassenden, risikobasierten Rechtsrahmen für Künstliche Intelligenz geschaffen. Das Regelwerk transformiert abstrakte ethische Postulate in hartes, sanktionsbewehrtes Produktsicherheitsrecht, welches bei Verstößen Bußgelder von bis zu 35 Millionen Euro oder 7 Prozent des weltweiten Jahresumsatzes bei verbotenen Praktiken beziehungsweise bis zu 15 Millionen Euro oder 3 Prozent bei Verstößen gegen die Pflichten für Hochrisiko-Systeme vorsieht. Im Zentrum der Regulierung steht die proportionale Skalierung der rechtlichen Pflichten anhand des inhärenten Gefährdungspotenzials des jeweiligen KI-Systems.2.
-
-## 1. Dichotomie der Pflichten: Anbieter (Provider, Art. 16) vs. Betreiber (Deployer, Art. 26)Ein fundamentaler Mechanismus des EU AI Act ist die scharfe juristische und operative Trennung der Wirtschaftsakteure entlang der KI-Wertschöpfungskette. Um rechtliche Grauzonen bei der Verantwortungszuschreibung zu eliminieren, differenziert das Gesetz strikt zwischen dem Anbieter (Provider) und dem Betreiber (Deployer). Diese Unterscheidung determiniert die Architektur der gesamten Compliance-Strategie eines Unternehmens, insbesondere wenn automatisierte Dokumentenprüfungen in sensiblen Bereichen wie dem Personalwesen (Hochrisiko-KI nach Anhang III) vorgenommen werden.
-
-Der Anbieter (Provider), legaldefiniert in Artikel 3 als die natürliche oder juristische Person, die ein KI-System entwickelt oder entwickeln lässt und dieses unter eigenem Namen oder eigener Marke in Verkehr bringt, trägt die primäre regulatorische Last für die Systemsicherheit. Gemäß Artikel 16 in Verbindung mit den flankierenden Artikeln 17 bis 21 treffen den Anbieter umfassende Ex-ante-Pflichten, bevor das System den europäischen Markt betreten darf. Er muss ein vollumfängliches Qualitätsmanagementsystem (Art. 17) etablieren, das Daten-Governance (Art. 10), Risikominderungsstrategien und Testszenarien umfasst. Ferner obliegt ihm die Erstellung einer detaillierten technischen Dokumentation nach Anhang IV, die Durchführung eines Konformitätsbewertungsverfahrens, die Registrierung in der EU-Datenbank sowie die proaktive Beobachtung des Systems nach dem Inverkehrbringen (Post-Market Monitoring, Art. 72). Der Anbieter garantiert somit die systemische Integrität und die Einhaltung der Vorgaben an Genauigkeit, Robustheit und Cybersicherheit (Art. 15).Im scharfen Kontrast dazu steht der Betreiber (Deployer). Als Betreiber gilt gemäß Artikel 26 derjenige Akteur, der ein KI-System unter eigener Verantwortung im Rahmen einer beruflichen oder gewerblichen Tätigkeit einsetzt. Nutzt ein deutsches Unternehmen ein lizenziertes KI-Tool zur automatisierten Auswertung und Filterung von Bewerber-Lebensläufen, agiert es rechtlich als Betreiber. Die Pflichten des Betreibers nach Artikel 26 sind komplementärer Natur und zielen darauf ab, die abstrakte Systemsicherheit in eine sichere operative Anwendung zu überführen. Artikel 26 Absatz 1 verpflichtet Betreiber, das KI-System strikt nach den vom Anbieter mitgelieferten Gebrauchsanweisungen zu verwenden. Besondere Brisanz entfaltet Artikel 26 Absatz 3: Der Betreiber muss sicherstellen, dass die Eingabedaten, über die er die Kontrolle ausübt, im Hinblick auf den beabsichtigten Zweck des Systems relevant und ausreichend repräsentativ sind. Werden ungeeignete, historisch verzerrte (biased) Dokumente in eine automatisierte Prüfung eingespeist, haftet der Betreiber für die resultierende Diskriminierung.
-
-Darüber hinaus statuiert Artikel 26 Absatz 5 eine permanente Überwachungspflicht. Treten im Betrieb Risiken für die Gesundheit, die Sicherheit oder die Grundrechte auf, ist der Betreiber gezwungen, das System unverzüglich zu stoppen, den Anbieter und die nationalen Marktüberwachungsbehörden – in Deutschland das bei der Bundesnetzagentur angesiedelte Koordinierungs- und Kompetenzzentrum für die KI-Verordnung (KoKIVO) – zu informieren. Ferner normiert Artikel 26 Absatz 7 eine weitreichende kollektivarbeitsrechtliche Informationspflicht: Vor der Implementierung eines Hochrisiko-KI-Systems am Arbeitsplatz müssen die Arbeitnehmervertretungen und die betroffenen Arbeitnehmer zwingend darüber unterrichtet werden, dass sie dem Einsatz eines solchen Systems ausgesetzt sein werden.
-
-Akteur im KI-ÖkosystemDefinition nach EU AI ActKernpflichten (Hochrisiko-Systeme)Anbieter (Provider)Entwickelt KI-System und bringt es unter eigenem Namen/Marke in Verkehr.
-
-Art. 16: Qualitätsmanagementsystem (Art. 17), Technische Dokumentation (Art. 11), Konformitätsbewertung, CE-Kennzeichnung, Post-Market Monitoring (Art. 72).
-
-Betreiber (Deployer)Nutzt das KI-System in eigener Verantwortung für berufliche/gewerbliche Zwecke.
-
-Art. 26: Nutzung gemäß Handbuch, Prüfung der Eingabedatenrelevanz, Systemüberwachung, Meldung bei Risiken, Information der Arbeitnehmer.
-
-Zusätzlich zu den operativen Betriebspflichten des Artikels 26 bürdet Artikel 27 spezifischen Betreiberkategorien eine ex-ante Grundrechte-Folgenabschätzung (Fundamental Rights Impact Assessment, FRIA) auf. Diese Pflicht trifft nicht jeden Anwender, sondern ist auf Einrichtungen des öffentlichen Rechts, private Erbringer öffentlicher Dienstleistungen sowie Betreiber von Systemen zur Kreditwürdigkeitsprüfung und Lebens- beziehungsweise Krankenversicherungsrisikobewertung beschränkt. Die Folgenabschätzung erzwingt eine schriftliche und tiefgehende Evaluation der Einsatzprozesse, der betroffenen Personengruppen (insbesondere vulnerabler Gruppen) sowie der implementierten technischen und organisatorischen Schutzmaßnahmen, bevor das KI-System die erste automatisierte Dokumentenprüfung vornehmen darf.2.
-
-## 2. Modifizierter Zeitplan: Der "Digital Omnibus" und Anhang IIIDie rechtliche Wirksamkeit dieser umfassenden Pflichtenarchitektur ist an einen gestaffelten Zeitplan gebunden, der infolge regulatorischer Verzögerungen auf europäischer Ebene Ende 2025/Mitte 2026 eine signifikante Modifikation erfuhr. Während die Verbote unannehmbarer KI-Praktiken (Art. 5) sowie die Pflicht zum Aufbau unternehmensinterner KI-Kompetenz (Art. 4) bereits seit dem 
-
-2. Februar 2025 bindend sind und die Governance-Regeln für KI-Modelle mit allgemeinem Verwendungszweck (GPAI) am 
-
-2. August 2025 in Kraft traten, drohte bei den Hochrisiko-Systemen ein normatives Vakuum. Da die notwendigen harmonisierten Standards der europäischen Normungsorganisationen (CEN/CENELEC) für die technische Compliance nicht fristgerecht vorlagen, initiierte die EU-Kommission Ende 2025 das Gesetzgebungspaket "Digital Omnibus".
-
-Die daraus hervorgegangene Änderungsverordnung (VO (EU) 2026/1744), die nach politischer Einigung im Mai 2026 am 27. Juli 2026 in Kraft trat, hat die Stichtage für Hochrisiko-Systeme verschoben. Für den allgemeinen Anwendungsbeginn des AI Act – insbesondere für die Transparenz- und Kennzeichnungspflichten von KI-generierten Inhalten und Chatbots nach Artikel 50 – bleibt der 
-
-2. August 2026 unverändert bestehen. Die massiven Compliance-Pflichten für Hochrisiko-Systeme wurden jedoch entzerrt.
-
-Für die automatisierte Dokumentenprüfung ist insbesondere Anhang III Nr. 4 maßgeblich, der KI-Systeme im Bereich "Beschäftigung, Arbeitnehmermanagement und Zugang zur Selbstständigkeit" kategorisiert. Jede Software, die Bewerbungen analysiert, filtert, Kandidaten bewertet oder Entscheidungen über Arbeitsverhältnisse vorbereitet, fällt originär in diese Hochrisikoklasse. Durch die Omnibus-Verordnung verschiebt sich die rechtliche Verbindlichkeit der Konformitäts-, Dokumentations- und Aufsichtspflichten (inklusive der Grundrechte-Folgenabschätzung nach Art. 27) für diese eigenständigen Anhang-III-Systeme vom ursprünglich vorgesehenen August 2026 auf den 
-
-2. Dezember 2027. Für Systeme, die als Sicherheitsbauteile in regulierte Produkte eingebettet sind (Anhang I), verlängert sich die Frist gar auf den 
-
-2. August 2028.
-
-Meilenstein (EU AI Act inkl. Omnibus 2026/1744)RegulierungsgegenstandBetroffene Akteure0
-
-2. Februar 2025Verbotene Praktiken (Art. 5) & KI-Kompetenz (Art. 4)Alle Anbieter und Betreiber0
-
-2. August 2025Pflichten für GPAI-Modelle (Art. 53 ff.)Anbieter von Basismodellen0
-
-2. August 2026Allgemeine Anwendbarkeit, Transparenz (Art. 50), MarktüberwachungAnbieter und Betreiber0
-
-2. Dezember 2027Hochrisiko-Systeme nach Anhang III (z.B. Recruiting-KI, Scoring)Anbieter (Art. 16) & Betreiber (Art. 26, 27)0
-
-2. August 2028Hochrisiko-Systeme nach Anhang I (Eingebettete Sicherheit)Produkthersteller / AnbieterTrotz dieser Einstufung bietet Artikel 6 Absatz 3 einen juristischen Fluchtweg, der für die automatisierte Dokumentenverarbeitung von eminenter praktischer Bedeutung ist. Ein System, das nominell unter Anhang III fällt, gilt ausnahmsweise nicht als Hochrisiko-KI, wenn es keine erheblichen Risiken für die Grundrechte birgt. Dies ist insbesondere dann der Fall, wenn das System lediglich eine "enge verfahrenstechnische oder vorbereitende Aufgabe" erfüllt. Extrahiert ein KI-System lediglich Stammdaten aus einer PDF-Bewerbung oder überführt unstrukturierte Rechnungsdaten in ein strukturiertes Format, ohne dabei inhaltliche Wertungen, Profiling oder Personalentscheidungen vorzunehmen, kann das Unternehmen durch eine dokumentierte Risikobewertung die Klassifikation als Hochrisiko-System abwenden. Diese Ausnahme ist jedoch restriktiv auszulegen und greift nicht, wenn in irgendeiner Form Profiling von natürlichen Personen stattfindet.2.
-
-## 3. Technische Imperative: Automatische Protokollierung (Art. 12) und Menschliche Aufsicht (Art. 14)Um die Black-Box-Natur maschinellen Lernens juristisch handhabbar zu machen, zwingt der EU AI Act Entwickler zur softwarearchitektonischen Implementierung zweier fundamentaler Konzepte: Rückverfolgbarkeit (Traceability) und menschliche Interventionsfähigkeit.
-
-Artikel 12 definiert die Aufzeichnungspflichten und statuiert, dass Hochrisiko-KI-Systeme so konzipiert sein müssen, dass sie über ihren gesamten Lebenszyklus hinweg Ereignisse automatisch protokollieren (Logging). Diese automatischen Protokolle müssen gewährleisten, dass die Funktionsweise des Systems im Hinblick auf das Eintreten von Risiken lückenlos und rückwirkend rekonstruiert werden kann. Der Detaillierungsgrad ist hoch: Es müssen der Zeitraum der Systemnutzung, die exakten Eingabedaten (soweit datenschutzrechtlich zulässig) sowie die Metadaten der an der Überprüfung beteiligten Personen erfasst werden. Artikel 26 Absatz 6 verpflichtet den Betreiber, diese maschinengenerierten Logs, soweit sie seiner Kontrolle unterliegen, für einen dem Verwendungszweck angemessenen Zeitraum, mindestens jedoch für sechs Monate, fälschungssicher aufzubewahren. Für Software-Architekten bedeutet dies, dass KI-Inferenz-APIs zwingend an einen WORM-Storage (Write Once Read Many) angebunden sein müssen, der Versionierung, Konfidenzwerte und Modellentscheidungen revisionssicher persistiert.
-
-Komplementär zur technischen Aufzeichnung verlangt Artikel 14 die zwingende Integration menschlicher Aufsicht (Human Oversight) in die Systemarchitektur. Ein KI-System, das tief in Grundrechte eingreift, darf niemals vollautonom letzte Entscheidungen treffen. Es muss durch geeignete Mensch-Maschine-Schnittstellen (Human-Computer Interfaces) so gestaltet sein, dass natürliche Personen, denen die Aufsicht übertragen wird, den Betrieb vollständig nachvollziehen können. Diese Aufsichtspersonen müssen in der Lage sein, die Ausgaben der KI kritisch zu bewerten, dem sogenannten "Automation Bias" (der psychologischen Tendenz, maschinellen Entscheidungen unreflektiert zu vertrauen) entgegenzuwirken und das System im Ernstfall zu übersteuern (Override) oder durch einen Not-Halt (Kill Switch) vollständig zu deaktivieren. In der Praxis der Dokumentenprüfung erfordert dies Workflow-Designs wie "Human-in-the-Loop" (bei dem die KI lediglich vorbereitet und der Mensch stets freigibt) oder "Human-on-the-Loop" (bei dem die KI autonom agiert, der Mensch aber stichprobenartig intervenieren kann).
-
-## 3. Steuerrecht und E-Rechnung: Die Digitalisierung des VorsteuerabzugsWährend der EU AI Act die Algorithmen der Dokumentenprüfung reguliert, diktiert das deutsche und europäische Umsatzsteuerrecht die formalen und inhaltlichen Kriterien der zu prüfenden Dokumente. Mit der Verabschiedung des Wachstumschancengesetzes (März 2024) und des Bürokratieentlastungsgesetzes IV (BEG IV) vollzieht Deutschland den definitiven Übergang in die Ära der strukturierten elektronischen Rechnungsverarbeitung, was enorme Auswirkungen auf OCR- und KI-Extraktionssysteme hat.3.
-
-## 1. Pflichtangaben für den Vorsteuerabzug (§ 14 Abs. 4 UStG) und Erleichterungen (§ 33 UStDV)Der Vorsteuerabzug nach § 15 UStG bildet die ökonomische Lebensader unternehmerischer Liquidität. Die finanzamtliche Anerkennung dieses Abzugs ist strikt an den Besitz einer formell und materiell ordnungsgemäßen Rechnung gebunden. Die Datenpunkte, die ein automatisiertes System aus einem Dokument fehlerfrei extrahieren und semantisch validieren muss, sind im § 14 Abs. 4 UStG abschließend katalogisiert.Zu diesen zwingenden Rechnungsmerkmalen gehören der vollständige Name und die vollständige Anschrift des leistenden Unternehmers sowie des Leistungsempfängers, die dem Leistenden erteilte Steuernummer oder Umsatzsteuer-Identifikationsnummer, das Ausstellungsdatum, eine fortlaufende Rechnungsnummer, die Menge und handelsübliche Bezeichnung der gelieferten Gegenstände oder Art und Umfang der sonstigen Leistung, der Zeitpunkt der Lieferung, das nach Steuersätzen aufgeschlüsselte Entgelt sowie der darauf entfallende und gesondert ausgewiesene Steuerbetrag. Fehlt auch nur ein Merkmal oder ist dieses inkorrekt (etwa eine unvollständige Adresse), ist der Vorsteuerabzug dogmatisch zu versagen. Zwar gewährt die Rechtsprechung des Europäischen Gerichtshofs, der der Bundesfinanzhof (BFH) folgt, mittlerweile die Möglichkeit der rückwirkenden Rechnungsberichtigung, doch birgt jeder initiale Fehler ein erhebliches Liquiditäts- und Zinsrisiko bei Betriebsprüfungen.
-
-Eine essenzielle verfahrenstechnische Erleichterung, die in der Algorithmus-Logik von Extraktions-Systemen abgebildet werden muss, bietet § 33 der Umsatzsteuer-Durchführungsverordnung (UStDV) für sogenannte Kleinbetragsrechnungen. Übersteigt der Gesamtbetrag der Rechnung 250 Euro (brutto) nicht, reduziert der Gesetzgeber die Anforderungen drastisch. Auf die Nennung des Leistungsempfängers, der Steuernummer des Leistenden und den separaten Ausweis des Netto- und Steuerbetrags kann verzichtet werden; es genügen Name und Anschrift des Leistenden, Ausstellungsdatum, Menge und Art der Leistung, das Bruttoentgelt sowie der anzuwendende Steuersatz. Automatisierte Dokumentenprüfungen müssen folglich eine dynamische Regelauswertung implementieren: Die Strenge der Validierungsmatrix muss sich in Millisekunden an den extrahierten Bruttobetrag anpassen.
-
-Gesetzliche GrundlageAnwendungsbereichErforderliche Pflichtangaben (Auswahl)Relevanz für KI-Extraktion§ 14 Abs. 4 UStGReguläre Rechnungen (> 250 €)Vollständige Namen/Anschriften beider Parteien, Steuernummer, Rechnungsnummer, Netto, USt-Betrag, Steuersatz.
-
-Strikte Validierung aller Felder. Bei Fehlern automatische Zuweisung in menschlichen Klärungsworkflow.§ 33 UStDVKleinbetragsrechnungen (<= 250 €)Name/Anschrift Leistender, Datum, Art der Leistung, Bruttobetrag, Steuersatz. (Kein Empfänger nötig).
-
-Dynamische Anpassung der Confidence-Schwellenwerte; Ignorieren fehlender Empfängerdaten.3.
-
-## 2. Rechtsfolgen des unrichtigen Steuerausweises (§ 14c UStG) im WandelEin hohes finanzielles Risiko bei der automatisierten Rechnungserstellung und -prüfung stellt der unrichtige oder unberechtigte Steuerausweis nach § 14c UStG dar. Weist ein Unternehmer in einer Rechnung einen höheren Steuerbetrag aus, als er nach dem Gesetz schuldet (z.B. 19 % statt 7 %), schuldet er nach § 14c Abs. 1 UStG auch diesen Mehrbetrag. Diese auf Artikel 203 der europäischen Mehrwertsteuersystemrichtlinie (MwStSystRL) basierende Gefährdungshaftung soll das Steueraufkommen schützen. Der Fiskus befürchtet, dass der Rechnungsempfänger den zu hoch ausgewiesenen Steuerbetrag als Vorsteuer geltend macht und der Staat somit Geld auszahlt, das ihm materiellrechtlich nicht zusteht.
-
-Die juristische Handhabung des § 14c UStG erlebte jedoch durch die jüngste europäische Rechtsprechung einen tiefgreifenden Wandel. In der Grundsatzentscheidung P-GmbH (C-378/21) urteilte der EuGH am 8. Dezember 2022, dass eine Steuerschuld aus unrichtigem Ausweis nach Art. 203 MwStSystRL nicht entsteht, wenn die fragliche Rechnung ausschließlich an Endverbraucher (Nichtunternehmer) gerichtet ist. Die Begründung folgt streng teleologischer Logik: Da Endverbraucher rechtlich nicht zum Vorsteuerabzug berechtigt sind, existiert objektiv keine Gefährdung des Steueraufkommens.
-
-Das Bundesministerium der Finanzen (BMF) hat diese europarechtliche Vorgabe in seinem Schreiben vom 27. Februar 2024 (III C 2 – S 7282/19/10001:002) in deutsches Verwaltungsrecht transformiert und die bis dato angewandte, strengere Rechtsprechung des BFH (z.B. Urteil vom 13.12.2018, V R 4/18) explizit für überholt erklärt. Stellt ein Unternehmer einem privaten Endkunden eine Rechnung mit zu hohem Steuerausweis aus, schuldet er den Mehrbetrag nicht mehr.
-
-Allerdings präzisierte der EuGH diese Doktrin in Folgeentscheidungen (Urteil vom 
-
-1. August 2025), die vom BFH im Beschluss vom 19. März 2025 (XI R 4/22) aufgenommen wurden: Die Befreiung von der Gefährdungshaftung ist an den strikten Ausschluss der sogenannten "Infektionswirkung" gebunden. Es muss zweifelsfrei feststehen, dass die Rechnung nicht an einen vorsteuerabzugsberechtigten Unternehmer gelangt ist. Bei Kassenbons (Kleinbetragsrechnungen) an namentlich nicht bekannte Laufkundschaft erkennt der EuGH zwar Schätzverfahren zur Ermittlung des Endverbraucher-Anteils an, verlangt jedoch, dass diese Schätzungen transparent, verhältnismäßig und überprüfbar sind. Für automatisierte ERP- und Dokumentensysteme bedeutet dies, dass die algorithmische Differenzierung zwischen B2B- und B2C-Transaktionen sowie die präzise Dokumentation des Kundenstatus harte steuerliche Compliance-Erfordernisse darstellen.3.
-
-## 3. Der Status der E-Rechnungspflicht (EN 16931) seit dem 
-
-1. Januar 2025Die tiefgreifendste prozessuale Veränderung im deutschen Steuerrecht ist die Implementierung der obligatorischen E-Rechnung für den inländischen B2B-Bereich, eingeführt durch das Wachstumschancengesetz und detailliert ausgelegt im finalen BMF-Schreiben vom 1
-
-5. Oktober 202
-
-## 4. Der Gesetzgeber verabschiedet sich endgültig von der optisch fokussierten Dokumentenprüfung und wendet sich dem Paradigma des strukturierten, maschinenlesbaren Datensatzes zu.
-
-Seit dem 
-
-1. Januar 2025 ist der rechtliche Begriff der "elektronischen Rechnung" (§ 14 Abs. 1 Satz 3 UStG neu) gesetzlich restriktiv definiert: Es handelt sich ausschließlich um Rechnungen, die in einem strukturierten elektronischen Format ausgestellt, übermittelt und empfangen werden, das eine vollautomatische elektronische Verarbeitung ermöglicht und den Vorgaben der europäischen Norm EN 16931 (oder einer kompatiblen Syntax wie XML oder UBL) entspricht. Klassische PDF-Dokumente, die per E-Mail versendet werden und optisch durch Menschen oder einfache OCR-Software gelesen werden müssen, sind steuerrechtlich zu "sonstigen Rechnungen" degradiert worden und haben denselben Status wie Papierrechnungen. Als E-Rechnungen qualifizieren sich in Deutschland vorrangig Formate wie XRechnung und ZUGFeRD (ab Version 2.0.1).
-
-Der Rollout dieser massiven Systemumstellung erfolgt asymmetrisch:Empfangspflicht (seit 01.01.2025): Seit Jahresbeginn 2025 sind ausnahmslos alle inländischen B2B-Unternehmer (ausdrücklich auch Kleinunternehmer nach § 19 UStG und Vereine mit wirtschaftlichem Geschäftsbetrieb) gesetzlich verpflichtet, EN 16931-konforme E-Rechnungen empfangen und archivieren zu können. Für diese Empfangspflicht gibt es keinerlei Übergangsfristen. Eine Verweigerung der Annahme durch den Empfänger ist rechtlich unbeachtlich; der Rechnungssteller hat seine Pflicht mit dem Nachweis des Versands erfüllt.
-
-Ausstellungspflicht (gestaffelt ab 2027/2028): Bei der Ausstellung gewährt der Gesetzgeber Kulanz. Im Zeitraum vom 
-
-1. Januar 2025 bis zum 3
-
-1. Dezember 2026 dürfen Unternehmen weiterhin PDF-Rechnungen versenden, sofern der Rechnungsempfänger diesem Format zustimmt. Ab dem 
-
-1. Januar 2027 tritt die harte Pflicht zur Ausstellung echter E-Rechnungen für umsatzstarke Unternehmen (Vorjahresumsatz 2026 über 800.000 Euro) in Kraft. Ab dem 
-
-1. Januar 2028 gilt die Ausstellungspflicht vollumfänglich für den gesamten B2B-Sektor.
-
-Für Software-Architekten birgt das BMF-Schreiben vom 1
-
-5. Oktober 2024 eine kritische Klarstellung bezüglich hybrider Formate (wie ZUGFeRD), die aus einem PDF-Bildteil und einem eingebetteten XML-Datensatz bestehen. Weichen diese beiden Schichten voneinander ab (z.B. durch Rundungsdifferenzen), bestimmt das BMF unmissverständlich, dass für den Vorsteuerabzug und die Steuerfestsetzung ausschließlich der strukturierte XML-Datensatz rechtlich maßgeblich ist. Eine KI-gestützte Dokumentenprüfung darf sich folglich bei E-Rechnungen nicht mehr auf das Auslesen (Scrapen/OCR) der visuellen PDF-Schicht verlassen; das System muss zwingend den XML-Knotenbaum gegen die EN 16931-Spezifikation parsen.3.
-
-## 4. Aufbewahrungsfristen (BEG IV) und die Relevanz der VerfahrensdokumentationDie Speicherung der empfangenen E-Rechnungen sowie der resultierenden Prüfprotokolle unterliegt den GoBD (Grundsätze zur ordnungsmäßigen Führung und Aufbewahrung von Büchern, Aufzeichnungen und Unterlagen in elektronischer Form sowie zum Datenzugriff). Um die Wirtschaft zu entlasten, hat der Gesetzgeber durch das Vierte Bürokratieentlastungsgesetz (BEG IV) mit Wirkung zum 
-
-1. Januar 2025 die gesetzliche Aufbewahrungsfrist für Buchungsbelege und Rechnungen (§ 147 Abs. 3 AO, § 14b Abs. 1 UStG) von zehn auf acht Jahre reduziert. Diese Verkürzung ist auch auf Bestandsbelege anzuwenden, deren ursprüngliche Zehnjahresfrist zum 
-
-1. Januar 2025 noch nicht abgelaufen war.
-
-Hieraus resultiert jedoch ein in der Praxis häufig übersehenes administratives Paradoxon: Während die Rechnungsdatensätze selbst nach acht Jahren gelöscht werden dürfen, verbleibt die Aufbewahrungsfrist für Jahresabschlüsse, Handelsbücher und – entscheidend für IT-Systeme – für die Verfahrensdokumentation bei zehn Jahren.
-
-Die GoBD zwingen Unternehmen, die elektronische Dokumentenmanagementsysteme einsetzen, zur Führung einer lückenlosen Verfahrensdokumentation, die den gewollten organisatorischen und technischen Prozess beschreibt. Diese gliedert sich zwingend in vier Säulen: Allgemeine Beschreibung, Anwenderdokumentation, technische Systemdokumentation und Betriebsdokumentation (inklusive IT-Sicherheits- und Kontrollmaßnahmen). Um die Unveränderbarkeit (WORM-Prinzip) historischer Buchungen auch für Prüfungen älterer Zeiträume (bis zu zehn Jahre) nachweisen zu können, muss die Verfahrensdokumentation jeden Systemzustand, jedes Software-Update und jede Änderung der Prüf-Algorithmen lückenlos historisieren. Der Prüfpfad (Audit Trail) – also die ununterbrochene Nachvollziehbarkeit von der empfangenen XML-Datei über den maschinellen Prüfvermerk bis hin zur ERP-Buchung – muss über die gesamte Aufbewahrungsdauer maschinell auswertbar bleiben. Die fehlende oder fehlerhafte Dokumentation des neuen E-Rechnungs-Workflows ab 2025 stellt einen formellen GoBD-Mangel dar, der zur Verwerfung der gesamten Buchführung und zu Hinzuschätzungen durch das Finanzamt führen kann.
-
-## 4. Datenschutz, Cloud-Inferenz und die Grenzen des DrittlandtransfersDie semantische Extraktion von Daten aus unstrukturierten Dokumenten (Verträge, Lebensläufe, Freitextrechnungen) wird zunehmend nicht mehr durch traditionelle regelbasierte Systeme, sondern durch Large Language Models (LLMs) durchgeführt. Da diese Inferenzleistung oft enorme Rechenkapazitäten erfordert, greifen Unternehmen auf Cloud-APIs (wie OpenAI, Anthropic oder Google) zurück, die zumeist in US-amerikanischem Besitz sind. Sobald die zu prüfenden Dokumente personenbezogene Daten enthalten, eröffnet diese Architektur das hochgradig komplexe Spannungsfeld der Datenschutz-Grundverordnung (DSGVO).4.
-
-## 1. Die relative Dogmatik: Pseudonymisierung vs. Anonymisierung (Art. 4 Nr. 5 DSGVO)Um den strikten Vorgaben der DSGVO zu entgehen, verfolgen Entwickler oft den Ansatz, Namen und Identifikatoren vor dem Senden an die LLM-API zu "anonymisieren". Das europäische Datenschutzrecht, namentlich Artikel 4 DSGVO, verlangt jedoch eine trennscharfe dogmatische Unterscheidung, an die massive Rechtsfolgen geknüpft sind.
-
-Eine Anonymisierung im Sinne des Erwägungsgrundes 26 der DSGVO liegt nur dann vor, wenn die Daten auf eine Weise verändert wurden, dass die betroffene Person unter keinen Umständen mehr identifiziert werden kann. Echte anonyme Daten unterfallen nicht dem sachlichen Anwendungsbereich der DSGVO. Die Pseudonymisierung hingegen ist in Artikel 4 Nr. 5 DSGVO legaldefiniert als die Verarbeitung personenbezogener Daten in einer Weise, dass diese ohne Hinzuziehung zusätzlicher Informationen (dem kryptografischen Schlüssel oder Mapping-Table) nicht mehr einer spezifischen Person zugeordnet werden können. Pseudonymisierte Daten bleiben rechtlich vollumfänglich personenbezogene Daten und unterliegen der DSGVO.
-
-Die Grenzziehung zwischen beiden Konzepten orientiert sich an der von der Rechtsprechung entwickelten "relativen Identifizierbarkeit". Der Europäische Gerichtshof (EuGH) hat in seinen Leitentscheidungen Breyer (C-582/14, betreffend dynamische IP-Adressen) und zuletzt im September 2025 in der Rechtssache EDSB/SRB (C-413/23 P) statuiert, dass die Beurteilung des Personenbezugs stets aus der Perspektive des jeweiligen Datenempfängers erfolgen muss. Übermittelt ein Unternehmen pseudonymisierte Daten an einen Dritten (z.B. einen externen Wirtschaftsprüfer oder Cloud-Anbieter) und hält den Identifikationsschlüssel strikt unter eigener Kontrolle, ohne dass der Empfänger über legale oder praktikable Mittel verfügt, diesen Schlüssel zu erlangen, können die übermittelten Daten aus der isolierten Sicht des Empfängers faktisch als anonym gelten.
-
-Die Applikation dieser Rechtsprechung auf generative KI-Modelle ist jedoch hochkomplex. Der Europäische Datenschutzausschuss (EDSA/EDPB) hat in seiner wegweisenden Stellungnahme 28/2024 zur Verarbeitung personenbezogener Daten durch KI-Modelle klargestellt, dass die Output-Generierung von LLMs aufgrund von "Regurgitation" (dem unbeabsichtigten Reproduzieren von Trainingsdaten) und der Fähigkeit, aus semantischem Kontext komplexe Rückschlüsse zu ziehen, die Identifizierbarkeit drastisch erhöht. Ein rudimentäres Ersetzen von Namen (z.B. via Regex) führt bei unstrukturierten Texten selten zu einer echten Anonymisierung, da der verbleibende Kontext (Berufsstationen, spezifische Vokabulare, stylometrische Merkmale) eine Re-Identifizierung durch Inferenzangriffe ermöglichen kann. Folglich betrachtet der EDSA solche Daten im Regelfall weiterhin als pseudonymisiert und somit als dem Datenschutzrecht unterworfen.4.
-
-## 2. Der Drittlandtransfer: EDSA-Empfehlungen 01/2020 und ephemere PseudonymisierungDa die maskierten Prompts rechtlich als pseudonymisierte personenbezogene Daten verbleiben, löst die Übermittlung an eine in den USA gehostete API zwingend die Regelungen des Kapitels V der DSGVO (Datenübermittlung in Drittländer) aus. Seit der Kassierung des EU-US Privacy Shields durch das Schrems II-Urteil des EuGH im Juli 2020 obliegt den Unternehmen die Nachweispflicht für ein angemessenes Schutzniveau.
-
-Zwar existiert seit Juli 2023 mit dem EU-US Data Privacy Framework (DPF) ein neuer Angemessenheitsbeschluss für zertifizierte US-Unternehmen. Angesichts drohender rechtlicher Anfechtungen (potenzielles "Schrems III") sowie der Tatsache, dass oft nicht alle Sub-Dienstleister zertifiziert sind, stützen viele europäische Organisationen ihre Transfers weiterhin auf Standardvertragsklauseln (SCCs) in Kombination mit einem dokumentierten Transfer Impact Assessment (TIA).
-
-Hier entfalten die EDSA-Empfehlungen 01/2020 (Ergänzende Maßnahmen zu Übermittlungsinstrumenten) ihre normative Kraft. Gemäß dieser Leitlinie genügen vertragliche Zusicherungen (SCCs) allein nicht, wenn die US-Gesetzgebung (wie der CLOUD Act oder FISA Section 702) US-Geheimdiensten einen unverhältnismäßigen Zugriff auf die Daten erlaubt. Der Verantwortliche muss "wirksame ergänzende technische Maßnahmen" (Supplementary Technical Measures) implementieren, die den Zugriff durch Drittstaatsbehörden faktisch unmöglich machen.
-
-Der von der Praxis adaptierte architektonische Lösungsansatz findet sich im "Use Case 2" (Übermittlung pseudonymisierter Daten) der EDSA-Empfehlungen 01/2020. Die Übermittlung an einen US-Cloud-Provider gilt als zulässig, wenn die Daten vor dem Verlassen des Europäischen Wirtschaftsraums derart pseudonymisiert (oder verschlüsselt) werden, dass der US-Dienstleister sie nicht re-identifizieren kann, und die Entschlüsselungskeys ausschließlich beim Datenexporteur in der EU verbleiben.
-
-Für den Einsatz von LLM-APIs in der Dokumentenprüfung bedeutet dies die Implementierung eines "Client-Side Pseudonymization Proxy". Bevor ein Dokument (z.B. ein Lebenslauf) an die OpenAI- oder Anthropic-API gesendet wird, durchläuft es lokal (On-Premise oder in einer sicheren EU-Cloud) ein Natural Language Processing-Modell zur Named Entity Recognition (NER). Sensible Entitäten (Namen, IBANs, Sozialversicherungsnummern) werden mittels deterministischer Tokenisierung oder Format-Preserving Encryption (FPE) durch synthetische, strukturerhaltende Platzhalter ersetzt. Der Text wird in diesem ephemer pseudonymisierten Zustand an die US-API gesendet. Die Inferenz (z.B. Zusammenfassung oder Klassifikation) erfolgt auf Basis der Platzhalter. Sobald die Antwort zurück in der europäischen Infrastruktur eintrifft, führt der Proxy das Reverse-Mapping durch und tauscht die kryptografischen Tokens wieder gegen die Klartext-Namen aus. Die kryptografische Grenze verläuft somit strikt zwischen dem eigenen System und dem Provider; selbst im Falle einer richterlichen Anordnung (Subpoena) nach dem CLOUD Act könnte der US-Provider den US-Behörden lediglich unbrauchbare Tokens ausliefern.4.
-
-## 3. Zwingende Flankierung durch Rechtsgrundlage und Auftragsverarbeitungsvertrag (Art. 28)Die technische Brillanz der clientseitigen Pseudonymisierung oder die vertragliche Zusicherung einer ephemeren Verarbeitung ("Zero Data Retention") heben die grundsätzliche Anwendbarkeit der DSGVO nicht auf. "Zero Data Retention" (ZDR) ist ein gängiges Marktkonzept, bei dem LLM-Provider (oft auf Enterprise-API-Ebene) garantieren, eingehende Prompts nicht dauerhaft zu speichern und unter keinen Umständen für das Training ihrer Basismodelle zu verwenden.ZDR reduziert das Risiko von Datenschutzverletzungen drastisch und adressiert die Prinzipien der Speicherbegrenzung und Datenminimierung (Art. 5 Abs. 1 lit. c und e DSGVO). Dennoch stellt die Übermittlung und die flüchtige Verarbeitung der Daten im Arbeitsspeicher (RAM) der Provider-Server (Inferenz) unbestreitbar eine Verarbeitung im Sinne des Artikel 4 Nr. 2 DSGVO dar. Daraus folgt zwingend, dass für diese Operation eine legitime Rechtsgrundlage nach Artikel 6 DSGVO (z.B. Erfüllung eines Vertrags oder berechtigtes Interesse) und bei der Verarbeitung besonderer Datenkategorien (z.B. Gesundheitsdaten in HR-Dokumenten) eine Ausnahme nach Artikel 9 DSGVO vorliegen muss.
-
-Des Weiteren handelt der US-LLM-Provider, der die API bereitstellt, bei der Inferenz der übermittelten Dokumente rechtlich als Auftragsverarbeiter für das anwendende Unternehmen. Gemäß Artikel 28 DSGVO ist der Abschluss eines formalen Auftragsverarbeitungsvertrags (AVV / Data Processing Agreement) zwingend erforderlich. Die ZDR-Zusicherung des Providers darf nicht lediglich in Marketing-Broschüren stehen, sondern muss als harte, dokumentierte Weisung (Art. 28 Abs. 3 lit. a DSGVO) in den AVV integriert werden. Dieser Vertrag regelt zudem die Einbindung möglicher Unterauftragsverarbeiter und legt das Fundament dafür, dass die "Zero Data Retention"-Einstellung als nachweisbare technisch-organisatorische Maßnahme (TOM) im Sinne des Artikel 32 DSGVO in das Verarbeitungsverzeichnis aufgenommen werden kann.
-
-## 5. Architektonische Synthese: Handlungsempfehlungen für Software-EngineersDie simultane Einhaltung der Produktsicherheitsvorgaben des AI Act, der harten Formalien des Steuerrechts sowie der rigiden Schutzmechanismen des Datenschutzrechts erfordert einen Paradigmenwechsel im Software-Engineering. Compliance darf nicht als retrospektiver, anwaltlicher Audit-Prozess verstanden werden, sondern muss als "Compliance-by-Design" fest im Code und in der Infrastruktur der automatisierten Dokumentenprüfung verankert sein.
-
-Die nachfolgende Matrix synthetisiert die juristischen Dogmen zu konkreten, implementierbaren Architektur-Patterns (Stand 2026):Regulatorische Norm (2025/2026)Juristischer ZwangTechnologisches Design Pattern (Handlungsempfehlung)EU AI Act – Art. 12 (Protokollierung) & GoBD (Verfahrensdokumentation)Nachweisbarkeit von KI-Entscheidungen (6 Mon.) & Unveränderbarkeit steuerlicher Prüfpfade (10 Jahre).
-
-Unified Compliance Ledger (WORM-Storage): Implementierung einer manipulationssicheren, Append-Only-Datenbankarchitektur. Für jeden Dokumenten-Parse-Vorgang müssen der exakte Prompt, die Modell-Version, der Hash des Originaldokuments, die LLM-Konfidenz und der Zeitstempel revisionssicher persistiert werden.EU AI Act – Art. 14 (Menschliche Aufsicht)Verhinderung des "Automation Bias"; zwingende Möglichkeit zur menschlichen Übersteuerung bei tiefen Grundrechtseingriffen.
-
-Confidence-based Human-in-the-Loop Gateway: Die KI-Inferenz darf nie direkt in führende ERP-Systeme schreiben. Ein Backend-Router evaluiert den Confidence-Score der KI-Extraktion. Liegt dieser unter einem definierten Schwellenwert (oder handelt es sich um Hochrisiko-Prozesse nach Anhang III), wird das Dokument in eine asynchrone Warteschlange für die manuelle Freigabe (Override-Interface) durch qualifiziertes Personal geleitet.UStG § 14 Abs. 4 & EN 16931 (Wachstumschancengesetz)Zwingende Einhaltung der strukturierten E-Rechnungsformate für den Vorsteuerabzug ab 01.01.2025; Primat der XML-Daten.
-
-Strict XML-First Parsing Engine: Für den Rechnungseingang (insb. B2B) darf das System bei hybriden Formaten (wie ZUGFeRD) die visuelle PDF-Schicht nicht mehr per OCR auswerten. Die Pipeline muss einen XML-Parser implementieren, der den EN 16931-Knotenbaum gegen die XSD-Schemata validiert. Abweichungen zwischen Bild und Daten sind zugunsten der XML-Daten aufzulösen. Die Validierungsregeln müssen dynamisch skalieren (z.B. Abschwächung bei < 250 € gemäß § 33 UStDV).DSGVO Art. 4 Nr. 5, Art. 28 & EDSA 01/2020 (Schrems II)Absicherung des Drittlandtransfers pseudonymisierter Daten bei Nutzung von US-Cloud-LLM-APIs.
-
-Client-Side Pseudonymization & FPE Proxy: Bevor Textinhalte das europäische Rechenzentrum verlassen, durchlaufen sie zwingend einen lokalen NER-Filter (Named Entity Recognition). Personenbezogene Daten werden durch Format-Preserving Encryption (FPE) tokenisiert. Die US-API (abgesichert via AVV und Zero-Data-Retention-Flag) inferiert ausschließlich über die kryptografischen Tokens. Das De-Tokenizing erfolgt nach Rückkehr der Payload auf europäischen Servern.
-
-Der regulatorische Druck auf die Softwareentwicklung hat ein historisches Maximum erreicht. Zwar verschafft der "Digital Omnibus" (VO (EU) 2026/1744) den Unternehmen bezüglich der drastischen Zertifizierungspflichten für eigenständige Hochrisiko-Systeme (Anhang III) bis zum 
-
-2. Dezember 2027 eine dringend benötigte temporäre Entlastung. Doch die operativen Fundamente – die zwingende Empfangsbereitschaft für EN 16931-strukturierte Rechnungen seit dem 
-
-1. Januar 2025, die GoBD-konforme Historisierung in der Verfahrensdokumentation sowie die rigorose Abschirmung personenbezogener Daten durch ephemere Pseudonymisierung vor dem Transfer an US-Hyperscaler – dulden keinen Aufschub. Erfolgreiche Architektur in den Jahren 2025 und 2026 definiert sich dadurch, dass juristische Vorgaben nicht als externe Blockaden, sondern als exakte technische Systemspezifikationen begriffen und implementiert werden.
+# Rechtliche und regulatorische Analyse (Stand 2026)
+
+Rechtsnormen für die automatisierte Dokumentenprüfung in Deutschland und der EU –
+EU AI Act, Umsatzsteuerrecht und E-Rechnung, GoBD sowie Datenschutz – und ihre
+Übersetzung in Architekturentscheidungen des Enterprise Compliance Agent.
+
+> Technische Einordnung, keine Rechts- oder Steuerberatung. Die Quellen zu den
+> einzelnen Angaben stehen in [`RECHTSQUELLEN.md`](RECHTSQUELLEN.md); wie das
+> System die Anforderungen umsetzt, beschreibt der Abschnitt
+> [Anmerkungen aus der Umsetzung](#anmerkungen-aus-der-umsetzung-stand-v25-november-2026).
+
+## Inhalt
+
+1. [Paradigmenwechsel in der automatisierten Dokumentenverarbeitung](#1-paradigmenwechsel-in-der-automatisierten-dokumentenverarbeitung)
+2. [Der EU AI Act: Produktsicherheit und Grundrechtsschutz](#2-der-eu-ai-act-produktsicherheit-und-grundrechtsschutz)
+3. [Steuerrecht und E-Rechnung: die Digitalisierung des Vorsteuerabzugs](#3-steuerrecht-und-e-rechnung-die-digitalisierung-des-vorsteuerabzugs)
+4. [Datenschutz, Cloud-Inferenz und Drittlandtransfer](#4-datenschutz-cloud-inferenz-und-drittlandtransfer)
+5. [Architektonische Synthese](#5-architektonische-synthese)
+6. [Anmerkungen aus der Umsetzung](#anmerkungen-aus-der-umsetzung-stand-v25-november-2026)
 
 ---
 
-## Anmerkungen aus der Umsetzung (v2.2, Oktober 2026)
+## 1. Paradigmenwechsel in der automatisierten Dokumentenverarbeitung
 
-Abgleich der Analyse mit dem implementierten Stand. Der Text oben bleibt
-unverändert; die folgenden Punkte präzisieren ihn.
+Architektur, Implementierung und Betrieb von Systemen zur automatisierten
+Dokumentenprüfung durchlaufen 2025 und 2026 eine Zäsur. Die Digitalisierung
+geschäftskritischer Prozesse – insbesondere im Personalwesen (Recruiting), im
+Finanz- und Rechnungswesen sowie in der Vertragsanalyse – trifft auf die
+Konvergenz dreier Regulierungsregime. Die automatisierte Extraktion,
+Klassifizierung und Bewertung von Dokumenteninhalten mit Large Language Models
+(LLMs) und Optical Character Recognition (OCR) bewegt sich damit im Zentrum des
+europäischen Daten- und Technologierechts.
+
+Eine isolierte Betrachtung einzelner Rechtsgebiete greift zu kurz. Die
+Extraktion von Rechnungs- oder Bewerbungsdaten durch eine in der Cloud
+betriebene KI berührt gleichzeitig
+
+- die Produktsicherheits- und Grundrechtsdogmatik der Verordnung (EU) 2024/1689
+  (EU AI Act),
+- die umsatzsteuerlichen Dokumentationspflichten nach dem
+  Wachstumschancengesetz und dem Vierten Bürokratieentlastungsgesetz (BEG IV)
+  sowie
+- die Anforderungen der Datenschutz-Grundverordnung (DSGVO) an die
+  Rechtmäßigkeit der Verarbeitung und an den Drittlandtransfer nach der
+  Schrems-II-Rechtsprechung.
+
+Die folgende Analyse ordnet den Rechtsstand 2025/2026 in diesen drei Domänen ein
+und leitet daraus architektonische Leitplanken für das Software-Engineering ab.
+
+## 2. Der EU AI Act: Produktsicherheit und Grundrechtsschutz
+
+Mit dem Inkrafttreten der Verordnung (EU) 2024/1689 am **1. August 2024** hat
+der europäische Gesetzgeber den ersten umfassenden, risikobasierten
+Rechtsrahmen für Künstliche Intelligenz geschaffen. Das Regelwerk überführt
+ethische Grundsätze in sanktionsbewehrtes Produktsicherheitsrecht: Bußgelder
+reichen bis zu 35 Mio. Euro oder 7 % des weltweiten Jahresumsatzes bei
+verbotenen Praktiken und bis zu 15 Mio. Euro oder 3 % bei Verstößen gegen die
+Pflichten für Hochrisiko-Systeme. Die Pflichten skalieren mit dem
+Gefährdungspotenzial des jeweiligen KI-Systems.
+
+### 2.1 Anbieter (Art. 16) und Betreiber (Art. 26)
+
+Der AI Act trennt die Wirtschaftsakteure entlang der KI-Wertschöpfungskette
+strikt in **Anbieter** (Provider) und **Betreiber** (Deployer). Diese
+Unterscheidung bestimmt die gesamte Compliance-Strategie, insbesondere wenn
+Dokumente in sensiblen Bereichen wie dem Personalwesen (Hochrisiko-KI nach
+Anhang III) automatisiert geprüft werden.
+
+**Anbieter** ist nach Art. 3, wer ein KI-System entwickelt oder entwickeln lässt
+und es unter eigenem Namen oder eigener Marke in Verkehr bringt. Er trägt die
+primäre Last für die Systemsicherheit: Nach Art. 16 i. V. m. Art. 17–21 muss er
+vor dem Markteintritt ein Qualitätsmanagementsystem (Art. 17) mit
+Daten-Governance (Art. 10), Risikominderung und Testszenarien einrichten, eine
+technische Dokumentation nach Anhang IV erstellen, ein
+Konformitätsbewertungsverfahren durchlaufen, das System in der EU-Datenbank
+registrieren und es nach dem Inverkehrbringen beobachten (Post-Market
+Monitoring, Art. 72). Er gewährleistet Genauigkeit, Robustheit und
+Cybersicherheit (Art. 15).
+
+**Betreiber** ist nach Art. 26, wer ein KI-System unter eigener Verantwortung im
+Rahmen einer beruflichen oder gewerblichen Tätigkeit einsetzt. Ein deutsches
+Unternehmen, das ein lizenziertes KI-Werkzeug zur Auswertung von Lebensläufen
+nutzt, handelt als Betreiber. Seine Pflichten ergänzen die des Anbieters und
+überführen die Systemsicherheit in eine sichere Anwendung:
+
+- **Art. 26 Abs. 1:** Nutzung strikt nach der Gebrauchsanweisung des Anbieters.
+- **Art. 26 Abs. 4:** Die Eingabedaten, über die der Betreiber die Kontrolle
+  ausübt, müssen für den Zweck relevant und ausreichend repräsentativ sein.
+  Werden verzerrte (biased) Dokumente eingespeist, haftet der Betreiber für die
+  resultierende Diskriminierung.
+- **Art. 26 Abs. 5:** Laufende Überwachung. Treten Risiken für Gesundheit,
+  Sicherheit oder Grundrechte auf, ist das System zu stoppen und sind Anbieter
+  und Marktüberwachungsbehörde zu informieren – in Deutschland das bei der
+  Bundesnetzagentur angesiedelte Koordinierungs- und Kompetenzzentrum für die
+  KI-Verordnung (KoKIVO).
+- **Art. 26 Abs. 7:** Vor dem Einsatz eines Hochrisiko-KI-Systems am
+  Arbeitsplatz sind Arbeitnehmervertretungen und betroffene Beschäftigte zu
+  unterrichten.
+
+| Akteur | Definition nach EU AI Act | Kernpflichten bei Hochrisiko-Systemen |
+|---|---|---|
+| **Anbieter** (Provider) | Entwickelt ein KI-System und bringt es unter eigenem Namen oder eigener Marke in Verkehr | Art. 16: Qualitätsmanagementsystem (Art. 17), technische Dokumentation (Art. 11), Konformitätsbewertung, CE-Kennzeichnung, Post-Market Monitoring (Art. 72) |
+| **Betreiber** (Deployer) | Nutzt das KI-System in eigener Verantwortung für berufliche oder gewerbliche Zwecke | Art. 26: Nutzung gemäß Gebrauchsanweisung, Relevanz der Eingabedaten, Systemüberwachung, Meldung bei Risiken, Information der Beschäftigten |
+
+Zusätzlich verlangt **Art. 27** von bestimmten Betreibern vor dem ersten Einsatz
+eine **Grundrechte-Folgenabschätzung** (Fundamental Rights Impact Assessment,
+FRIA). Sie trifft Einrichtungen des öffentlichen Rechts, private Erbringer
+öffentlicher Dienstleistungen sowie Betreiber von Systemen zur
+Kreditwürdigkeitsprüfung und zur Risikobewertung in der Lebens- und
+Krankenversicherung. Die Abschätzung bewertet schriftlich die Einsatzprozesse,
+die betroffenen Personengruppen (insbesondere vulnerable Gruppen) und die
+technischen und organisatorischen Schutzmaßnahmen.
+
+### 2.2 Zeitplan nach dem „Digital Omnibus“ und Anhang III
+
+Die Pflichten gelten gestaffelt. Die Verbote unannehmbarer Praktiken (Art. 5)
+und die Pflicht zur KI-Kompetenz (Art. 4) gelten seit dem **2. Februar 2025**,
+die Regeln für KI-Modelle mit allgemeinem Verwendungszweck (GPAI) seit dem
+**2. August 2025**. Weil die harmonisierten Normen der europäischen
+Normungsorganisationen (CEN/CENELEC) für Hochrisiko-Systeme nicht rechtzeitig
+vorlagen, legte die EU-Kommission Ende 2025 das Gesetzgebungspaket „Digital
+Omnibus“ vor.
+
+Die daraus hervorgegangene Änderungsverordnung **VO (EU) 2026/1744** trat nach
+der politischen Einigung im Mai 2026 am **27. Juli 2026** in Kraft und
+verschiebt die Stichtage für Hochrisiko-Systeme. Der allgemeine
+Anwendungsbeginn – insbesondere die Transparenz- und Kennzeichnungspflichten
+für KI-generierte Inhalte und Chatbots nach Art. 50 – bleibt der
+**2. August 2026**.
+
+Für die automatisierte Dokumentenprüfung ist **Anhang III Nr. 4** maßgeblich:
+KI-Systeme im Bereich „Beschäftigung, Personalmanagement und Zugang zur
+Selbstständigkeit“. Software, die Bewerbungen analysiert, filtert, Kandidaten
+bewertet oder Entscheidungen über Arbeitsverhältnisse vorbereitet, fällt
+originär in diese Hochrisikoklasse. Die Konformitäts-, Dokumentations- und
+Aufsichtspflichten (einschließlich der Folgenabschätzung nach Art. 27) für
+eigenständige Anhang-III-Systeme gelten nach dem Omnibus ab dem
+**2. Dezember 2027** statt ab August 2026; für Systeme, die als
+Sicherheitsbauteile in regulierte Produkte eingebettet sind (Anhang I), ab dem
+**2. August 2028**.
+
+| Stichtag | Regelungsgegenstand | Betroffene Akteure |
+|---|---|---|
+| 02.02.2025 | Verbotene Praktiken (Art. 5) und KI-Kompetenz (Art. 4) | Alle Anbieter und Betreiber |
+| 02.08.2025 | Pflichten für GPAI-Modelle (Art. 53 ff.) | Anbieter von Basismodellen |
+| 02.08.2026 | Allgemeine Anwendbarkeit, Transparenz (Art. 50), Marktüberwachung | Anbieter und Betreiber |
+| 02.12.2027 | Hochrisiko-Systeme nach Anhang III (z. B. Recruiting-KI, Scoring) | Anbieter (Art. 16) und Betreiber (Art. 26, 27) |
+| 02.08.2028 | Hochrisiko-Systeme nach Anhang I (eingebettete Sicherheitsbauteile) | Produkthersteller und Anbieter |
+
+**Art. 6 Abs. 3** eröffnet eine für die Dokumentenverarbeitung bedeutsame
+Ausnahme: Ein System, das nominell unter Anhang III fällt, gilt nicht als
+Hochrisiko-KI, wenn es kein erhebliches Risiko für die Grundrechte birgt –
+insbesondere, wenn es nur eine „enge verfahrenstechnische Aufgabe“ oder eine
+vorbereitende Aufgabe erfüllt. Extrahiert ein System lediglich Stammdaten aus
+einer Bewerbung oder überführt es unstrukturierte Rechnungsdaten in ein
+strukturiertes Format, ohne Wertung, Profiling oder Personalentscheidung, kann
+das Unternehmen die Einstufung durch eine dokumentierte Risikobewertung
+abwenden. Die Ausnahme ist eng auszulegen und greift nie, wenn Profiling
+natürlicher Personen stattfindet.
+
+### 2.3 Automatische Protokollierung (Art. 12) und menschliche Aufsicht (Art. 14)
+
+Um maschinelle Entscheidungen rechtlich handhabbar zu machen, verlangt der AI
+Act zwei Architekturkonzepte: **Rückverfolgbarkeit** und **menschliche
+Eingriffsmöglichkeit**.
+
+**Art. 12** verpflichtet Hochrisiko-Systeme, Ereignisse über ihren gesamten
+Lebenszyklus automatisch zu protokollieren. Die Protokolle müssen die
+Funktionsweise im Hinblick auf Risiken rückwirkend rekonstruierbar machen:
+Zeitraum der Nutzung, Eingabedaten (soweit datenschutzrechtlich zulässig) und
+die an der Überprüfung beteiligten Personen. Nach **Art. 26 Abs. 6** bewahrt der
+Betreiber diese Protokolle, soweit sie seiner Kontrolle unterliegen,
+mindestens sechs Monate fälschungssicher auf. Für die Architektur folgt
+daraus eine Anbindung der KI-Inferenz an einen unveränderbaren Speicher
+(WORM-Prinzip), der Versionen, Konfidenzwerte und Modellentscheidungen
+revisionssicher festhält.
+
+**Art. 14** verlangt menschliche Aufsicht (Human Oversight). Ein KI-System, das
+tief in Grundrechte eingreift, darf keine letzte Entscheidung vollautonom
+treffen. Die beaufsichtigenden Personen müssen den Betrieb nachvollziehen,
+Ausgaben kritisch bewerten, dem „Automation Bias“ (der Tendenz, maschinellen
+Ergebnissen unreflektiert zu vertrauen) entgegenwirken und das System
+übersteuern oder anhalten können (Art. 14 Abs. 4 lit. d und e). In der
+Dokumentenprüfung bedeutet das Workflows wie **Human-in-the-Loop** (die KI
+bereitet vor, der Mensch gibt stets frei) oder **Human-on-the-Loop** (die KI
+arbeitet selbstständig, der Mensch greift stichprobenartig ein).
+
+## 3. Steuerrecht und E-Rechnung: die Digitalisierung des Vorsteuerabzugs
+
+Während der AI Act die Algorithmen reguliert, bestimmt das Umsatzsteuerrecht
+die formalen und inhaltlichen Kriterien der geprüften Dokumente. Mit dem
+Wachstumschancengesetz (März 2024) und dem BEG IV geht Deutschland zur
+strukturierten elektronischen Rechnung über – mit erheblichen Folgen für
+OCR- und KI-Extraktionssysteme.
+
+### 3.1 Pflichtangaben (§ 14 Abs. 4 UStG) und Kleinbetragsrechnung (§ 33 UStDV)
+
+Der Vorsteuerabzug nach § 15 UStG setzt eine formell und materiell
+ordnungsgemäße Rechnung voraus. Die Merkmale, die ein System fehlerfrei
+extrahieren und prüfen muss, nennt § 14 Abs. 4 UStG abschließend: vollständiger
+Name und Anschrift des leistenden Unternehmers und des Leistungsempfängers,
+Steuernummer oder USt-IdNr. des Leistenden, Ausstellungsdatum, fortlaufende
+Rechnungsnummer, Menge und handelsübliche Bezeichnung der Lieferung bzw. Art
+und Umfang der Leistung, Zeitpunkt der Lieferung oder Leistung, das nach
+Steuersätzen aufgeschlüsselte Entgelt sowie der gesondert ausgewiesene
+Steuerbetrag. Fehlt ein Merkmal oder ist es unrichtig, ist der Vorsteuerabzug
+zu versagen. Die Rechtsprechung des EuGH, der der BFH folgt, erlaubt zwar die
+rückwirkende Rechnungsberichtigung, doch jeder Fehler birgt Liquiditäts- und
+Zinsrisiken in der Betriebsprüfung.
+
+Eine verfahrensrechtliche Erleichterung bietet **§ 33 UStDV** für
+Kleinbetragsrechnungen bis **250 Euro brutto**: Es genügen Name und Anschrift
+des Leistenden, Ausstellungsdatum, Menge und Art der Leistung, das Bruttoentgelt
+und der Steuersatz; Leistungsempfänger, Steuernummer und der getrennte Ausweis
+von Netto und Steuer entfallen. Eine automatisierte Prüfung muss ihre
+Regelmatrix daher am extrahierten Bruttobetrag ausrichten.
+
+| Rechtsgrundlage | Anwendungsbereich | Pflichtangaben (Auswahl) | Folge für die Extraktion |
+|---|---|---|---|
+| § 14 Abs. 4 UStG | Rechnungen über 250 € | Namen und Anschriften beider Parteien, Steuernummer bzw. USt-IdNr., Rechnungsnummer, Netto, Steuerbetrag, Steuersatz | Strikte Prüfung aller Felder; bei Mängeln Übergabe an die menschliche Klärung |
+| § 33 UStDV | Kleinbetragsrechnungen bis 250 € | Name und Anschrift des Leistenden, Datum, Art der Leistung, Bruttobetrag, Steuersatz; kein Empfänger nötig | Reduzierter Pflichtkatalog; fehlende Empfängerdaten sind kein Mangel |
+
+### 3.2 Unrichtiger Steuerausweis (§ 14c UStG)
+
+Ein erhebliches Risiko ist der unrichtige oder unberechtigte Steuerausweis.
+Weist ein Unternehmer mehr Steuer aus, als er schuldet (z. B. 19 % statt 7 %),
+schuldet er nach § 14c Abs. 1 UStG auch den Mehrbetrag. Diese auf Art. 203 der
+Mehrwertsteuer-Systemrichtlinie (MwStSystRL) beruhende Gefährdungshaftung
+schützt das Steueraufkommen vor einem unberechtigten Vorsteuerabzug des
+Empfängers.
+
+Der EuGH hat diese Haftung mit dem Urteil **P-GmbH (C-378/21) vom
+8. Dezember 2022** eingeschränkt: Eine Steuerschuld aus unrichtigem Ausweis
+entsteht nicht, wenn die Rechnung ausschließlich an Endverbraucher gerichtet
+ist – sie sind nicht zum Vorsteuerabzug berechtigt, das Steueraufkommen ist
+also nicht gefährdet. Das BMF hat dies mit Schreiben vom **27. Februar 2024**
+(III C 2 – S 7282/19/10001 :002) umgesetzt und die frühere, strengere
+BFH-Rechtsprechung (Urteil vom 13.12.2018, V R 4/18) insoweit für überholt
+erklärt.
+
+Die Folgerechtsprechung (EuGH, Urteil vom 1. August 2025; BFH, Beschluss vom
+19. März 2025, XI R 4/22) knüpft die Befreiung an den Ausschluss der
+„Infektionswirkung“: Es muss feststehen, dass die Rechnung nicht an einen
+vorsteuerabzugsberechtigten Unternehmer gelangt ist. Bei Kleinbetragsrechnungen
+an unbekannte Laufkundschaft sind Schätzungen des Endverbraucher-Anteils
+zulässig, wenn sie transparent, verhältnismäßig und überprüfbar sind. Für
+ERP- und Dokumentensysteme werden die Unterscheidung zwischen B2B und B2C und
+die Dokumentation des Kundenstatus damit zu steuerlichen Anforderungen.
+
+### 3.3 E-Rechnungspflicht nach EN 16931 seit dem 1. Januar 2025
+
+Die tiefgreifendste Änderung ist die obligatorische E-Rechnung im inländischen
+B2B-Verkehr, eingeführt durch das Wachstumschancengesetz und ausgelegt im
+BMF-Schreiben vom **15. Oktober 2024**. Der Gesetzgeber löst sich von der
+optischen Dokumentenprüfung und setzt auf den strukturierten,
+maschinenlesbaren Datensatz.
+
+Seit dem **1. Januar 2025** ist eine „elektronische Rechnung“ (§ 14 Abs. 1
+Satz 3 UStG) ausschließlich eine Rechnung, die in einem strukturierten
+elektronischen Format ausgestellt, übermittelt und empfangen wird, das eine
+elektronische Verarbeitung ermöglicht und der Norm **EN 16931** entspricht.
+Klassische PDF-Rechnungen per E-Mail gelten als „sonstige Rechnungen“ und
+stehen Papierrechnungen gleich. In Deutschland qualifizieren sich vor allem
+**XRechnung** und **ZUGFeRD** ab Version 2.0.1 (ohne die Profile MINIMUM und
+BASIC WL).
+
+Die Umstellung verläuft gestaffelt:
+
+- **Empfangspflicht seit 01.01.2025:** Alle inländischen Unternehmer – auch
+  Kleinunternehmer nach § 19 UStG – müssen E-Rechnungen nach EN 16931 empfangen
+  und archivieren können. Übergangsfristen gibt es dafür nicht.
+- **Ausstellungspflicht ab 2027/2028:** Vom 1. Januar 2025 bis zum
+  31. Dezember 2026 dürfen Unternehmen weiterhin PDF-Rechnungen versenden, wenn
+  der Empfänger zustimmt. Ab dem **1. Januar 2027** gilt die Pflicht für
+  Unternehmen mit einem Vorjahresumsatz über 800.000 Euro, ab dem
+  **1. Januar 2028** für den gesamten B2B-Bereich.
+
+Für hybride Formate wie ZUGFeRD – ein PDF-Bildteil mit eingebettetem
+XML-Datensatz – enthält das BMF-Schreiben vom 15. Oktober 2024 eine zentrale
+Klarstellung: Weichen beide Teile voneinander ab, ist für Vorsteuerabzug und
+Steuerfestsetzung **der XML-Datensatz maßgeblich** (Rz. 36). Eine KI-gestützte
+Prüfung darf sich bei E-Rechnungen deshalb nicht auf die visuelle PDF-Schicht
+verlassen, sondern muss den XML-Datensatz nach EN 16931 auswerten.
+
+### 3.4 Aufbewahrungsfristen (BEG IV) und Verfahrensdokumentation
+
+Die Aufbewahrung von E-Rechnungen und Prüfprotokollen folgt den GoBD
+(Grundsätze zur ordnungsmäßigen Führung und Aufbewahrung von Büchern,
+Aufzeichnungen und Unterlagen in elektronischer Form sowie zum Datenzugriff).
+Das BEG IV hat mit Wirkung zum **1. Januar 2025** die Frist für Buchungsbelege
+und Rechnungen (§ 147 Abs. 3 AO, § 14b Abs. 1 UStG) von zehn auf **acht Jahre**
+verkürzt – auch für Belege, deren Zehnjahresfrist zu diesem Stichtag noch lief.
+
+Daraus folgt ein häufig übersehenes Paradoxon: Rechnungsdatensätze dürfen nach
+acht Jahren gelöscht werden, Jahresabschlüsse, Handelsbücher und – für
+IT-Systeme entscheidend – die **Verfahrensdokumentation** bleiben **zehn Jahre**
+aufbewahrungspflichtig.
+
+Die GoBD verlangen für elektronische Dokumentenmanagementsysteme eine
+Verfahrensdokumentation, die das organisatorisch und technisch gewollte
+Verfahren beschreibt. Sie gliedert sich in vier Teile: allgemeine Beschreibung,
+Anwenderdokumentation, technische Systemdokumentation und
+Betriebsdokumentation (einschließlich IT-Sicherheits- und Kontrollmaßnahmen).
+Um die Unveränderbarkeit historischer Buchungen über bis zu zehn Jahre
+nachzuweisen, muss sie Systemzustände, Software-Updates und Änderungen der
+Prüfalgorithmen historisieren. Der Prüfpfad (Audit Trail) von der empfangenen
+XML-Datei über den maschinellen Prüfvermerk bis zur Buchung muss über die
+gesamte Aufbewahrungsdauer maschinell auswertbar bleiben. Eine fehlende oder
+unzureichende Dokumentation des E-Rechnungs-Workflows kann ein formeller
+GoBD-Mangel sein (zur Gewichtung siehe die Anmerkungen am Ende).
+
+## 4. Datenschutz, Cloud-Inferenz und Drittlandtransfer
+
+Die semantische Extraktion aus unstrukturierten Dokumenten (Verträge,
+Lebensläufe, Freitextrechnungen) übernehmen zunehmend LLMs statt regelbasierter
+Systeme. Weil die Inferenz viel Rechenleistung braucht, greifen Unternehmen auf
+Cloud-APIs (etwa von OpenAI, Anthropic oder Google) zurück, die überwiegend von
+US-Unternehmen betrieben werden. Enthalten die Dokumente personenbezogene
+Daten, eröffnet das die Anforderungen der DSGVO.
+
+### 4.1 Pseudonymisierung und Anonymisierung (Art. 4 Nr. 5 DSGVO)
+
+Entwickler versuchen häufig, Namen und Identifikatoren vor dem Versand an die
+LLM-API zu „anonymisieren“. Die DSGVO verlangt jedoch eine klare Unterscheidung
+mit weitreichenden Folgen.
+
+Eine **Anonymisierung** im Sinne von Erwägungsgrund 26 liegt nur vor, wenn die
+betroffene Person unter keinen Umständen mehr identifiziert werden kann;
+anonyme Daten fallen nicht unter die DSGVO. Die **Pseudonymisierung** ist in
+Art. 4 Nr. 5 DSGVO definiert als Verarbeitung, nach der die Daten ohne
+zusätzliche Informationen (Schlüssel oder Zuordnungstabelle) keiner Person
+mehr zugeordnet werden können. Pseudonymisierte Daten bleiben
+personenbezogen und unterliegen der DSGVO.
+
+Die Abgrenzung folgt dem Konzept der **relativen Identifizierbarkeit**. Der EuGH
+hat in den Entscheidungen *Breyer* (C-582/14, dynamische IP-Adressen) und
+*EDSB/SRB* (C-413/23 P, September 2025) festgehalten, dass der Personenbezug aus
+der Sicht des jeweiligen Empfängers zu beurteilen ist. Übermittelt ein
+Unternehmen pseudonymisierte Daten an einen Dritten und behält den Schlüssel
+unter eigener Kontrolle, ohne dass der Empfänger rechtliche oder praktische
+Mittel hat, ihn zu erlangen, können die Daten aus Sicht des Empfängers als
+anonym gelten.
+
+Bei generativen KI-Modellen ist das komplex. Der Europäische
+Datenschutzausschuss (EDSA) hat in seiner **Stellungnahme 28/2024** zu
+KI-Modellen betont, dass LLMs durch „Regurgitation“ (das unbeabsichtigte
+Wiedergeben von Trainingsdaten) und durch Rückschlüsse aus dem semantischen
+Kontext die Identifizierbarkeit deutlich erhöhen. Ein einfaches Ersetzen von
+Namen (etwa per Regex) führt bei unstrukturierten Texten selten zu echter
+Anonymität, weil der verbleibende Kontext (Berufsstationen, Vokabular,
+stilistische Merkmale) eine Re-Identifizierung erlauben kann. Der EDSA
+betrachtet solche Daten deshalb in der Regel weiterhin als pseudonymisiert.
+
+### 4.2 Drittlandtransfer: EDSA-Empfehlungen 01/2020 und flüchtige Pseudonymisierung
+
+Weil pseudonymisierte Prompts personenbezogen bleiben, löst ihre Übermittlung
+an eine in den USA betriebene API die Regeln des **Kapitels V der DSGVO**
+(Übermittlung in Drittländer) aus. Seit dem Schrems-II-Urteil des EuGH
+(C-311/18, 16. Juli 2020) müssen Unternehmen ein angemessenes Schutzniveau
+nachweisen.
+
+Seit Juli 2023 besteht mit dem **EU-US Data Privacy Framework** ein
+Angemessenheitsbeschluss für zertifizierte US-Unternehmen. Wegen möglicher
+Anfechtungen („Schrems III“) und weil nicht alle Unterauftragnehmer
+zertifiziert sind, stützen viele Organisationen Transfers zusätzlich auf
+Standardvertragsklauseln (SCC) mit dokumentiertem Transfer Impact Assessment
+(TIA).
+
+Hier greifen die **EDSA-Empfehlungen 01/2020** zu ergänzenden Maßnahmen:
+Vertragliche Zusicherungen genügen nicht, wenn das Recht des Drittlands (etwa
+CLOUD Act oder FISA Section 702) Behörden einen unverhältnismäßigen Zugriff
+erlaubt. Der Verantwortliche muss **wirksame ergänzende technische Maßnahmen**
+treffen. Der verbreitete Lösungsansatz entspricht dem **Anwendungsfall 2**
+(Übermittlung pseudonymisierter Daten): Die Übermittlung ist vertretbar, wenn
+die Daten vor dem Verlassen des EWR so pseudonymisiert werden, dass der
+Empfänger sie nicht re-identifizieren kann, und die Zuordnung ausschließlich
+beim Datenexporteur in der EU verbleibt.
+
+Für LLM-APIs bedeutet das einen **Pseudonymisierungs-Proxy auf der eigenen
+Seite**: Bevor ein Dokument an die API geht, ersetzt eine lokale Komponente
+sensible Entitäten (Namen, IBANs, Sozialversicherungsnummern) durch
+strukturerhaltende Platzhalter – per Named Entity Recognition (NER),
+deterministischer Tokenisierung oder formaterhaltender Verschlüsselung (FPE).
+Die Inferenz läuft auf den Platzhaltern; erst nach der Rückkehr der Antwort
+setzt der Proxy die Klartextwerte wieder ein. Selbst bei einer behördlichen
+Anordnung könnte der Anbieter nur die Platzhalter herausgeben.
+
+### 4.3 Rechtsgrundlage und Auftragsverarbeitungsvertrag (Art. 28 DSGVO)
+
+Weder die Pseudonymisierung noch eine vertragliche Zusicherung flüchtiger
+Verarbeitung („Zero Data Retention“, ZDR) heben die Anwendbarkeit der DSGVO
+auf. Bei ZDR sichert der Anbieter zu, Prompts nicht dauerhaft zu speichern und
+nicht für das Training zu verwenden. Das senkt das Risiko und unterstützt
+Speicherbegrenzung und Datenminimierung (Art. 5 Abs. 1 lit. c und e DSGVO).
+Die Übermittlung und die Verarbeitung im Arbeitsspeicher des Anbieters bleiben
+aber eine Verarbeitung nach Art. 4 Nr. 2 DSGVO. Sie braucht eine Rechtsgrundlage
+nach **Art. 6 DSGVO** und – bei besonderen Kategorien, etwa Gesundheitsdaten in
+Personalunterlagen – eine Ausnahme nach **Art. 9 DSGVO**.
+
+Der API-Anbieter handelt bei der Inferenz als **Auftragsverarbeiter**; ein
+Vertrag nach **Art. 28 DSGVO** ist zwingend. Die ZDR-Zusicherung gehört als
+dokumentierte Weisung (Art. 28 Abs. 3 lit. a DSGVO) in diesen Vertrag, nicht nur
+in Marketingunterlagen. Der Vertrag regelt auch Unterauftragsverarbeiter und
+macht ZDR als technisch-organisatorische Maßnahme nach **Art. 32 DSGVO** im
+Verarbeitungsverzeichnis nachweisbar.
+
+## 5. Architektonische Synthese
+
+Die gleichzeitige Einhaltung von AI Act, Steuerrecht und Datenschutz verlangt
+**Compliance by Design**: Die Anforderungen gehören in Code und Infrastruktur,
+nicht in eine nachträgliche Prüfung.
+
+| Norm | Rechtliche Anforderung | Architekturmuster |
+|---|---|---|
+| EU AI Act Art. 12 (Protokollierung) und GoBD (Verfahrensdokumentation) | Nachweisbarkeit von KI-Entscheidungen (mind. 6 Monate) und Unveränderbarkeit steuerlicher Prüfpfade (bis 10 Jahre) | **Einheitliches Compliance-Ledger (WORM):** append-only, manipulationssicher; je Prüfung Prompt-Version, Modellversion, Hash des Originals, Konfidenz und Zeitstempel |
+| EU AI Act Art. 14 (menschliche Aufsicht) | Verhinderung des Automation Bias; Übersteuerung bei Grundrechtseingriffen | **Human-in-the-Loop-Gateway:** KI-Ergebnisse schreiben nie direkt ins ERP; unsichere Ergebnisse und Hochrisiko-Fälle nach Anhang III gehen in eine asynchrone Warteschlange zur Freigabe bzw. Übersteuerung durch Fachpersonal |
+| § 14 Abs. 4 UStG und EN 16931 | Strukturierte E-Rechnung für den Vorsteuerabzug seit 01.01.2025; Vorrang der XML-Daten | **XML-first-Verarbeitung:** bei hybriden Formaten den XML-Datensatz auswerten statt die PDF-Schicht per OCR; Abweichungen zugunsten des XML auflösen; Regelmatrix am Betrag ausrichten (§ 33 UStDV) |
+| DSGVO Art. 4 Nr. 5, Art. 28 und EDSA 01/2020 (Schrems II) | Absicherung des Drittlandtransfers pseudonymisierter Daten an Cloud-LLM-APIs | **Pseudonymisierungs-Proxy:** Identifikatoren vor dem Verlassen der eigenen Infrastruktur durch Platzhalter ersetzen; Inferenz nur auf Platzhaltern (mit AVV und ZDR); Re-Identifizierung erst nach der Rückkehr |
+
+Der „Digital Omnibus“ (VO (EU) 2026/1744) verschafft Unternehmen für die
+Zertifizierungspflichten eigenständiger Hochrisiko-Systeme (Anhang III) bis zum
+**2. Dezember 2027** Zeit. Die operativen Grundlagen – Empfangsbereitschaft für
+E-Rechnungen nach EN 16931 seit dem **1. Januar 2025**, GoBD-konforme
+Historisierung in der Verfahrensdokumentation und die Abschirmung
+personenbezogener Daten vor dem Transfer an Cloud-Anbieter – dulden dagegen
+keinen Aufschub. Rechtliche Vorgaben lassen sich am besten als präzise
+technische Spezifikation verstehen und umsetzen.
+
+---
+
+## Anmerkungen aus der Umsetzung (Stand v2.5, November 2026)
+
+Abgleich der Analyse mit dem implementierten Stand des Enterprise Compliance
+Agent. Der Analysetext oben bleibt inhaltlich unverändert; die folgenden Punkte
+präzisieren ihn.
 
 1. **Folgen einer fehlenden Verfahrensdokumentation.** Nach GoBD Rz. 155 ist
    eine fehlende oder ungenügende Verfahrensdokumentation nur dann ein
-   formeller Mangel mit sachlichem Gewicht, der die Beweiskraft der
-   Buchführung (§ 158 AO) entfallen lassen und eine Schätzung (§ 162 AO)
-   eröffnen kann, wenn die Nachvollziehbarkeit und Nachprüfbarkeit
-   beeinträchtigt sind. Ein Automatismus „fehlt, also
-   Schätzung“ besteht nicht. Umgesetzt: `app/procedural_doc.py` erzeugt einen
-   Entwurf nach Rz. 153 aus dem Systemzustand.
+   formeller Mangel mit sachlichem Gewicht, der die Beweiskraft der Buchführung
+   (§ 158 AO) entfallen lassen und eine Schätzung (§ 162 AO) eröffnen kann,
+   wenn Nachvollziehbarkeit und Nachprüfbarkeit beeinträchtigt sind. Ein
+   Automatismus „fehlt, also Schätzung“ besteht nicht. Umgesetzt:
+   `app/procedural_doc.py` erzeugt einen Entwurf nach Rz. 153 aus dem
+   Systemzustand.
 2. **Rückausnahme Finanzsektor.** Für Kreditinstitute,
    Versicherungsunternehmen und Wertpapierinstitute gilt für Buchungsbelege
    wieder die Frist von zehn Jahren (Gesetz zur Modernisierung und
    Digitalisierung der Schwarzarbeitsbekämpfung, Bundesrat 19.12.2025).
    Umgesetzt in `app/retention.py`, Scorecard und Zertifikat.
-3. **Fristbeginn.** Die Frist beginnt mit dem Schluss des Kalenderjahres, in
-   dem der Beleg entstanden ist (§ 147 Abs. 4 AO), und läuft nicht ab, solange
-   die Festsetzungsfrist noch offen ist (§ 147 Abs. 3 S. 5 AO).
-4. **Pseudonymisierung.** Das Privacy Gateway arbeitet regelbasiert im
-   Backend (kein NER-Modell, keine Format-Preserving Encryption); das Mapping
-   bleibt flüchtig im Arbeitsspeicher. Die im Abschnitt „Client-Side
-   Pseudonymization & FPE Proxy“ beschriebene Architektur ist das Zielbild,
-   nicht der aktuelle Stand.
+3. **Fristbeginn.** Die Frist beginnt mit dem Schluss des Kalenderjahres, in dem
+   der Beleg entstanden ist (§ 147 Abs. 4 AO), und läuft nicht ab, solange die
+   Festsetzungsfrist noch offen ist (§ 147 Abs. 3 S. 5 AO).
+4. **Pseudonymisierung.** Das Privacy Gateway arbeitet regelbasiert im Backend
+   (kein NER-Modell, keine formaterhaltende Verschlüsselung); das Mapping bleibt
+   flüchtig im Arbeitsspeicher. Der in Abschnitt 4.2 beschriebene Proxy mit NER
+   und FPE ist das Zielbild, nicht der aktuelle Stand.
 5. **Menschliche Aufsicht.** Art. 14 Abs. 4 lit. d AI Act ist als begründete
-   Übersteuerung der Risikoeinstufung umgesetzt; Prüfer-Einträge sind im
-   Ledger Ed25519-signiert. Die Signatur stammt vom System und belegt
-   Integrität, nicht die Identität der Prüfperson.
+   Übersteuerung der Risikoeinstufung umgesetzt; Prüfer-Einträge sind im Ledger
+   Ed25519-signiert. Die Signatur stammt vom System und belegt Integrität, nicht
+   die Identität der Prüfperson.
+6. **XML-Prüfung.** Der Agent wertet den XML-Datensatz hybrider und reiner
+   E-Rechnungen deterministisch aus (Profil, Pflichtfelder, Summenregeln,
+   Abgleich mit dem PDF-Bildteil). Eine vollständige Validierung gegen XSD und
+   Schematron leistet er nicht; für die formale Annahme beim Empfänger zählt
+   der KoSIT-Validator.
+7. **Asynchrone Verarbeitung und Ausfallsicherheit.** Analysen laufen seit v2.5
+   als Hintergrund-Jobs mit Warteschlange, Fortschritt und Abbruch. Fällt die
+   gesamte KI-Kaskade aus, schließt ein deterministisches Regelwerk die Prüfung
+   ab und kennzeichnet das Ergebnis in Oberfläche und Ledger; die Freigabe
+   bleibt in jedem Fall bei der Prüfperson.

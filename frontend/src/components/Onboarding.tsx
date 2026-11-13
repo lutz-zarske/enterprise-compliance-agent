@@ -170,7 +170,7 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
         className="anim-panel fixed z-[92] rounded-xl border border-line-strong bg-surface-solid p-4 shadow-2xl"
         style={{ ...cardStyle, width: CARD_WIDTH }}
       >
-        <p className="font-mono text-xs tabular-nums text-subtle">Schritt {step + 1} / {STEPS.length}</p>
+        <p className="text-xs tabular-nums text-subtle">Schritt {step + 1} / {STEPS.length}</p>
         <h2 className="mt-1 text-sm font-semibold text-fg">{current.title}</h2>
         <p className="mt-1.5 text-xs leading-relaxed text-muted">{current.text(mod)}</p>
         {!rect && <p className="mt-2 text-xs text-warn">Dieser Bereich erscheint, sobald ein Beleg geöffnet ist – z. B. über die Musterdaten.</p>}
@@ -207,7 +207,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
       items: [
         [<><Kbd>J</Kbd><Kbd>K</Kbd></>, "Nächstes / vorheriges Dokument"],
         [<><Kbd>↓</Kbd><Kbd>↑</Kbd></>, "Nächstes / vorheriges Dokument (Pfeiltasten)"],
-        [<><Kbd>1</Kbd>–<Kbd>6</Kbd></>, "Reiter: § 14 UStG · AI Act · PII · Kerndaten · XML · Ledger"],
+        [<><Kbd>1</Kbd>–<Kbd>5</Kbd></>, "Reiter: § 14 UStG · AI Act · PII · Kerndaten · XML"],
         [<Kbd key="q">?</Kbd>, "Diese Übersicht"],
       ],
     },

@@ -50,7 +50,7 @@ function Kpi({ label, value, info, edge, valueClass, loading }: {
       {loading ? (
         <Skeleton className="h-6 w-16" />
       ) : (
-        <p className={cx("shrink-0 font-mono text-xl font-semibold leading-none tabular-nums text-fg 2xl:text-2xl", valueClass)}>{value}</p>
+        <p className={cx("shrink-0 zahl-display text-xl font-semibold leading-none tabular-nums text-fg 2xl:text-2xl", valueClass)}>{value}</p>
       )}
     </div>
   );
@@ -75,7 +75,7 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
           <>
             <span className="block">Jede Analyse im SHA-256-Ledger · Siegel Ed25519-signiert · unveränderbare Historie (GoBD).</span>
             {kpis && (
-              <span className="mt-1 block font-mono tabular-nums text-subtle">
+              <span className="mt-1 block tabular-nums text-subtle">
                 Prüfquote {quote != null ? percent(quote) : "–"} · {kpis.documents_total} erfasst · {kpis.sealed_count} versiegelt
                 {kpis.reference_count ? ` · ${kpis.reference_count} Referenz-Audits` : ""}
               </span>
@@ -92,7 +92,7 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         info={
           <>
             Deterministisches Regelwerk nach § 14 UStG &amp; ZUGFeRD EN 16931
-            {kpis?.ruleset_version && <span className="mt-1 block font-mono tabular-nums text-subtle">Regelwerk {kpis.ruleset_version}</span>}
+            {kpis?.ruleset_version && <span className="mt-1 block tabular-nums text-subtle">Regelwerk {kpis.ruleset_version}</span>}
           </>
         }
       />
@@ -115,7 +115,7 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
             Anteil der Dokumente mit Hochrisiko-Einstufung gem. VO (EU) 2024/1689 Anhang III.
             {kpis && (
               <span className="mt-1 block text-subtle">
-                <span className="font-mono tabular-nums">{kpis.high_risk_count}</span> × Anhang III · Pflichten ab 02.12.2027
+                <span className="tabular-nums">{kpis.high_risk_count}</span> × Anhang III · Pflichten ab 02.12.2027
               </span>
             )}
           </>

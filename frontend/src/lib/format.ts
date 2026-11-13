@@ -31,9 +31,28 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** "qwen2.5:14b-instruct" -> "QWEN 2.5 14B", "claude-sonnet-5-5" -> "CLAUDE SONNET 5.5". */
+/** Restzeit: "8 s", "1 Min. 05 s", "1 Std. 02 Min.". */
+export function formatEta(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 60) return `noch ${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `noch ${m} Min. ${String(s % 60).padStart(2, "0")} s`;
+  return `noch ${Math.floor(m / 60)} Std. ${String(m % 60).padStart(2, "0")} Min.`;
+}
+
+/** Laufzeit: "12 s", "3 Min. 05 s". */
+export function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s} s`;
+  return `${Math.floor(s / 60)} Min. ${String(s % 60).padStart(2, "0")} s`;
+}
+
+/** "qwen2.5:14b-instruct" -> "QWEN 2.5 14B", "claude-sonnet-5" -> "CLAUDE SONNET 5". */
 export function formatModel(model: string): string {
   if (model === "en16931-parser") return "EN-16931-Parser (ohne KI)";
+  if (model.startsWith("regelwerk-")) return `Regelwerk ${model.slice(10)} (ohne KI)`;
+  if (model === "reference-answer") return "Musterantwort";
+  if (model === "reference-fixture") return "Referenz-Audit (Musterdaten)";
   if (/^gpt-/i.test(model)) return model.toUpperCase();
   const tokens = model
     .split(/[-:_]/)
@@ -66,6 +85,24 @@ export const PROVIDER_NAMES: Record<InferenceMode, string> = {
   anthropic: "Anthropic Claude",
   openai: "OpenAI",
 };
+
+/** Anzeige eines Provider-Werts aus Ledger oder Ergebnis (inkl. Regelwerk und Musterdaten). */
+export function providerLabel(provider: string | null | undefined): string {
+  if (!provider) return "–";
+  if (provider === "heuristic") return "Regelwerk (ohne KI)";
+  if (provider === "structured") return "XML-Datensatz (ohne KI)";
+  if (provider === "reference") return "Referenz-Audit (Musterdaten)";
+  return PROVIDER_NAMES[provider as InferenceMode] ?? provider;
+}
+
+/** Verstaendliche Meldung zu einem Fehlercode - nie ein Klassenname oder "Failed to fetch". */
+export function friendlyError(code: string, message: string, apiBase: string): string {
+  if (code === "network") {
+    const port = /:(\d+)/.exec(apiBase.replace(/^https?:\/\//, ""))?.[1] ?? "8001";
+    return `Backend nicht erreichbar (Port ${port}) – Start_Compliance_Agent.bat ausführen bzw. „uvicorn app.main:app --port ${port}“ starten.`;
+  }
+  return message;
+}
 
 export const RISK_LABELS: Record<AIActRiskLevel, string> = {
   unacceptable: "Verbotene Praktik (Art. 5)",

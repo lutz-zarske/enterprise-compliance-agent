@@ -17,7 +17,6 @@ import type {
   DetectionSource,
   DocumentDetail,
   EInvoiceData,
-  LedgerEntry,
   LedgerVerification,
   PIIFinding,
   ScoreCheck,
@@ -46,7 +45,6 @@ import {
   FileCode,
   FileText,
   Info,
-  Layers,
   Lock,
   MinusCircle,
   RefreshCw,
@@ -54,9 +52,9 @@ import {
   ShieldAlert,
   Stamp,
 } from "./icons";
-import { Chip, CopyValue, EmptyState, HashBadge, Kbd, Skeleton, Spinner, StatusIcon, Tabs, Tooltip, useModifierLabel } from "./ui";
+import { Chip, CopyValue, EmptyState, HashBadge, Kbd, Spinner, StatusIcon, Tabs, Tooltip, useModifierLabel } from "./ui";
 
-export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml" | "ledger";
+export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml";
 
 /** Scrollhoehe der Inspektor-Spalten: auf grossen Monitoren (1440p/2K) die volle Hoehe nutzen. */
 /**
@@ -272,7 +270,7 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
             <Tooltip content={check.risk_note}>
               <span
                 tabIndex={check.risk_note ? 0 : undefined}
-                className="cursor-help rounded font-mono text-xs tabular-nums text-bad underline decoration-dotted underline-offset-2"
+                className="cursor-help rounded text-xs tabular-nums text-bad underline decoration-dotted underline-offset-2"
                 aria-label={`Abzug ${check.deduction} Punkte${check.risk_note ? `: ${check.risk_note}` : ""}`}
               >
                 −{check.deduction}
@@ -280,7 +278,7 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
             </Tooltip>
           )}
         </div>
-        {check.legal_reference && <p className="font-mono text-xs text-subtle">{check.legal_reference}</p>}
+        {check.legal_reference && <p className="text-xs text-subtle">{check.legal_reference}</p>}
         {check.detail && <p className="mt-1 text-xs leading-relaxed text-muted">{check.detail}</p>}
         {/* Bei Abzuegen steht die Risikoerklaerung im Tooltip am Abzug; Hinweise ohne Abzug inline. */}
         {check.risk_note && check.deduction === 0 && check.status !== "pass" && (
@@ -292,7 +290,7 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
       <div className="flex shrink-0 flex-col items-end gap-1">
         <Chip tone={toneForStatus(check.status)}>{STATUS_LABELS[check.status]}</Chip>
         {check.evidence_source && (
-          <span className="font-mono text-xs text-subtle" title={`Herkunft des Nachweises: ${SOURCE_LABELS[check.evidence_source]}`}>
+          <span className="text-xs text-subtle" title={`Herkunft des Nachweises: ${SOURCE_LABELS[check.evidence_source]}`}>
             {SOURCE_SHORT[check.evidence_source]}
           </span>
         )}
@@ -307,7 +305,7 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
             title={`${toneLabel(check)} · ${found.lines.length === 1 ? "1 Fundstelle" : `${found.lines.length} Fundstellen`} im Beleg`}
           >
             <Crosshair size={12} aria-hidden="true" />
-            <span className="font-mono tabular-nums">{found.lines.length}</span>
+            <span className="tabular-nums">{found.lines.length}</span>
           </button>
         )}
       </div>
@@ -368,7 +366,7 @@ function ViesCheck({ document }: { document: DocumentDetail }) {
                 <span className="block font-semibold">
                   {state.result.valid ? "Laut VIES gültig" : "Laut VIES nicht gültig"}
                   {state.result.request_date && (
-                    <span className="font-mono font-normal tabular-nums"> · {formatDate(state.result.request_date, true)}</span>
+                    <span className="font-normal tabular-nums"> · {formatDate(state.result.request_date, true)}</span>
                   )}
                 </span>
                 {state.result.name ? (
@@ -423,14 +421,14 @@ function OverrideNotice({ document }: { document: DocumentDetail }) {
     <div className="rounded-lg border border-accent-line bg-accent-soft p-3 text-xs">
       <p className="flex flex-wrap items-center gap-2 font-semibold text-accent">
         <Scale size={13} aria-hidden="true" /> Einstufung durch Prüfperson übersteuert
-        <span className="font-mono font-normal tabular-nums">
+        <span className="font-normal tabular-nums">
           {RISK_LABELS[override.previous_risk_level]} → {RISK_LABELS[override.new_risk_level]} · Score{" "}
           {override.previous_score ?? "–"} → {override.new_score}
         </span>
       </p>
       <p className="mt-1.5 leading-relaxed text-fg">{override.reason}</p>
       <p className="mt-1 text-subtle">
-        {override.auditor_name} · <span className="font-mono tabular-nums">{formatDate(override.overridden_at, true)}</span> · {override.legal_basis}
+        {override.auditor_name} · <span className="tabular-nums">{formatDate(override.overridden_at, true)}</span> · {override.legal_basis}
       </p>
       {override.ledger_entry_hash && (
         <HashBadge className="mt-2" value={override.ledger_entry_hash} label="Ledger" verified verifiedLabel="Ed25519-signiert" />
@@ -459,7 +457,7 @@ function AiActPanel({ document, onOverride }: { document: DocumentDetail; onOver
               )}
             >
               <span className={cx("whitespace-nowrap", active && "font-semibold")}>{layer.label}</span>
-              <span className="ml-2 hidden whitespace-nowrap font-mono text-xs opacity-80 sm:inline">{layer.sub}</span>
+              <span className="ml-2 hidden whitespace-nowrap text-xs opacity-80 sm:inline">{layer.sub}</span>
             </div>
           );
         })}
@@ -508,7 +506,7 @@ function AiActPanel({ document, onOverride }: { document: DocumentDetail; onOver
                   <Chip key={label} tone="bad" className="mr-1 mt-2">{label}</Chip>
                 ))}
                 {system.evidence && <p className="mt-2 border-l-2 border-line pl-2 text-xs italic text-subtle">„{system.evidence}“</p>}
-                <p className="mt-1 font-mono text-xs tabular-nums text-subtle">Konfidenz {(system.confidence * 100).toFixed(0)} %</p>
+                <p className="mt-1 text-xs tabular-nums text-subtle">Konfidenz {(system.confidence * 100).toFixed(0)} %</p>
               </li>
             ))}
           </ul>
@@ -539,13 +537,13 @@ function PiiPanel({ document, highlight }: { document: DocumentDetail; highlight
           DSGVO-Risiko: {gdpr.risk_level}
         </Chip>
         <span className="text-subtle">
-          <span className="font-mono tabular-nums">{gdpr.findings.length}</span> Fundstellen · gespeichert ausschließlich maskiert
+          <span className="tabular-nums">{gdpr.findings.length}</span> Fundstellen · gespeichert ausschließlich maskiert
         </span>
       </div>
       {gateway && Object.keys(gateway).length > 0 && (
         <div className="rounded-lg border border-pii-line bg-pii-soft p-3 text-xs text-pii">
           <p className="font-semibold">Privacy Gateway aktiv – vor dem Cloud-Aufruf pseudonymisiert:</p>
-          <p className="mt-1 font-mono tabular-nums">
+          <p className="mt-1 tabular-nums">
             {Object.entries(gateway).map(([category, count]) => `${category} ×${count}`).join(" · ")}
           </p>
         </div>
@@ -572,7 +570,7 @@ function PiiPanel({ document, highlight }: { document: DocumentDetail; highlight
                     <span className="text-fg">{finding.category_label}</span>
                     {finding.is_special_category && <Chip tone="bad" className="ml-1">Art. 9/10</Chip>}
                   </td>
-                  <td className="break-all px-3 py-2 align-top font-mono text-muted">{finding.masked_value || "–"}</td>
+                  <td className="break-all px-3 py-2 align-top tabular-nums text-muted">{finding.masked_value || "–"}</td>
                   <td className="px-3 py-2 align-top">
                     <Chip tone={finding.source === "both" ? "ok" : finding.source === "llm" ? "pii" : "accent"}>
                       {finding.source === "both" ? "KI + Regex" : finding.source === "llm" ? "KI" : "Regex"}
@@ -583,7 +581,7 @@ function PiiPanel({ document, highlight }: { document: DocumentDetail; highlight
                       <div className="h-1.5 w-14 rounded-full bg-line">
                         <div className="h-1.5 rounded-full bg-pii" style={{ width: `${Math.round(finding.confidence * 100)}%` }} />
                       </div>
-                      <span className="w-10 text-right font-mono text-xs tabular-nums text-subtle">{Math.round(finding.confidence * 100)} %</span>
+                      <span className="w-10 text-right text-xs tabular-nums text-subtle">{Math.round(finding.confidence * 100)} %</span>
                     </div>
                   </td>
                 </tr>
@@ -606,7 +604,7 @@ function Fact({ label, value, mono }: { label: string; value: React.ReactNode; m
   return (
     <div className="min-w-0">
       <dt className="label-caps">{label}</dt>
-      <dd className={cx("mt-0.5 break-words text-sm font-semibold text-fg", mono && "font-mono tabular-nums")}>{value || "–"}</dd>
+      <dd className={cx("mt-0.5 break-words text-sm font-semibold text-fg", mono && "tabular-nums")}>{value || "–"}</dd>
     </div>
   );
 }
@@ -624,7 +622,7 @@ function SumBlock({ rows, total, currency, marks }: {
   const line = (label: string, value: string | number | null, mark: React.ReactNode, strong = false) => (
     <div className={cx("grid items-baseline gap-3 px-3 py-1.5", marks ? "grid-cols-[1fr_auto_1.5rem]" : "grid-cols-[1fr_auto]")}>
       <dt className={cx("text-left text-xs", strong ? "font-semibold text-fg" : "text-muted")}>{label}</dt>
-      <dd className={cx("text-right font-mono tabular-nums", strong ? "text-base font-semibold text-fg" : "text-sm text-fg")}>
+      <dd className={cx("text-right tabular-nums", strong ? "text-base font-semibold text-fg" : "text-sm text-fg")}>
         {typeof value === "string" && /[A-Z]{3}$/.test(value) ? value : formatMoney(value, currency)}
       </dd>
       {marks && <span className="flex justify-center">{mark}</span>}
@@ -804,7 +802,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
                 <td
                   className={cx(
                     "px-3 py-2 align-top text-fg [overflow-wrap:anywhere]",
-                    NAME_TERMS.has(term.bt) ? "text-sm" : "font-mono tabular-nums",
+                    NAME_TERMS.has(term.bt) ? "text-sm" : "tabular-nums",
                   )}
                 >
                   {COPY_TERMS.has(term.bt) && term.value ? <CopyValue value={term.value} label={term.label} /> : term.value ?? "–"}
@@ -817,7 +815,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
                 <tr key={check.bt}>
                   <td className="whitespace-nowrap px-3 py-2 align-top font-mono text-subtle">{check.bt}</td>
                   <td className="px-3 py-2 align-top text-muted">{check.label}</td>
-                  <td className="px-3 py-2 align-top font-mono tabular-nums text-fg [overflow-wrap:anywhere]">
+                  <td className="px-3 py-2 align-top tabular-nums text-fg [overflow-wrap:anywhere]">
                     {check.bt === "BT-84" && einvoice.iban ? (
                       <CopyValue value={einvoice.iban} display={check.xml_value} label="IBAN" />
                     ) : (
@@ -896,95 +894,10 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
   );
 }
 
-// --- Ledger-Historie ---------------------------------------------------------
-
-const EVENT_LABELS: Record<string, string> = {
-  analysis: "Analyse",
-  sign_off: "Prüfer-Siegel",
-  human_override: "Übersteuerung (Art. 14)",
-};
-
-function LedgerPanel({ document }: { document: DocumentDetail }) {
-  const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // Neu laden, sobald sich der Pruefstand aendert (Analyse, Siegel, Override).
-  const version = `${document.id}|${document.updated_at}|${document.sign_off?.ledger_entry_hash ?? ""}|${document.scorecard?.human_override?.ledger_entry_hash ?? ""}`;
-
-  useEffect(() => {
-    let cancelled = false;
-    setEntries(null);
-    setError(null);
-    api
-      .trail(document.id)
-      .then((result) => !cancelled && setEntries(result.items))
-      .catch((err: unknown) => !cancelled && setError(err instanceof Error ? err.message : String(err)));
-    return () => {
-      cancelled = true;
-    };
-  }, [document.id, version]);
-
-  if (error) return <EmptyState icon={<Layers size={18} />} title="Ledger nicht abrufbar">{error}</EmptyState>;
-  if (!entries) {
-    return (
-      <div className="space-y-2" aria-busy="true" aria-label="Ledger wird geladen">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
-      </div>
-    );
-  }
-  if (entries.length === 0) return <EmptyState icon={<Layers size={18} />} title="Noch keine Ledger-Einträge" />;
-
-  return (
-    <div className="space-y-2">
-      <h3 className="label-caps">Ledger-Historie · neueste zuerst</h3>
-      <ol className="space-y-2" aria-label="Ledger-Historie, neueste zuerst">
-        {entries.map((entry) => {
-          const milestone = entry.event_type === "sign_off" || entry.event_type === "human_override";
-          const details = entry.details ?? {};
-          const actor = typeof details.auditor_name === "string" ? details.auditor_name : entry.model_name;
-          return (
-            <li
-              key={entry.entry_id}
-              className={cx(
-                "rounded-lg border p-3 text-xs",
-                milestone ? "border-accent-line bg-accent-soft/40" : "border-line",
-              )}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <span className="font-mono text-xs tabular-nums text-subtle">#{entry.seq}</span>
-                  <span className="font-semibold text-fg">{EVENT_LABELS[entry.event_type] ?? entry.event_type}</span>
-                  {milestone && <Chip tone="accent">Prüfer-Meilenstein</Chip>}
-                </span>
-                <span className="font-mono text-xs tabular-nums text-subtle">{formatDate(entry.timestamp_utc, true)}</span>
-              </div>
-              <p className="mt-1 text-muted">{entry.result_summary}</p>
-              {entry.event_type === "human_override" && (
-                <p className="mt-1 text-subtle">
-                  {String(details.legal_basis ?? "")} – {String(details.reason ?? "")}
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-subtle">{actor}</span>
-                {entry.compliance_score != null && (
-                  <span className="font-mono tabular-nums text-subtle">Score {entry.compliance_score}</span>
-                )}
-                <HashBadge value={entry.entry_hash} label="Eintrag" />
-                {entry.signature_status === "valid" && <Chip tone="ok">Ed25519 gültig</Chip>}
-                {entry.signature_status === "invalid" && <Chip tone="bad">Signatur ungültig</Chip>}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
 // --- Action-Leiste -------------------------------------------------------------
 
 /** Revisionssicherheits-Status: Hash-Kette des gesamten Ledgers (GET /api/audit/verify). */
-function LedgerSeal({ ledger }: { ledger: LedgerVerification | null }) {
+function LedgerSeal({ ledger, onOpen }: { ledger: LedgerVerification | null; onOpen?: () => void }) {
   const state = !ledger ? "unknown" : !ledger.valid ? "broken" : ledger.entries === 0 ? "empty" : "ok";
   const tone = { ok: "ok", broken: "bad", empty: "neutral", unknown: "neutral" } as const;
   const label = {
@@ -1008,28 +921,34 @@ function LedgerSeal({ ledger }: { ledger: LedgerVerification | null }) {
         ) : (
           <>
             <span className="block">
-              <span className="font-mono tabular-nums">{ledger.entries}</span> Einträge vollständig nachgerechnet, davon{" "}
-              <span className="font-mono tabular-nums">{ledger.signed_entries}</span> Ed25519-signiert (Art. 12 AI Act, GoBD Rz. 107 ff.).
+              <span className="tabular-nums">{ledger.entries}</span> Einträge vollständig nachgerechnet, davon{" "}
+              <span className="tabular-nums">{ledger.signed_entries}</span> Ed25519-signiert (Art. 12 AI Act, GoBD Rz. 107 ff.).
             </span>
             {ledger.entries > 0 && (
-              <span className="mt-1 block font-mono tabular-nums text-subtle">Kopf-Hash {ledger.head_hash.slice(0, 16)}…</span>
+              <span className="mt-1 block tabular-nums text-subtle">Kopf-Hash {ledger.head_hash.slice(0, 16)}…</span>
             )}
           </>
         )
       }
     >
-      <span tabIndex={0} className={cx("chip cursor-help py-1", TONE_CLASSES[tone[state]])}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cx("chip py-1 transition-colors duration-150 hover:border-line-strong", TONE_CLASSES[tone[state]])}
+        aria-label={`${label} – Protokoll öffnen`}
+      >
         {state === "broken" ? <ShieldAlert size={12} aria-hidden="true" /> : <Lock size={12} aria-hidden="true" />}
         {label}
-      </span>
+      </button>
     </Tooltip>
   );
 }
 
-function ActionBar({ document, ledger, onSeal }: {
+function ActionBar({ document, ledger, onSeal, onOpenProtocol }: {
   document: DocumentDetail;
   ledger: LedgerVerification | null;
   onSeal?: () => void;
+  onOpenProtocol?: () => void;
 }) {
   const mod = useModifierLabel();
   const seal = document.sign_off;
@@ -1041,17 +960,17 @@ function ActionBar({ document, ledger, onSeal }: {
       className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-line bg-surface-solid px-4 py-3 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.5)]"
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <LedgerSeal ledger={ledger} />
+        <LedgerSeal ledger={ledger} onOpen={onOpenProtocol} />
         {seal && (
           <span className={cx("chip py-1", TONE_CLASSES[seal.status === "SEALED_APPROVED" ? "ok" : "bad"])}>
             <Stamp size={12} aria-hidden="true" />
             {seal.status === "SEALED_APPROVED" ? "Freigegeben" : "Abgelehnt"} · {seal.auditor_name}
-            <span className="font-mono font-medium tabular-nums opacity-80">{formatDate(seal.sealed_at, true)}</span>
+            <span className="font-medium tabular-nums opacity-80">{formatDate(seal.sealed_at, true)}</span>
           </span>
         )}
         {document.scorecard?.retention && (
           <span className="hidden text-xs text-subtle 2xl:inline">
-            Aufbewahrung bis <span className="font-mono tabular-nums">{formatDate(document.scorecard.retention.until)}</span> (§ 147 AO)
+            Aufbewahrung bis <span className="tabular-nums">{formatDate(document.scorecard.retention.until)}</span> (§ 147 AO)
           </span>
         )}
       </div>
@@ -1078,12 +997,14 @@ function ActionBar({ document, ledger, onSeal }: {
 const LEVEL_LABELS = { strict: "Strikt", standard: "Standard", audit_only: "Audit-Only" } as const;
 const NONE: string[] = [];
 
-export function DocumentInspector({ document, tab, onTabChange, onOverride, ledger, onSeal }: {
+export function DocumentInspector({ document, tab, onTabChange, onOverride, ledger, onSeal, onOpenProtocol }: {
   document: DocumentDetail;
   tab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
   onOverride?: () => void;
   ledger: LedgerVerification | null;
+  /** Wechselt in die Ansicht "Protokoll & Regelwerk" (vollstaendige Hash-Kette). */
+  onOpenProtocol?: () => void;
   /** Oeffnet den Siegel-Dialog; fehlt, solange nicht gesiegelt werden kann. */
   onSeal?: () => void;
 }) {
@@ -1192,7 +1113,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
           {document.text_view && (
             <span className="chip border-line bg-surface-2 text-subtle">
               Maskierung: {LEVEL_LABELS[document.text_view.level]} ·{" "}
-              <span className="font-mono tabular-nums">{document.text_view.spans.length}</span> Markierungen
+              <span className="tabular-nums">{document.text_view.spans.length}</span> Markierungen
             </span>
           )}
         </div>
@@ -1228,7 +1149,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
                     <>
                       <span className={cx("font-medium", tone && TONE_TEXT[tone])}>{toneLabel(focusCheck)}</span>
                       {" · "}
-                      <span className="font-mono tabular-nums">{focusFound.lines.length}</span>{" "}
+                      <span className="tabular-nums">{focusFound.lines.length}</span>{" "}
                       {focusFound.lines.length === 1 ? "Fundstelle" : "Fundstellen"}
                     </>
                   ) : (
@@ -1244,12 +1165,11 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
               active={tab}
               onChange={onTabChange}
               tabs={[
-                { key: "ustg", label: "§ 14 UStG", badge: failures ? <span className="font-mono text-xs tabular-nums text-bad">{failures}</span> : undefined },
+                { key: "ustg", label: "§ 14 UStG", badge: failures ? <span className="text-xs tabular-nums text-bad">{failures}</span> : undefined },
                 { key: "aiact", label: "AI Act", title: "EU AI Act (VO (EU) 2024/1689)" },
-                { key: "pii", label: "PII", title: "PII-Befunde (DSGVO)", badge: <span className="font-mono text-xs tabular-nums text-subtle">{document.compliance?.gdpr.findings.length ?? 0}</span> },
+                { key: "pii", label: "PII", title: "PII-Befunde (DSGVO)", badge: <span className="text-xs tabular-nums text-subtle">{document.compliance?.gdpr.findings.length ?? 0}</span> },
                 { key: "facts", label: "Kerndaten" },
                 ...(document.einvoice ? [{ key: "xml" as const, label: "XML-Datensatz", title: "XML-Datensatz (EN 16931)" }] : []),
-                { key: "ledger", label: "Ledger", title: "Ledger-Historie (Prüfprotokoll)" },
               ]}
             />
             <div ref={panelRef} key={tab} role="tabpanel" className={cx(PANEL_HEIGHT, "scroll-area anim-fade relative pr-4 pt-3")}>
@@ -1269,11 +1189,10 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
               {tab === "pii" && <PiiPanel document={document} highlight={activeSpan} />}
               {tab === "facts" && <FactsPanel document={document} />}
               {tab === "xml" && <XmlPanel document={document} />}
-              {tab === "ledger" && <LedgerPanel document={document} />}
             </div>
           </div>
         </div>
-        <ActionBar document={document} ledger={ledger} onSeal={onSeal} />
+        <ActionBar document={document} ledger={ledger} onSeal={onSeal} onOpenProtocol={onOpenProtocol} />
       </section>
     </EvidenceContext.Provider>
   );

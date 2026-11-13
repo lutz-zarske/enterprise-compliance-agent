@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
-# Enterprise KI-Compliance- & Dokumenten-Agent
-# Schlankes Single-Stage-Image auf Basis von python:3.12-slim.
+# Enterprise Compliance Agent - Backend (FastAPI)
+# Schlankes Single-Stage-Image auf Basis von python:3.12-slim, Non-Root, Healthcheck.
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
@@ -28,7 +28,8 @@ USER appuser
 # Container spricht per Default den Ollama-Dienst auf dem Host an.
 ENV OLLAMA_BASE_URL=http://host.docker.internal:11434 \
     DATABASE_URL=sqlite:///data/agent.db \
-    UPLOAD_DIR=data/uploads
+    UPLOAD_DIR=data/uploads \
+    RUNNING_IN_CONTAINER=1
 
 EXPOSE 8000
 

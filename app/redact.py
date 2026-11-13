@@ -1,7 +1,7 @@
 """Generisches Data-Loss-Prevention-Gateway (seit v2.4, ``POST /api/v1/redact``).
 
-Externe Anwendungen schicken Text hierher, *bevor* sie
-ihn an ein Cloud-LLM geben.  Anders als der Privacy Vault der Dokumentpruefung
+Andere Anwendungen (externe Fachanwendungen, Analyse-Pipelines) schicken Text
+hierher, *bevor* sie ihn an ein Cloud-LLM geben.  Anders als der Privacy Vault der Dokumentpruefung
 schwaerzt dieses Gateway **endgueltig**: Es gibt kein Mapping, keine
 Re-Identifizierung, und die Antwort enthaelt nur den geschwaerzten Text und
 Zaehler - nie die gefundenen Werte.

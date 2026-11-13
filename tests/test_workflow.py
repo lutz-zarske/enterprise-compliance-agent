@@ -19,7 +19,7 @@ from tests.conftest import (
 
 def _analyzed(client: TestClient, pdf: bytes) -> str:
     document_id = uploaded_document_id(client, pdf)
-    assert client.post(f"/documents/{document_id}/extract").status_code == 200
+    assert client.post(f"/documents/{document_id}/extract?wait=true").status_code == 200
     return document_id
 
 
@@ -30,7 +30,7 @@ def _analyzed(client: TestClient, pdf: bytes) -> str:
 
 def test_extraktion_liefert_scorecard_und_detail_traegt_sie(full_client: TestClient, invoice_pdf: bytes) -> None:
     document_id = uploaded_document_id(full_client, invoice_pdf)
-    body = full_client.post(f"/documents/{document_id}/extract").json()
+    body = full_client.post(f"/documents/{document_id}/extract?wait=true").json()
 
     card = body["scorecard"]
     assert 0 <= card["score"] <= 100
@@ -123,7 +123,7 @@ def test_sign_off_versiegelt_und_schreibt_ledger(full_client: TestClient, invoic
     assert full_client.get("/documents").json()["items"][0]["sealed"] is True
 
     # Neue Analyse = neuer Pruefgegenstand -> Siegel faellt, Historie bleibt.
-    full_client.post(f"/documents/{document_id}/extract")
+    full_client.post(f"/documents/{document_id}/extract?wait=true")
     assert full_client.get(f"/documents/{document_id}").json()["sign_off"] is None
     assert len(full_client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"]) == 3
 
@@ -191,7 +191,7 @@ def test_demo_rechnungen_scoren_wie_dokumentiert(
         "document_number": "RE-2025-0142", "document_date": "2025-03-14", "total_amount": 7140,
         "iban": "DE89370400440532013000", "summary": "Rechnung ueber Managed-Security-Leistungen.",
     }
-    good = full_client.post(f"/documents/{seeded['Rechnung_Gueltig_14UStG.pdf']}/extract").json()
+    good = full_client.post(f"/documents/{seeded['Rechnung_Gueltig_14UStG.pdf']}/extract?wait=true").json()
     assert good["scorecard"]["score"] == 100
     assert good["scorecard"]["release_recommendation"] == "Zur Auszahlung freigegeben"
 
@@ -200,7 +200,7 @@ def test_demo_rechnungen_scoren_wie_dokumentiert(
         "document_number": "2025-77", "document_date": "2025-05-02", "total_amount": 5220,
         "iban": "DE12345678901234567890",
     }
-    bad = full_client.post(f"/documents/{seeded['Rechnung_Fehlerhaft_Steuerfalle.pdf']}/extract").json()
+    bad = full_client.post(f"/documents/{seeded['Rechnung_Fehlerhaft_Steuerfalle.pdf']}/extract?wait=true").json()
     assert bad["scorecard"]["score"] == 45
     assert bad["scorecard"]["band"] == "red"
 
@@ -236,7 +236,7 @@ def test_fortschritt_endpunkt(full_client: TestClient, invoice_pdf: bytes) -> No
     assert [stage["state"] for stage in before["stages"]] == ["pending"] * 4
     assert [stage["key"] for stage in before["stages"]] == ["text_check", "pii_scan", "ustg_check", "ai_act"]
 
-    full_client.post(f"/documents/{document_id}/extract")
+    full_client.post(f"/documents/{document_id}/extract?wait=true")
     after = full_client.get(f"/documents/{document_id}/progress").json()
     assert [stage["state"] for stage in after["stages"]] == ["done"] * 4
 

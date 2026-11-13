@@ -1,50 +1,84 @@
 "use client";
 
-import React from "react";
-import type { ProgressStage } from "../types/api";
+import React, { useState } from "react";
+import type { JobSnapshot } from "../types/api";
 import { cx } from "../lib/format";
-import { Check } from "./icons";
-import { Spinner } from "./ui";
+import { Check, Square } from "./icons";
+import { Eta, ProgressBar, Spinner } from "./ui";
 
-export const DEFAULT_STAGES: ProgressStage[] = [
-  { key: "text_check", label: "Text-Layer & PDF-Check", state: "active" },
-  { key: "pii_scan", label: "PII-Scanner & DSGVO-Maskierung", state: "pending" },
-  { key: "ustg_check", label: "§ 14 UStG Rechnungsprüfung", state: "pending" },
-  { key: "ai_act", label: "EU AI Act Risikobewertung", state: "pending" },
+/** Die vier Phasen der Pruefung (eine Quelle: ``app/jobs.py``); Fallback vor der ersten Antwort. */
+export const DEFAULT_PHASES = [
+  { key: "text_check", label: "Text-Layer & XML-Vorrang" },
+  { key: "pii_scan", label: "PII-Scanner & Privacy Vault" },
+  { key: "ustg_check", label: "§ 14 UStG Extraktion & Prüfung" },
+  { key: "ai_act", label: "EU AI Act, Scorecard & Ledger" },
 ];
 
-/** Zeigt die echten Pipeline-Stufen des Backends (GET /documents/{id}/progress). */
-export function AuditStepper({ stages, filename, provider }: { stages: ProgressStage[]; filename: string; provider: string }) {
+/**
+ * Live-Audit des geoeffneten Belegs: echte Phasen des Hintergrund-Jobs, Fortschritt,
+ * geglaettete Restzeit und ruhige Hinweise bei Neuversuch oder Stufenwechsel.
+ */
+export function AuditStepper({ job, provider, onCancel }: {
+  job: JobSnapshot;
+  provider: string;
+  onCancel: (jobId: string) => Promise<void>;
+}) {
+  const [asking, setAsking] = useState(false);
+  const phases = job.phases.length ? job.phases : DEFAULT_PHASES;
+  const queued = job.status === "queued";
+  const notice = job.events.length && job.message && !phases.some((phase) => phase.label === job.message) ? job.message : null;
   return (
     <section className="card p-4" aria-label="Live-Audit" aria-live="polite">
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold text-fg">Live-Audit läuft: <span className="font-normal text-muted">{filename}</span></p>
-        <p className="font-mono text-xs text-subtle">{provider}</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-fg">
+            {queued ? "Prüfung wartet" : "Prüfung läuft"}: <span className="font-normal text-muted">{job.title}</span>
+          </p>
+          <p className="text-xs text-subtle">
+            {queued ? `Platz ${job.queue_position} in der Warteschlange` : provider}
+            {!queued && job.eta_seconds ? <> · <Eta seconds={job.eta_seconds} /></> : null}
+          </p>
+        </div>
+        {!asking && !job.cancel_requested && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAsking(true)}>
+            <Square size={10} aria-hidden="true" /> Abbrechen
+          </button>
+        )}
+        {asking && (
+          <span className="flex items-center gap-1.5 rounded-md border border-bad-line bg-bad-soft px-2 py-1" role="alert">
+            <span className="text-xs font-medium text-bad">Wirklich stoppen?</span>
+            <button type="button" className="btn btn-danger btn-sm" onClick={() => void onCancel(job.job_id).finally(() => setAsking(false))}>Ja</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAsking(false)}>Nein</button>
+          </span>
+        )}
       </div>
-      <ol className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        {stages.map((stage, index) => (
-          <li key={stage.key} className="flex items-center gap-2.5 sm:flex-col sm:items-start">
-            <div className="flex w-full items-center gap-2">
+      <ProgressBar value={queued ? null : job.progress} label="Fortschritt der Prüfung" />
+      <ol className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+        {phases.map((phase, index) => {
+          const state = index < job.phase_index ? "done" : index === job.phase_index && !queued ? "active" : "pending";
+          return (
+            <li key={phase.key} className="flex items-center gap-2">
               <span
                 className={cx(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-mono text-xs",
-                  stage.state === "done" && "border-ok-line bg-ok-soft text-ok",
-                  stage.state === "active" && "border-accent-line bg-accent-soft text-accent",
-                  stage.state === "pending" && "border-line bg-surface-2 text-subtle",
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums",
+                  state === "done" && "border-ok-line bg-ok-soft text-ok",
+                  state === "active" && "border-accent-line bg-accent-soft text-accent",
+                  state === "pending" && "border-line bg-surface-2 text-subtle",
                 )}
               >
-                {stage.state === "done" ? <Check size={14} /> : stage.state === "active" ? <Spinner size={12} /> : index + 1}
+                {state === "done" ? <Check size={12} aria-hidden="true" /> : state === "active" ? <Spinner size={11} /> : index + 1}
               </span>
-              {index < stages.length - 1 && (
-                <span className={cx("hidden h-px flex-1 sm:block", stage.state === "done" ? "bg-ok-line" : "bg-line")} />
-              )}
-            </div>
-            <span className={cx("text-xs", stage.state === "pending" ? "text-subtle" : "font-medium text-fg")}>
-              {index + 1}. {stage.label}
-            </span>
-          </li>
-        ))}
+              <span className={cx("text-xs", state === "pending" ? "text-subtle" : "font-medium text-fg")}>{phase.label}</span>
+            </li>
+          );
+        })}
       </ol>
+      {notice && <p className="mt-3 rounded-md border border-warn-line bg-warn-soft px-3 py-1.5 text-xs text-fg">{notice}</p>}
+      {job.stalled && (
+        <p className="mt-3 rounded-md border border-warn-line bg-warn-soft px-3 py-1.5 text-xs text-fg">
+          Seit Minuten keine Rückmeldung des Modells – die Prüfung abbrechen und neu starten oder in den Einstellungen ein Ausweichmodell hinterlegen.
+        </p>
+      )}
     </section>
   );
 }

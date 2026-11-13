@@ -1,28 +1,38 @@
 @import "tailwindcss";
 
-/* Klassenbasierter Dark Mode: <html class="dark"> */
+/* Klassenbasierter Dark Mode: <html class="dark"> (Wahl dark | light | system, siehe ThemeProvider). */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Design-Tokens. Alle Komponenten nutzen ausschliesslich diese semantischen
- * Farben; beide Themes werden hier zentral auf WCAG-AA-Kontraste abgestimmt
- * (Fliesstext >= 4.5:1 gegen den jeweiligen Hintergrund).
+ * Design-System "FinTech Minimal – ruhig und statisch".
+ *
+ * Alle Komponenten nutzen ausschliesslich diese semantischen Tokens; beide Themes
+ * sind hier zentral auf WCAG AA abgestimmt (Fliesstext >= 4.5:1 gegen die jeweilige
+ * Flaeche).  Farbe traegt Bedeutung, nie Dekoration: Gruen konform, Bernstein
+ * Pruefhinweis, Rose Verstoss, Indigo PII; Himmelblau markiert Bedienung (Fokus,
+ * Auswahl, laufende Jobs).
  */
 :root {
   --bg: #f8fafc;
   --surface: #ffffff;
   --surface-2: #f1f5f9;
   --surface-solid: #ffffff;
+  --surface-hover: #e8eef5;
   --line: #e2e8f0;
   --line-strong: #cbd5e1;
   --fg: #0f172a;
   --fg-muted: #334155;
-  --fg-subtle: #64748b;
+  --fg-subtle: #556070;
 
-  --accent: #0e7490;
+  --accent: #0369a1;
   --accent-fg: #ffffff;
-  --accent-soft: #ecfeff;
-  --accent-line: #a5f3fc;
+  --accent-soft: #e0f2fe;
+  --accent-line: #7dd3fc;
+
+  /* Primaeraktion: tiefes Slate auf Weiss (dunkel: Weiss auf Tiefschwarz). */
+  --primary-bg: #0f172a;
+  --primary-fg: #ffffff;
+  --primary-hover: #1e293b;
 
   --ok: #047857;
   --ok-soft: #ecfdf5;
@@ -37,57 +47,79 @@
   --pii-soft: #eef2ff;
   --pii-line: #c7d2fe;
 
+  /* CVD-validierte Kategorienpalette (Diagramme, Verteilungen). */
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-6: #008300;
+  --viz-7: #4a3aa7;
+  --viz-8: #e34948;
+  --viz-rest: #9ca3af;
+
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
-  --header-bg: rgba(255, 255, 255, 0.7);
-  --menu-bg: rgba(255, 255, 255, 0.95);
+  --header-bg: rgba(255, 255, 255, 0.86);
+  --menu-bg: rgba(255, 255, 255, 0.96);
+  --menu-line: #cbd5e1;
   --backdrop: rgba(15, 23, 42, 0.35);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --scroll-thumb: rgba(148, 163, 184, 0.45);
-  --scroll-thumb-hover: rgba(100, 116, 139, 0.65);
+  --scroll-thumb: rgba(100, 116, 139, 0.4);
+  --scroll-thumb-hover: rgba(71, 85, 105, 0.6);
   color-scheme: light;
 }
 
-/*
- * Obsidian & Slate: kein reines Schwarz, Flaechen leicht gefrostet, zarte
- * Aussenkonturen (weiss 8 %) und eine feine Lichtkante oben an jeder Karte.
- */
 .dark {
-  --bg: #090d16;
-  --surface: rgba(17, 23, 38, 0.6);
-  --surface-2: rgba(30, 41, 59, 0.45);
-  --surface-solid: #111726;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --fg: #e2e8f0;
-  --fg-muted: #cbd5e1;
-  --fg-subtle: #94a3b8;
+  --bg: #07080c;
+  --surface: #0f1118;
+  --surface-2: #161924;
+  --surface-solid: #0f1118;
+  --surface-hover: #1c2030;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --fg: #f5f7fb;
+  --fg-muted: #d6dbe7;
+  --fg-subtle: #9da6be;
 
-  --accent: #22d3ee;
-  --accent-fg: #083344;
-  --accent-soft: rgba(8, 145, 178, 0.14);
-  --accent-line: rgba(34, 211, 238, 0.35);
+  --accent: #38bdf8;
+  --accent-fg: #04121d;
+  --accent-soft: rgba(56, 189, 248, 0.12);
+  --accent-line: rgba(56, 189, 248, 0.4);
+
+  --primary-bg: #f5f7fb;
+  --primary-fg: #07080c;
+  --primary-hover: #ffffff;
 
   --ok: #34d399;
-  --ok-soft: rgba(16, 185, 129, 0.12);
-  --ok-line: rgba(52, 211, 153, 0.35);
+  --ok-soft: rgba(16, 185, 129, 0.14);
+  --ok-line: rgba(16, 185, 129, 0.45);
   --warn: #fbbf24;
-  --warn-soft: rgba(245, 158, 11, 0.12);
-  --warn-line: rgba(251, 191, 36, 0.35);
-  --bad: #fb7185;
-  --bad-soft: rgba(244, 63, 94, 0.12);
-  --bad-line: rgba(251, 113, 133, 0.35);
+  --warn-soft: rgba(245, 158, 11, 0.14);
+  --warn-line: rgba(245, 158, 11, 0.45);
+  --bad: #ff5a73;
+  --bad-soft: rgba(220, 20, 60, 0.16);
+  --bad-line: rgba(255, 90, 115, 0.5);
   --pii: #a5b4fc;
-  --pii-soft: rgba(99, 102, 241, 0.14);
-  --pii-line: rgba(129, 140, 248, 0.4);
+  --pii-soft: rgba(99, 102, 241, 0.16);
+  --pii-line: rgba(129, 140, 248, 0.45);
 
-  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  /* Liquid Glass: slate-950/60 - der Belegtext darunter schimmert weichgezeichnet durch. */
-  --header-bg: rgba(2, 6, 23, 0.6);
-  --menu-bg: rgba(15, 21, 36, 0.94);
-  --backdrop: rgba(2, 6, 23, 0.6);
-  /* slate-700/40, beim Ueberfahren slate-600/60 */
-  --scroll-thumb: rgba(51, 65, 85, 0.4);
-  --scroll-thumb-hover: rgba(71, 85, 105, 0.6);
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-5: #d55181;
+  --viz-6: #008300;
+  --viz-7: #9085e9;
+  --viz-8: #e66767;
+  --viz-rest: #6b7280;
+
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 28px -18px rgba(0, 0, 0, 0.9);
+  --header-bg: rgba(15, 17, 24, 0.86);
+  --menu-bg: rgba(2, 6, 23, 0.94);
+  --menu-line: rgb(30, 41, 59);
+  --backdrop: rgba(2, 4, 10, 0.62);
+  --scroll-thumb: rgba(148, 163, 184, 0.22);
+  --scroll-thumb-hover: rgba(148, 163, 184, 0.4);
   color-scheme: dark;
 }
 
@@ -96,6 +128,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-solid: var(--surface-solid);
+  --color-surface-hover: var(--surface-hover);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-fg: var(--fg);
@@ -119,6 +152,7 @@
   --color-pii-line: var(--pii-line);
   --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-zahl: "IBM Plex Serif", ui-serif, Georgia, serif;
 }
 
 html,
@@ -132,24 +166,36 @@ body {
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Zahlen in der UI: Inter mit Tabellenziffern - Monospace nur fuer Hashes, XML und Beleg-Rohtext. */
+.tabular,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+.font-mono {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+/* Grosse Kennzahlen (KPI-Leiste, Score): IBM Plex Serif mit Tabellen- und Versalziffern. */
+.zahl-display {
+  font-family: var(--font-zahl);
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.015em;
 }
 
 @layer components {
-  /* Karte: dezent gefrostet im Dark Mode, sauber und blendfrei im Light Mode. */
+  /*
+   * Karten und Panels bleiben unter dem Zeiger vollstaendig statisch: kein Anheben,
+   * kein Schein, kein Rand-Glow.  Eine Karte, die reagiert, verspricht eine
+   * Klickflaeche, die es nicht gibt.  Hover-Feedback nur an Bedienelementen.
+   */
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 0.75rem;
+    border-radius: 0.875rem;
     box-shadow: var(--shadow);
-    transition: border-color 150ms ease-out;
-  }
-  .dark .card {
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-  /* Kanten-Hover: nur die Kontur hellt auf, kein Schein, kein Versatz. */
-  .card-hover:hover {
-    border-color: var(--line-strong);
   }
 
   .btn {
@@ -165,15 +211,15 @@ body {
     font-size: 0.8125rem;
     font-weight: 500;
     line-height: 1.25rem;
-    transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms var(--ease-out);
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
     white-space: nowrap;
   }
-  /* Druckgefuehl (0.97, 150 ms): die Oberflaeche bestaetigt den Klick sofort. */
+  /* Druckgefuehl (0.97): die Oberflaeche bestaetigt den Klick sofort. */
   .btn:active:not(:disabled) {
     transform: scale(0.97);
   }
   .btn:hover:not(:disabled) {
-    background: var(--surface-2);
+    background: var(--surface-hover);
     border-color: var(--line-strong);
   }
   .btn:disabled {
@@ -181,14 +227,37 @@ body {
     cursor: not-allowed;
   }
   .btn-primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-fg);
+    background: var(--primary-bg);
+    border-color: var(--primary-bg);
+    color: var(--primary-fg);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--accent);
-    border-color: var(--accent);
-    filter: brightness(1.08);
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+  .btn-danger {
+    border-color: var(--bad-line);
+    color: var(--bad);
+    background: var(--bad-soft);
+  }
+  .btn-danger:hover:not(:disabled) {
+    border-color: var(--bad);
+    background: var(--bad-soft);
+  }
+  .btn-ghost {
+    border-color: transparent;
+    background: transparent;
+    color: var(--fg-subtle);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: transparent;
+    color: var(--fg);
+  }
+  .btn-sm {
+    padding: 0.25rem 0.55rem;
+    font-size: 0.75rem;
+    line-height: 1.1rem;
   }
   .btn-icon {
     padding: 0.4rem;
@@ -198,18 +267,27 @@ body {
     width: 100%;
     border-radius: 0.5rem;
     border: 1px solid var(--line);
-    background: var(--surface-solid);
+    background: var(--surface-2);
     color: var(--fg);
     padding: 0.45rem 0.7rem;
     font-size: 0.8125rem;
-    transition: border-color 150ms;
+    transition: border-color 150ms ease, background-color 150ms ease;
   }
   .input::placeholder {
     color: var(--fg-subtle);
   }
+  .input:hover:not(:disabled) {
+    border-color: var(--line-strong);
+  }
   .input:focus {
     outline: none;
     border-color: var(--accent);
+    background: var(--surface-solid);
+  }
+  /* Mehrzeilige Eingaben wachsen mit (AutoTextarea), ohne Zieh-Ecke. */
+  textarea.input {
+    resize: none;
+    line-height: 1.5;
   }
 
   .chip {
@@ -250,8 +328,8 @@ body {
   }
 
   /*
-   * Fundstellen-Hervorhebung (Rossum-Muster): Zeile im Beleg, die eine Pruefung
-   * belegt. Gruen konform, Gelb Pruefhinweis/KI-Vorschlag, Rot Verstoss.
+   * Fundstellen-Hervorhebung: Zeile im Beleg, die eine Pruefung belegt.
+   * Gruen konform, Gelb Pruefhinweis/KI-Vorschlag, Rot Verstoss.
    */
   .doc-line {
     display: block;
@@ -265,7 +343,7 @@ body {
     cursor: pointer;
   }
   .doc-line[data-anchor="true"]:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
   }
   .doc-line[data-evidence="ok"],
   .doc-line[data-evidence="ok"]:hover {
@@ -281,6 +359,11 @@ body {
   .doc-line[data-evidence="bad"]:hover {
     background: var(--bad-soft);
     box-shadow: 0 0 0 2px var(--bad);
+  }
+  /* Sprungziel eines Copilot-Zeilenverweises ([Z. 4]). */
+  .doc-line[data-cited="true"] {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 2px var(--accent);
   }
 
   /* Feldbezeichner: text-xs, medium, Versalien mit tracking-wider. */
@@ -304,16 +387,15 @@ body {
     border-bottom-width: 2px;
     background: var(--surface-2);
     padding: 0 0.3rem;
-    font-family: var(--font-mono);
     font-size: 0.6875rem;
     font-weight: 500;
     line-height: 1.1rem;
     color: var(--fg-subtle);
   }
   .btn-primary .kbd-shortcut {
-    border-color: color-mix(in srgb, var(--accent-fg) 30%, transparent);
-    background: color-mix(in srgb, var(--accent-fg) 12%, transparent);
-    color: var(--accent-fg);
+    border-color: color-mix(in srgb, var(--primary-fg) 30%, transparent);
+    background: color-mix(in srgb, var(--primary-fg) 10%, transparent);
+    color: var(--primary-fg);
   }
 
   /*
@@ -327,11 +409,146 @@ body {
   .scroll-area:hover {
     scrollbar-color: var(--scroll-thumb-hover) transparent;
   }
+
+  /* --- Segmentschalter (PillTabs) mit gleitendem Indikator ----------------- */
+  .pill-tabs {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    border-radius: 0.625rem;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    padding: 0.1875rem;
+  }
+  .pill-tab {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+    border-radius: 0.5rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--fg-subtle);
+    transition: color 150ms ease, background-color 150ms ease;
+  }
+  .pill-tab:hover:not([aria-selected="true"]):not(:disabled) {
+    color: var(--fg);
+    background: color-mix(in srgb, var(--fg) 5%, transparent);
+  }
+  .pill-tab[aria-selected="true"] {
+    color: var(--fg);
+  }
+  .pill-tab:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .pill-indikator {
+    position: absolute;
+    top: 0.1875rem;
+    bottom: 0.1875rem;
+    left: 0;
+    z-index: 0;
+    border-radius: 0.5rem;
+    background: var(--surface-solid);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12), 0 0 0 1px var(--line);
+    transition: transform 220ms var(--ease-out), width 220ms var(--ease-out);
+    pointer-events: none;
+  }
+  .dark .pill-indikator {
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.2),
+      0 4px 12px -4px rgba(0, 0, 0, 0.55);
+  }
+  .pill-tabs-sm .pill-tab {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  /* Kopf-Navigation als Liquid-Glass-Kapsel. */
+  .kopf-kapsel {
+    border-radius: 9999px;
+    padding: 0.3125rem;
+    background: rgba(255, 255, 255, 0.72);
+    border-color: rgba(15, 23, 42, 0.12);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 8px 24px -12px rgba(15, 23, 42, 0.2);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+  }
+  .dark .kopf-kapsel {
+    background: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06)), rgba(15, 23, 42, 0.9);
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+  .kopf-kapsel .pill-tab {
+    border-radius: 9999px;
+    padding-inline: 0.95rem;
+    font-size: 0.84375rem;
+    color: var(--fg-muted);
+  }
+  .kopf-kapsel .pill-tab[aria-selected="true"] {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .kopf-kapsel .pill-indikator {
+    top: 0.3125rem;
+    bottom: 0.3125rem;
+    border-radius: 9999px;
+  }
+
+  /* --- Fortschritt ------------------------------------------------------------- */
+  .progress-track {
+    position: relative;
+    height: 0.375rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: var(--surface-2);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 600ms linear;
+  }
+  .progress-fill[data-indeterminate="true"] {
+    width: 35% !important;
+    animation: eca-progress-run 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
 }
 
-/* Browser-Oberflaechen aus der Palette statt Systemvorgaben. */
+@keyframes eca-progress-run {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(320%); }
+}
+
+/* --- Tooltips per Portal (fest positioniert, an das Fenster geklemmt) --------- */
+.tip-bubble {
+  position: fixed;
+  z-index: 95;
+  max-width: min(340px, calc(100vw - 16px));
+  border-radius: 0.5rem;
+  border: 1px solid var(--menu-line);
+  background: var(--menu-bg);
+  color: var(--fg);
+  padding: 0.5rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  pointer-events: none;
+  animation: eca-fade-in 120ms ease-out both;
+}
+
+/* Browserflaechen aus der Palette statt Systemvorgaben. */
 ::selection {
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--fg);
 }
 input,
@@ -344,11 +561,6 @@ a,
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-/* Zahlen, Betraege, Hashes und Normzitate: gleich breite Ziffern. */
-.font-mono,
-.tabular {
-  font-variant-numeric: tabular-nums slashed-zero;
-}
 
 .skip-link {
   position: absolute;
@@ -356,8 +568,8 @@ a,
   top: -3rem;
   z-index: 100;
   border-radius: 0.5rem;
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--primary-bg);
+  color: var(--primary-fg);
   padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -372,7 +584,7 @@ a,
   outline-offset: 2px;
 }
 
-/* Schlanker FinTech-Scrollbalken (Standard-Eigenschaften; WebKit-Fallback darunter). */
+/* Schlanke Scrollbalken aus der Palette (Standard-Eigenschaften; WebKit darunter). */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;
@@ -391,8 +603,12 @@ a,
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scroll-thumb-hover);
 }
+/* Kein weisses Eckquadrat, wo sich zwei Scrollbalken treffen (Chrome/Edge unter Windows). */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
-/* --- Micro-Interactions (150 ms ease-out, kein Layout-Shift) ------------- */
+/* --- Micro-Interactions (150 ms ease-out, kein Layout-Shift) ----------------- */
 @keyframes eca-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -418,9 +634,9 @@ a,
   animation: eca-pulse 2.4s ease-out infinite;
 }
 .anim-fade { animation: eca-fade-in 150ms ease-out both; }
-.anim-panel { animation: eca-panel-in 150ms ease-out both; }
+.anim-panel { animation: eca-panel-in 160ms var(--ease-out) both; }
 .skeleton-shimmer {
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 50%, var(--surface-2) 75%);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-hover) 50%, var(--surface-2) 75%);
   background-size: 200% 100%;
   animation: eca-shimmer 1.6s ease-in-out infinite;
 }
@@ -442,7 +658,7 @@ a,
   z-index: 200;
   display: grid;
   place-items: center;
-  background: radial-gradient(60% 50% at 50% 42%, rgba(34, 211, 238, 0.08), transparent 70%), var(--bg);
+  background: var(--bg);
   transition: opacity 320ms var(--ease-out, ease-out);
   /* Notaus ohne JavaScript: nach 4 s weg. */
   animation: eca-splash-notaus 0s linear 4s forwards;
@@ -454,13 +670,12 @@ a,
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  animation: eca-splash-ein 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: eca-splash-ein 420ms var(--ease-out) both;
 }
 .eca-splash-logo {
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  animation: eca-splash-glow 1.8s ease-in-out infinite;
 }
 .eca-splash-name {
   font-size: 15px;
@@ -483,16 +698,12 @@ a,
   inset: 0;
   width: 42%;
   border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background: var(--accent);
   animation: eca-splash-lauf 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 @keyframes eca-splash-ein {
-  from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
-  to { opacity: 1; transform: none; filter: none; }
-}
-@keyframes eca-splash-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
-  50% { box-shadow: 0 0 28px 2px rgba(34, 211, 238, 0.28); }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes eca-splash-lauf {
   from { transform: translateX(-100%); }
@@ -502,14 +713,14 @@ a,
   to { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 
-/* --- Glas-Menues (Select, Musterdaten) -------------------------------------- */
+/* --- Glas-Menues (Select, Popover, Job-Monitor) ------------------------------ */
 .glass-menu {
   background: var(--menu-bg);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--menu-line);
   border-radius: 0.75rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 16px 40px -12px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(16px) saturate(1.5);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
   transform-origin: var(--origin, top);
   animation: eca-menu-in 150ms var(--ease-out, ease-out) both;
 }
@@ -542,9 +753,39 @@ a,
     width 220ms var(--ease-out, ease-out), height 220ms var(--ease-out, ease-out);
 }
 
-/* --- Next.js-Entwicklerhinweise ausblenden (devIndicators: false genuegt im Normalfall) ---
- * Das Fehler-Overlay (data-nextjs-dialog-overlay) bleibt bewusst sichtbar: Es zeigt
- * Laufzeitfehler waehrend der Entwicklung und erscheint im Produktionsbuild ohnehin nie. */
+/* --- Markdown im Copilot ------------------------------------------------------ */
+.md-answer p + p,
+.md-answer p + ul,
+.md-answer ul + p,
+.md-answer p + ol,
+.md-answer ol + p {
+  margin-top: 0.6rem;
+}
+.md-answer ul,
+.md-answer ol {
+  padding-left: 1.15rem;
+}
+.md-answer ul { list-style: disc; }
+.md-answer ol { list-style: decimal; }
+.md-answer li + li { margin-top: 0.25rem; }
+.md-answer li::marker { color: var(--fg-subtle); }
+.md-answer h3,
+.md-answer h4 {
+  margin-top: 0.8rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+.md-answer code {
+  border-radius: 0.25rem;
+  background: var(--surface-2);
+  padding: 0 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+/* --- Next.js-Entwicklerhinweise ausblenden ----------------------------------- */
 nextjs-portal [data-nextjs-dev-tools-button],
 [data-nextjs-dev-tools-button],
 #nextjs-dev-tools-button,

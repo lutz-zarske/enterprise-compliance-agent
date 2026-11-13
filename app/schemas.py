@@ -787,6 +787,13 @@ class ComplianceAudit(ApiModel):
         default=None,
         description="Provider-Wechsel waehrend der Analyse (Ausfall, 429, Zeitueberschreitung), je Wechsel im Ledger.",
     )
+    heuristic: bool = Field(
+        default=False,
+        description="True, wenn alle KI-Stufen ausfielen und das deterministische Regelwerk die Pruefung abschloss.",
+    )
+    fallback_reason: str | None = Field(
+        default=None, description="Grund fuer das regelbasierte Referenz-Audit (z. B. Ueberlast aller Stufen)."
+    )
 
     @computed_field(description="Kurzfazit fuer Uebersichtslisten und Dashboards.")  # type: ignore[prop-decorator]
     @property
@@ -1234,6 +1241,15 @@ class SignOff(ApiModel):
 InferenceModeLiteral = Literal["local", "gemini", "anthropic", "openai"]
 
 
+class BackupKeyInput(ApiModel):
+    """Ein Ausweich-Schluessel der Kaskade (Schluessel wird verschluesselt gespeichert, nie zurueckgegeben)."""
+
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,40}$", description="Stabile Kennung des Eintrags.")
+    provider: Literal["gemini", "anthropic", "openai"]
+    model: str | None = Field(default=None, max_length=120, description="Leer = Hauptmodell des Anbieters.")
+    api_key: str | None = Field(default=None, max_length=400, description="Leer = gespeicherten Schluessel behalten.")
+
+
 class SettingsUpdate(ApiModel):
     """Teilaktualisierung der Laufzeit-Einstellungen (nur gesetzte Felder wirken)."""
 
@@ -1249,6 +1265,18 @@ class SettingsUpdate(ApiModel):
         default=None,
         max_length=3,
         description="Ausweich-Provider in Reihenfolge, je Provider einmal (z. B. ['anthropic', 'local']).",
+    )
+    ausweich_modelle: dict[str, Annotated[str, Field(max_length=120)]] | None = Field(
+        default=None,
+        description="Ausweichmodell desselben Anbieters je Cloud-Provider (leerer String = aus).",
+    )
+    ausweich_schluessel: list[BackupKeyInput] | None = Field(
+        default=None,
+        max_length=6,
+        description=(
+            "Ganze Liste der Ausweich-Schluessel in Reihenfolge; Eintraege ohne api_key behalten "
+            "den gespeicherten Schluessel derselben id."
+        ),
     )
 
 
@@ -1298,6 +1326,14 @@ class CopilotTurn(ApiModel):
 class CopilotRequest(ApiModel):
     question: str = Field(min_length=2, max_length=2000)
     history: list[CopilotTurn] = Field(default_factory=list, max_length=20)
+    thinking: Literal["low", "medium", "high"] = Field(
+        default="medium", description="Denkstufe: Gruendlichkeit und Laenge der Antwort."
+    )
+    progress_id: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9_-]{6,64}$",
+        description="Vom Client vergebene Kennung fuer die Live-Arbeitsschritte (GET /api/v1/copilot/progress/{id}).",
+    )
 
 
 class CopilotResponse(ApiModel):
@@ -1308,6 +1344,17 @@ class CopilotResponse(ApiModel):
     reference: bool = Field(
         default=False, description="True bei hinterlegter Musterantwort (Musterdaten, ohne Sprachmodell)."
     )
+    heuristic: bool = Field(
+        default=False, description="True, wenn alle KI-Stufen ausfielen und das Regelwerk geantwortet hat."
+    )
+    failover: list[dict[str, str]] | None = Field(default=None, description="Stufenwechsel waehrend der Antwort.")
+    notice: str | None = Field(default=None, description="Ruhiger Hinweis fuer die Oberflaeche.")
+
+
+class JobSubmitRequest(ApiModel):
+    """Batch-Pruefung: mehrere Belege auf einmal in die Warteschlange."""
+
+    document_ids: list[Annotated[str, Field(min_length=8, max_length=64)]] = Field(min_length=1, max_length=100)
 
 
 class TextSpan(ApiModel):
@@ -1351,6 +1398,10 @@ class OllamaHealth(ComponentHealth):
     model: str
     model_available: bool = False
     available_models: list[str] = Field(default_factory=list)
+    suggested_model: str | None = Field(
+        default=None,
+        description="Installiertes Ersatzmodell aus der Vorrangliste, falls das eingestellte fehlt (nur Vorschlag).",
+    )
 
 
 class HealthResponse(ApiModel):

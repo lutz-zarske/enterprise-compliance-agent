@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
+// Schriften strikt lokal aus dem npm-Bundle - kein CDN, kein Netz beim Build (Docker, Offline-Betrieb).
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
+import "@fontsource/ibm-plex-serif/latin-500.css";
+import "@fontsource/ibm-plex-serif/latin-600.css";
 import "./globals.css";
 import { SplashAbbau } from "../components/SplashAbbau";
 import { ThemeProvider } from "../components/ThemeProvider";
@@ -8,7 +11,7 @@ import { ThemeProvider } from "../components/ThemeProvider";
 export const metadata: Metadata = {
   title: "Enterprise Compliance Agent",
   description:
-    "Revisionssichere Prüfung von Rechnungen und Verträgen: EU AI Act, § 14 UStG, DSGVO – lokal oder über ein Privacy Gateway.",
+    "Revisionssichere Vorprüfung von Rechnungen und Verträgen: § 14 UStG, E-Rechnung nach EN 16931, EU AI Act und DSGVO – lokal oder über ein Privacy Gateway.",
   icons: {
     icon: [
       { url: "/compliance-logo-transparent.png", type: "image/png", sizes: "256x256" },
@@ -20,16 +23,16 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#090d16" },
+    { media: "(prefers-color-scheme: dark)", color: "#07080c" },
     { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
   ],
 };
 
 /**
- * Setzt das Theme vor dem ersten Paint (kein Aufblitzen des falschen Themes).
- * Standard ist der institutionelle Dark Mode.
+ * Setzt das Farbschema vor dem ersten Paint (kein Aufblitzen des falschen Themes).
+ * Wahl dark | light | system; Standard ist der dunkle Arbeitsmodus.
  */
-const themeScript = `(function(){try{var t=localStorage.getItem("eca-theme");var d=t?t==="dark":true;document.documentElement.classList.toggle("dark",d);}catch(e){document.documentElement.classList.add("dark");}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem("eca-theme");var d=t==="light"?false:t==="system"?!window.matchMedia("(prefers-color-scheme: light)").matches:true;document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light";}catch(e){document.documentElement.classList.add("dark");}})();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

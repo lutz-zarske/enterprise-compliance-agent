@@ -1,45 +1,35 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AuditStepper, DEFAULT_STAGES } from "../components/AuditStepper";
-import { CopilotDrawer } from "../components/CopilotDrawer";
+import { AuditStepper } from "../components/AuditStepper";
+import { CopilotView } from "../components/CopilotView";
 import { DocumentInspector, type InspectorTab } from "../components/DocumentInspector";
 import { DocumentList } from "../components/DocumentList";
 import { DocumentUploader } from "../components/DocumentUploader";
 import { ExportModal } from "../components/ExportModal";
-import { Header } from "../components/Header";
-import {
-  AlertTriangle,
-  Download,
-  FileText,
-  Layers,
-  MessageSquare,
-  RefreshCw,
-  Settings,
-  ShieldCheck,
-  Terminal,
-  WifiOff,
-  Zap,
-} from "../components/icons";
+import { Header, type View, VIEW_LABELS } from "../components/Header";
+import { Download, FileText, Layers, MessageSquare, RefreshCw, ShieldCheck, WifiOff, Zap } from "../components/icons";
+import { NACHLAUF_MS, type FinishedJob } from "../components/JobMonitor";
 import { KpiStrip } from "../components/KpiStrip";
 import { markOnboardingDone, onboardingDone, ShortcutsModal, SpotlightTour, WelcomeModal } from "../components/Onboarding";
 import { OverrideModal } from "../components/OverrideModal";
+import { ProtocolView } from "../components/ProtocolView";
 import { Scorecard } from "../components/Scorecard";
 import { SettingsModal } from "../components/SettingsModal";
 import { SealModal } from "../components/SignOffPanel";
 import { meldeBereit } from "../components/SplashAbbau";
 import { EmptyState, HashBadge, isModEnter, isTypingTarget, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
-import { api, ApiError, fetchHealth, getApiBase } from "../lib/api";
-import { cx, formatBytes, formatDate, formatModel, PROVIDER_NAMES } from "../lib/format";
+import { api, ApiError, fetchHealth } from "../lib/api";
+import { cx, formatBytes, formatDate, formatModel, PROVIDER_NAMES, providerLabel } from "../lib/format";
+import { useJobs } from "../lib/useJobs";
 import type {
   BatchUploadResponse,
   DocumentDetail,
   DocumentSummary,
   HealthResponse,
-  InferenceMode,
+  JobSnapshot,
   KpiResponse,
   LedgerVerification,
-  ProgressStage,
   RuntimeSettings,
   ScoreTile,
 } from "../types/api";
@@ -51,15 +41,17 @@ const TILE_TO_TAB: Record<ScoreTile["key"], InspectorTab> = {
   math: "facts",
 };
 
-/** Tasten 1-6 der Reiter (5 = XML nur bei E-Rechnungen). */
-const TAB_KEYS: InspectorTab[] = ["ustg", "aiact", "pii", "facts", "xml", "ledger"];
+/** Tasten 1-5 der Reiter (5 = XML nur bei E-Rechnungen). */
+const TAB_KEYS: InspectorTab[] = ["ustg", "aiact", "pii", "facts", "xml"];
 
 const STATUS_LABELS: Record<string, string> = {
-  uploaded: "Hochgeladen",
+  uploaded: "Ungeprüft",
   processing: "In Prüfung",
   extracted: "Geprüft",
   failed: "Fehlgeschlagen",
 };
+
+const VIEW_STORAGE = "eca-view";
 
 function asApiError(err: unknown): ApiError {
   return err instanceof ApiError ? err : new ApiError(String(err), 0, "unknown");
@@ -75,18 +67,18 @@ export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [extractingId, setExtractingId] = useState<string | null>(null);
-  const [stages, setStages] = useState<ProgressStage[]>(DEFAULT_STAGES);
+  const [view, setViewState] = useState<View>("workspace");
   const [tab, setTab] = useState<InspectorTab>("ustg");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const [sealOpen, setSealOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [finished, setFinished] = useState<FinishedJob | null>(null);
+  const [copilotBusy, setCopilotBusy] = useState(false);
   const { toasts, push, dismiss, pause, resume } = useToasts();
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
@@ -104,6 +96,24 @@ export default function DashboardPage() {
     },
     [notify],
   );
+
+  const setView = useCallback((next: View) => {
+    setViewState(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE, next);
+    } catch {
+      /* privater Modus */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(VIEW_STORAGE);
+      if (stored === "workspace" || stored === "copilot" || stored === "protocol") setViewState(stored);
+    } catch {
+      /* privater Modus */
+    }
+  }, []);
 
   const loadDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
@@ -146,7 +156,7 @@ export default function DashboardPage() {
         setOffline(true);
         setHealth(null);
       } else if (error.status === 401) {
-        notify("warn", "Zugang verweigert", "Backend verlangt einen X-API-Key – unter Einstellungen › System & Verbindung hinterlegen.");
+        notify("warn", "Zugang verweigert", "Das Backend verlangt einen X-API-Key – unter Einstellungen › System & Verbindung hinterlegen.");
       }
     }
   }, [refreshData, loadDetail, notify]);
@@ -159,8 +169,7 @@ export default function DashboardPage() {
     });
   }, [loadAll]);
 
-  // Reaktiv statt Aktualisieren-Button: Rueckkehr ins Fenster laedt den Stand neu
-  // (z. B. nach einem Upload aus einem zweiten Tab), hoechstens alle 15 s.
+  // Reaktiv statt Aktualisieren-Button: Rueckkehr ins Fenster laedt den Stand neu (hoechstens alle 15 s).
   useEffect(() => {
     const onReturn = () => {
       if (window.document.visibilityState === "visible" && Date.now() - lastLoad.current > 15_000) void loadAll();
@@ -185,57 +194,67 @@ export default function DashboardPage() {
     else setDetail(null);
   }, [selectedId, loadDetail]);
 
-  const runExtraction = useCallback(
-    async (id: string, filename: string): Promise<boolean> => {
-      setExtractingId(id);
-      setStages(DEFAULT_STAGES);
-      setDocuments((all) => all.map((d) => (d.id === id ? { ...d, status: "processing" } : d)));
-      const poll = window.setInterval(async () => {
-        try {
-          const progress = await api.progress(id);
-          if (progress.current_stage) setStages(progress.stages);
-        } catch {
-          /* Fortschritt ist optional */
-        }
-      }, 500);
-      let ok = false;
-      try {
-        const result = await api.extract(id);
-        ok = true;
-        result.compliance.failover?.forEach((switched) =>
+  // --- Hintergrund-Jobs ---------------------------------------------------------
+  const onJobFinished = useCallback(
+    (job: JobSnapshot) => {
+      setFinished({ title: job.title, status: job.status, heuristic: Boolean(job.result?.heuristic), until: Date.now() + NACHLAUF_MS });
+      if (job.status === "done" && job.result) {
+        job.result.failover?.forEach((switched) =>
           notify(
             "warn",
-            `Fallback auf Modell ${formatModel(switched.to_model)} ausgelöst: ${switched.reason_code === "provider_timeout" ? "Zeitüberschreitung" : "Anbieter nicht verfügbar"}`,
-            `${PROVIDER_NAMES[switched.from_provider as InferenceMode] ?? switched.from_provider} → ${PROVIDER_NAMES[switched.to_provider as InferenceMode] ?? switched.to_provider} · im Ledger protokolliert`,
+            `Ausweichstufe übernommen: ${formatModel(switched.to_model)}`,
+            `${providerLabel(switched.from_provider)} → ${providerLabel(switched.to_provider)} (${switched.reason_code === "provider_timeout" ? "Zeitüberschreitung" : switched.reason_code === "cloud_budget_exceeded" ? "Tagesbudget erreicht" : "Überlast"}) · im Ledger protokolliert`,
           ),
         );
         notify(
-          result.scorecard?.release_blocked ? "warn" : "ok",
-          `Audit abgeschlossen: ${filename}`,
-          `Score ${result.scorecard?.score ?? "–"}/100 · ${result.scorecard?.release_recommendation ?? ""} · ${formatModel(result.model)}`,
+          job.result.heuristic ? "warn" : job.result.release_blocked ? "warn" : "ok",
+          job.result.heuristic ? `Regelbasiertes Referenz-Audit: ${job.title}` : `Prüfung abgeschlossen: ${job.title}`,
+          `Score ${job.result.score ?? "–"}/100 · ${job.result.release_recommendation ?? ""}${job.result.heuristic ? " · KI temporär überlastet, Ergebnis gekennzeichnet" : ` · ${formatModel(job.result.model)}`}`,
         );
-      } catch (err) {
-        reportError(`Analyse fehlgeschlagen: ${filename}`, err);
-      } finally {
-        window.clearInterval(poll);
-        setExtractingId(null);
-        try {
-          await refreshData();
-        } catch {
-          /* Offline-Zustand wird separat erkannt */
-        }
-        if (selectedRef.current === id) await loadDetail(id);
+      } else if (job.status === "failed") {
+        notify("bad", `Prüfung fehlgeschlagen: ${job.title}`, `${job.error?.message ?? "Unbekannter Fehler"}${job.error?.hint ? ` – ${job.error.hint}` : ""}`);
+      } else if (job.status === "cancelled") {
+        notify("info", `Prüfung abgebrochen: ${job.title}`, "Der Beleg behält sein vorheriges Ergebnis.");
       }
-      return ok;
+      void refreshData().catch(() => undefined);
+      if (selectedRef.current === job.document_id) void loadDetail(job.document_id);
     },
-    [notify, reportError, refreshData, loadDetail],
+    [notify, refreshData, loadDetail],
+  );
+
+  const { jobs, track, cancel } = useJobs(!offline && Boolean(health), onJobFinished);
+  const analysingIds = new Set(jobs.map((job) => job.document_id));
+
+  const runExtraction = useCallback(
+    async (id: string) => {
+      try {
+        const job = await api.extract(id);
+        track(job);
+        setDocuments((all) => all.map((d) => (d.id === id ? { ...d, status: "processing" } : d)));
+      } catch (err) {
+        reportError("Prüfung konnte nicht gestartet werden", err);
+      }
+    },
+    [track, reportError],
+  );
+
+  const runBatch = useCallback(
+    async (ids: string[]) => {
+      try {
+        const result = await api.submitJobs(ids);
+        result.jobs.forEach(track);
+        notify("info", `${result.jobs.length} Belege eingereiht`, "Die Prüfungen laufen nacheinander im Hintergrund – Fortschritt im Job-Monitor oben rechts.");
+      } catch (err) {
+        reportError("Batch-Prüfung konnte nicht gestartet werden", err);
+      }
+    },
+    [track, notify, reportError],
   );
 
   async function handleSeed(file?: string) {
     setSeeding(true);
     try {
-      // Die Musterdaten kommen bereits geprueft zurueck (Referenz-Audits) -
-      // es ist keine Inferenz noetig, das Dashboard ist sofort vollstaendig.
+      // Die Musterdaten kommen bereits geprueft zurueck (Referenz-Audits) - ohne Inferenz.
       const result = await api.seed(file);
       await refreshData();
       const audited = result.items.filter((item) => item.reference_audit).length;
@@ -247,12 +266,13 @@ export default function DashboardPage() {
           ? [
               audited ? `${audited} Referenz-Audits ohne KI-Modell erstellt` : "",
               structured ? `${structured} E-Rechnung deterministisch aus dem XML geprüft` : "",
-            ].filter(Boolean).join(", ") + ". Mit laufendem Modell lassen sich die Referenz-Audits über „Live neu prüfen“ berechnen."
+            ].filter(Boolean).join(", ") + "."
           : "Die Musterdokumente sind bereits vorhanden; bestehende Prüfergebnisse bleiben unverändert.",
       );
       const preferred =
         (file ? result.items[0] : result.items.find((item) => item.filename.startsWith("Rechnung_Fehlerhaft"))) ?? result.items[0];
       if (preferred) setSelectedId(preferred.id);
+      setView("workspace");
     } catch (err) {
       reportError("Musterdaten konnten nicht geladen werden", err);
     } finally {
@@ -260,20 +280,13 @@ export default function DashboardPage() {
     }
   }
 
-  async function copyOllamaCommand() {
-    try {
-      await navigator.clipboard.writeText("ollama serve");
-      notify("info", "Befehl kopiert", "„ollama serve“ im Terminal ausführen; das Dashboard erkennt das Modell beim nächsten Aktualisieren.");
-    } catch {
-      notify("info", "Im Terminal ausführen: ollama serve", "Die Zwischenablage ist in diesem Browser nicht verfügbar.");
-    }
-  }
-
   async function handleUploaded(result: BatchUploadResponse) {
     await refreshData().catch(() => undefined);
     const first = result.items.find((item) => item.ok && item.id);
     if (first?.id) setSelectedId(first.id);
-    if (result.succeeded) notify("ok", `${result.succeeded} Dokument(e) hochgeladen`, "Audit über „Audit starten“ auslösen.");
+    if (result.succeeded) {
+      notify("ok", `${result.succeeded} Dokument(e) hochgeladen`, result.succeeded > 1 ? "Über „prüfen“ in der Liste alle auf einmal einreihen." : "Prüfung über „Audit starten“ auslösen.");
+    }
     result.items
       .filter((item) => !item.ok)
       .forEach((item) => notify("bad", `Upload abgelehnt: ${item.filename}`, item.error?.message));
@@ -298,25 +311,29 @@ export default function DashboardPage() {
     }
   }
 
-  const ollamaDown = !offline && health?.inference?.mode === "local" && health.ollama.status !== "ok";
-  const cloudUnconfigured = !offline && health?.inference?.is_cloud && !health.inference.configured;
+  const online = !offline && Boolean(health);
+  const cloudUnconfigured = online && Boolean(health?.inference?.is_cloud) && !health?.inference?.configured;
+  const modelReady: boolean | null = !health
+    ? null
+    : health.inference?.mode === "local"
+      ? health.ollama.status === "ok"
+      : Boolean(health.inference?.configured);
   const modelLabel = settings ? `${PROVIDER_NAMES[settings.inference_mode]} · ${formatModel(settings.active_model)}` : "–";
-  const isExtracting = detail !== null && extractingId === detail.id;
-  const inferenceAvailable = !offline && !ollamaDown && !cloudUnconfigured;
+  const activeJob = detail ? jobs.find((job) => job.document_id === detail.id) ?? null : null;
   const isReference = detail?.provider === "reference";
-  // E-Rechnungen mit auswertbarem XML laufen deterministisch - ohne Sprachmodell.
+  const isHeuristic = detail?.provider === "heuristic";
   const structuredReady = Boolean(
     detail?.einvoice && !detail.einvoice.error && (detail.einvoice.source === "standalone" || detail.einvoice.is_einvoice),
   );
-  const canAnalyze = !offline && (inferenceAvailable || structuredReady);
+  // Seit v2.5 bricht keine Pruefung an fehlender KI ab: das Regelwerk schliesst gekennzeichnet ab.
+  const canAnalyze = online && (!cloudUnconfigured || structuredReady);
   const isXml = detail?.content_type === "application/xml";
-  const overlayOpen =
-    settingsOpen || exportOpen || overrideOpen || copilotOpen || sealOpen || welcomeOpen || tourOpen || shortcutsOpen;
-  const canSeal = Boolean(detail?.scorecard) && !offline && extractingId === null;
+  const overlayOpen = settingsOpen || exportOpen || overrideOpen || sealOpen || welcomeOpen || tourOpen || shortcutsOpen;
+  const canSeal = Boolean(detail?.scorecard) && online && !activeJob;
 
   // Strg/⌘ + Enter oeffnet den Siegel-Dialog; dort versiegelt ein zweites Strg/⌘ + Enter.
   useEffect(() => {
-    if (overlayOpen || !canSeal) return;
+    if (overlayOpen || !canSeal || view !== "workspace") return;
     const onKey = (event: KeyboardEvent) => {
       if (!isModEnter(event)) return;
       event.preventDefault();
@@ -324,9 +341,9 @@ export default function DashboardPage() {
     };
     window.document.addEventListener("keydown", onKey);
     return () => window.document.removeEventListener("keydown", onKey);
-  }, [overlayOpen, canSeal]);
+  }, [overlayOpen, canSeal, view]);
 
-  // 1-6 wechseln den Reiter, ? oeffnet die Kuerzel-Uebersicht - nie beim Tippen, nie bei offenem Dialog.
+  // 1-5 wechseln den Reiter, ? oeffnet die Kuerzel-Uebersicht - nie beim Tippen, nie bei offenem Dialog.
   useEffect(() => {
     if (overlayOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -336,6 +353,7 @@ export default function DashboardPage() {
         setShortcutsOpen(true);
         return;
       }
+      if (view !== "workspace") return;
       const target = TAB_KEYS[Number(event.key) - 1];
       if (!target || !detail || (target === "xml" && !detail.einvoice)) return;
       event.preventDefault();
@@ -343,227 +361,243 @@ export default function DashboardPage() {
     };
     window.document.addEventListener("keydown", onKey);
     return () => window.document.removeEventListener("keydown", onKey);
-  }, [overlayOpen, detail]);
+  }, [overlayOpen, detail, view]);
 
   // Den XML-Tab nicht stehen lassen, wenn das neue Dokument keinen Datensatz hat.
   useEffect(() => {
     if (tab === "xml" && detail && !detail.einvoice) setTab("ustg");
   }, [tab, detail]);
 
+  const analyzeHint = !online
+    ? "Ohne Backend-Verbindung keine Prüfung."
+    : cloudUnconfigured && !structuredReady
+      ? "Cloud-Modus ohne API-Key – Schlüssel in den Einstellungen hinterlegen."
+      : structuredReady && modelReady === false
+        ? "E-Rechnung: Die Prüfung läuft deterministisch über den XML-Datensatz und braucht kein Sprachmodell."
+        : modelReady === false
+          ? "Kein Sprachmodell erreichbar – das Regelwerk prüft den Beleg und kennzeichnet das Ergebnis."
+          : undefined;
+
   return (
     <div className="flex min-h-screen flex-col">
       <a href="#inhalt" className="skip-link">Zum Inhalt springen</a>
       <Header
+        view={view}
+        onViewChange={setView}
         health={health}
         offline={offline}
         settings={settings}
         ledger={ledger}
+        ruleset={kpis?.ruleset_version ?? null}
         seeding={seeding}
-        busy={extractingId !== null}
+        jobs={jobs}
+        finished={finished}
+        copilotBusy={copilotBusy}
+        onCancelJob={cancel}
         onSeed={(file) => void handleSeed(file)}
         onOpenSettings={() => setSettingsOpen(true)}
         onStartTour={() => {
+          setView("workspace");
           setWelcomeOpen(false);
           setTourOpen(true);
         }}
+        onChanged={() => void loadAll()}
         notify={notify}
       />
 
       <main
         id="inhalt"
         tabIndex={-1}
-        className="mx-auto w-full max-w-[1920px] flex-1 space-y-4 px-4 py-5 outline-none sm:px-6 2xl:max-w-[2400px] 2xl:space-y-5 2xl:px-10"
+        aria-label={VIEW_LABELS[view]}
+        className="mx-auto w-full max-w-[1920px] flex-1 px-4 py-4 outline-none sm:px-6 2xl:max-w-[2400px] 2xl:px-10 2xl:py-5"
       >
         {offline && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn" role="status">
-            <WifiOff size={16} className="shrink-0" aria-hidden="true" />
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-fg" role="status">
+            <WifiOff size={16} className="shrink-0 text-warn" aria-hidden="true" />
             <p className="min-w-0 flex-1">
-              <strong>Backend nicht erreichbar</strong> ({getApiBase()}). Starten mit{" "}
-              <code className="rounded bg-surface-solid px-1 font-mono text-xs text-fg">uvicorn app.main:app --port 8001</code> – die
-              Verbindung wird alle 10 s automatisch neu geprüft. Es werden keine Ersatzdaten angezeigt.
+              <strong className="text-warn">Backend nicht erreichbar.</strong> <span className="font-mono text-xs">Start_Compliance_Agent.bat</span> ausführen
+              (oder <span className="font-mono text-xs">uvicorn app.main:app --port 8001</span>) – die Verbindung wird alle 10 s neu geprüft. Es werden
+              keine Ersatzdaten angezeigt.
             </p>
             <button className="btn" onClick={() => void loadAll()}><RefreshCw size={14} aria-hidden="true" /> Erneut verbinden</button>
           </div>
         )}
-        {(ollamaDown || cloudUnconfigured) && (
-          <div className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3" role="status">
-            <div className="flex flex-wrap items-start gap-3">
-              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
-              <div className="min-w-0 flex-1 text-sm text-fg">
-                <p>
-                  <strong className="text-warn">
-                    {ollamaDown ? "Kein lokales Sprachmodell erreichbar." : "Cloud-Modus ohne API-Key."}
-                  </strong>{" "}
-                  Musterdaten, Prüfergebnisse, Zertifikate und Siegel funktionieren weiter. Für neue Analysen
-                  {ollamaDown ? " Ollama starten oder" : ""} einen Cloud-Provider in den Einstellungen wählen.
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Datenschutz: Die Pseudonymisierung (Art. 4 Nr. 5 DSGVO) läuft lokal im Backend (Privacy Vault, Python),
-                  bevor Daten den Server verlassen. Cloud-Modelle erhalten erkannte Identifikatoren – Namen mit Anrede oder Rolle,
-                  Firmen, IBAN, Steuer-IDs, Kontaktdaten, Adressen, Beträge – nur als Platzhalter; dafür ist kein lokales Ollama nötig.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button className="btn" onClick={() => setSettingsOpen(true)}>
-                  <Settings size={14} aria-hidden="true" /> Inferenz-Einstellungen
-                </button>
-                {ollamaDown && (
-                  <button className="btn" onClick={() => void copyOllamaCommand()} title="Kopiert den Befehl „ollama serve“">
-                    <Terminal size={14} aria-hidden="true" /> Lokale KI starten
-                  </button>
-                )}
-              </div>
+
+        {/* Keep-Alive: alle Ansichten bleiben eingehaengt - ein Wechsel bricht keine Pruefung und kein Gespraech ab. */}
+        <div hidden={view !== "workspace"} className="space-y-4 2xl:space-y-5">
+          <KpiStrip kpis={kpis} loading={!health && !offline} />
+
+          {/* Kompakte Queue (340 bzw. 400 px), der Rest gehoert der Workbench. */}
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)] 2xl:gap-5">
+            <div className="space-y-4">
+              <DocumentUploader disabled={offline} onUploaded={handleUploaded} onError={(err) => reportError("Upload fehlgeschlagen", err)} />
+              <DocumentList
+                documents={documents}
+                selectedId={selectedId}
+                analysingIds={analysingIds}
+                onAnalyzeAll={canAnalyze ? (ids) => void runBatch(ids) : undefined}
+                onSelect={setSelectedId}
+                onTogglePin={handleTogglePin}
+                onToggleArchive={handleToggleArchive}
+                shortcutsEnabled={!overlayOpen && view === "workspace"}
+              />
             </div>
-          </div>
-        )}
 
-        <KpiStrip kpis={kpis} loading={!health && !offline} />
+            <div className="min-w-0 space-y-4 2xl:space-y-5">
+              {!detail && !loadingDetail && (
+                <div className="card">
+                  <EmptyState icon={<ShieldCheck size={20} aria-hidden="true" />} title="Noch kein Dokument ausgewählt">
+                    <p>
+                      Mit den Musterdaten sehen Sie in Sekunden einen vollständigen Prüfdurchlauf – auch ohne KI-Modell:
+                      eine gültige Rechnung, eine Steuerfalle, einen KI-Recruiting-Vertrag nach Anhang III und eine hybride
+                      ZUGFeRD-E-Rechnung an eine Kommune.
+                    </p>
+                    <button className="btn btn-primary mt-3" onClick={() => void handleSeed()} disabled={offline || seeding}>
+                      {seeding ? <Spinner size={13} /> : <Layers size={14} aria-hidden="true" />} Musterdaten laden
+                    </button>
+                    <p className="mt-3">Oder eigene PDFs und XRechnungen links hochladen.</p>
+                  </EmptyState>
+                </div>
+              )}
+              {!detail && loadingDetail && (
+                <div className="space-y-4" aria-busy="true" aria-label="Dokument wird geladen">
+                  <div className="card flex items-center gap-3 px-4 py-3"><Skeleton className="h-8 w-8" /><Skeleton className="h-4 w-64" /></div>
+                  <div className="card flex gap-5 p-5"><Skeleton className="h-28 w-28 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-4 w-1/3" /></div></div>
+                  <div className="card p-5"><Skeleton className="h-64 w-full" /></div>
+                </div>
+              )}
 
-        {/* Kompakte Queue (340 bzw. 400 px), der Rest gehoert der Workbench. */}
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)] 2xl:gap-5">
-          <div className="space-y-4">
-            <DocumentUploader disabled={offline} onUploaded={handleUploaded} onError={(err) => reportError("Upload fehlgeschlagen", err)} />
-            <DocumentList
-              documents={documents}
-              selectedId={selectedId}
-              extractingId={extractingId}
-              onSelect={setSelectedId}
-              onTogglePin={handleTogglePin}
-              onToggleArchive={handleToggleArchive}
-              shortcutsEnabled={!overlayOpen}
-            />
-          </div>
-
-          <div className="min-w-0 space-y-4 2xl:space-y-5">
-            {!detail && !loadingDetail && (
-              <div className="card">
-                <EmptyState icon={<ShieldCheck size={20} aria-hidden="true" />} title="Noch kein Dokument ausgewählt">
-                  <p>
-                    Mit den Musterdaten sehen Sie in Sekunden einen vollständigen Prüfdurchlauf – auch ohne KI-Modell:
-                    eine gültige Rechnung, eine Steuerfalle, einen KI-Recruiting-Vertrag nach Anhang III und eine hybride
-                    ZUGFeRD-E-Rechnung an eine Kommune.
-                  </p>
-                  <button className="btn btn-primary mt-3" onClick={() => void handleSeed()} disabled={offline || seeding}>
-                    {seeding ? <Spinner size={13} /> : <Layers size={14} aria-hidden="true" />} Musterdaten laden
-                  </button>
-                  <p className="mt-3">Oder eigene PDFs und XRechnungen links hochladen.</p>
-                </EmptyState>
-              </div>
-            )}
-            {!detail && loadingDetail && (
-              <div className="space-y-4" aria-busy="true" aria-label="Dokument wird geladen">
-                <div className="card flex items-center gap-3 px-4 py-3"><Skeleton className="h-8 w-8" /><Skeleton className="h-4 w-64" /></div>
-                <div className="card flex gap-5 p-5"><Skeleton className="h-28 w-28 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-4 w-1/3" /></div></div>
-                <div className="card p-5"><Skeleton className="h-64 w-full" /></div>
-              </div>
-            )}
-
-            {detail && (
-              <>
-                <section className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="rounded-lg border border-line bg-surface-2 p-2 text-accent"><FileText size={16} aria-hidden="true" /></div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="truncate text-sm font-semibold text-fg">{detail.filename}</h2>
-                        <span className={cx("chip", detail.status === "failed" ? "border-bad-line bg-bad-soft text-bad" : "border-line bg-surface-2 text-muted")}>
-                          {STATUS_LABELS[detail.status] ?? detail.status}
-                        </span>
-                        {isReference && (
-                          <Tooltip content="Musterdaten: Die KI-Antwort ist vorberechnet und gekennzeichnet. Score, Maskierung, Eskalationsregeln und Hash-Kette stammen aus dem regulären Regelwerk.">
-                            <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">Referenz-Audit · ohne KI</span>
-                          </Tooltip>
-                        )}
-                        {detail.provider === "structured" && (
-                          <Tooltip content="Die Rechnungsdaten stammen deterministisch aus dem EN-16931-Datensatz. Bei hybriden Rechnungen ist der XML-Teil maßgeblich (BMF-Schreiben vom 15.10.2024, Rz. 36).">
-                            <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">XML-Prüfung · ohne KI</span>
-                          </Tooltip>
-                        )}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
-                        <HashBadge value={detail.sha256} label="SHA-256" />
-                        <span className="font-mono tabular-nums">
-                          {isXml ? "XML" : `${detail.page_count ?? "?"} S.`} · {formatBytes(detail.size_bytes)}
-                          {detail.extracted_at && ` · geprüft ${formatDate(detail.extracted_at, true)}`}
-                          {detail.model && !isReference && ` · ${formatModel(detail.model)}`}
-                        </span>
+              {detail && (
+                <>
+                  <section className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="rounded-lg border border-line bg-surface-2 p-2 text-subtle"><FileText size={16} aria-hidden="true" /></div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="truncate text-sm font-semibold text-fg">{detail.filename}</h2>
+                          <span className={cx("chip", detail.status === "failed" ? "border-bad-line bg-bad-soft text-bad" : "border-line bg-surface-2 text-muted")}>
+                            {activeJob ? "In Prüfung" : STATUS_LABELS[detail.status] ?? detail.status}
+                          </span>
+                          {isReference && (
+                            <Tooltip content="Musterdaten: Die KI-Antwort ist vorberechnet und gekennzeichnet. Score, Maskierung, Eskalationsregeln und Hash-Kette stammen aus dem regulären Regelwerk.">
+                              <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">Referenz-Audit · ohne KI</span>
+                            </Tooltip>
+                          )}
+                          {detail.provider === "structured" && (
+                            <Tooltip content="Die Rechnungsdaten stammen deterministisch aus dem EN-16931-Datensatz. Bei hybriden Rechnungen ist der XML-Teil maßgeblich (BMF-Schreiben vom 15.10.2024, Rz. 36).">
+                              <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">XML-Prüfung · ohne KI</span>
+                            </Tooltip>
+                          )}
+                          {isHeuristic && (
+                            <Tooltip content={`Regelbasiertes Referenz-Audit – KI temporär überlastet. ${detail.compliance?.fallback_reason ?? ""} Felder per Mustererkennung, Einstufung konservativ; im Ledger gekennzeichnet. Mit erreichbarem Modell über „Neu prüfen“ wiederholen.`}>
+                              <span tabIndex={0} className="chip cursor-help border-warn-line bg-warn-soft text-warn">Regelwerk-Audit · KI überlastet</span>
+                            </Tooltip>
+                          )}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
+                          <HashBadge value={detail.sha256} label="SHA-256" />
+                          <span className="tabular-nums">
+                            {isXml ? "XML" : `${detail.page_count ?? "?"} S.`} · {formatBytes(detail.size_bytes)}
+                            {detail.extracted_at && ` · geprüft ${formatDate(detail.extracted_at, true)}`}
+                            {detail.model && !isReference && ` · ${formatModel(detail.model)}`}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Tooltip
-                      align="right"
-                      content={
-                        canAnalyze
-                          ? structuredReady && !inferenceAvailable
-                            ? "E-Rechnung: Die Prüfung läuft deterministisch über den XML-Datensatz und braucht kein Sprachmodell."
-                            : undefined
-                          : "Für eine Live-Analyse wird ein Sprachmodell benötigt – Ollama starten oder einen Cloud-Provider in den Einstellungen wählen."
-                      }
-                    >
-                      <button
-                        className={cx("btn", detail.status !== "extracted" && "btn-primary")}
-                        onClick={() => void runExtraction(detail.id, detail.filename)}
-                        disabled={!canAnalyze || extractingId !== null}
-                      >
-                        {isExtracting ? <Spinner size={13} /> : detail.status === "extracted" ? <RefreshCw size={14} aria-hidden="true" /> : <Zap size={14} aria-hidden="true" />}
-                        {detail.status === "extracted" ? (isReference ? "Live neu prüfen" : "Neu prüfen") : "Audit starten"}
+                    <div className="flex flex-wrap items-center gap-2" data-tour="actions-top">
+                      <Tooltip align="right" content={analyzeHint}>
+                        <button
+                          className={cx("btn", detail.status !== "extracted" && "btn-primary")}
+                          onClick={() => void runExtraction(detail.id)}
+                          disabled={!canAnalyze || Boolean(activeJob)}
+                        >
+                          {activeJob ? <Spinner size={13} /> : detail.status === "extracted" ? <RefreshCw size={14} aria-hidden="true" /> : <Zap size={14} aria-hidden="true" />}
+                          {detail.status === "extracted" ? (isReference ? "Live neu prüfen" : "Neu prüfen") : "Audit starten"}
+                        </button>
+                      </Tooltip>
+                      <button className="btn" onClick={() => setView("copilot")} disabled={offline}>
+                        <MessageSquare size={14} aria-hidden="true" /> Copilot
                       </button>
-                    </Tooltip>
-                    <button className="btn" onClick={() => setCopilotOpen(true)} disabled={offline}>
-                      <MessageSquare size={14} aria-hidden="true" /> Compliance-Copilot
-                    </button>
-                    <button className="btn" onClick={() => setExportOpen(true)} disabled={offline}>
-                      <Download size={14} aria-hidden="true" /> Prüfbericht exportieren
-                    </button>
-                  </div>
-                </section>
+                      <button className="btn" onClick={() => setExportOpen(true)} disabled={offline}>
+                        <Download size={14} aria-hidden="true" /> Export
+                      </button>
+                    </div>
+                  </section>
 
-                {detail.status === "failed" && detail.error && !isExtracting && (
-                  <div className="rounded-lg border border-bad-line bg-bad-soft px-4 py-3 text-xs text-bad">
-                    <strong>Letzte Analyse fehlgeschlagen:</strong> {detail.error}
-                  </div>
-                )}
+                  {detail.status === "failed" && detail.error && !activeJob && (
+                    <div className="rounded-lg border border-bad-line bg-bad-soft px-4 py-3 text-xs text-fg">
+                      <strong className="text-bad">Letzte Prüfung fehlgeschlagen:</strong> {detail.error}
+                    </div>
+                  )}
 
-                {isExtracting && (
-                  <AuditStepper stages={stages} filename={detail.filename} provider={modelLabel} />
-                )}
+                  {activeJob && <AuditStepper job={activeJob} provider={modelLabel} onCancel={cancel} />}
 
-                {detail.scorecard && !isExtracting && (
-                  <Scorecard
-                    scorecard={detail.scorecard}
-                    sealed={Boolean(detail.sign_off)}
-                    reference={isReference}
-                    onOpenTile={(key) => setTab(TILE_TO_TAB[key])}
+                  {detail.scorecard && !activeJob && (
+                    <Scorecard
+                      scorecard={detail.scorecard}
+                      sealed={Boolean(detail.sign_off)}
+                      reference={isReference}
+                      onOpenTile={(key) => setTab(TILE_TO_TAB[key])}
+                    />
+                  )}
+
+                  <DocumentInspector
+                    document={detail}
+                    tab={tab}
+                    onTabChange={setTab}
+                    onOverride={detail.compliance && !offline ? () => setOverrideOpen(true) : undefined}
+                    ledger={offline ? null : ledger}
+                    onSeal={canSeal ? () => setSealOpen(true) : undefined}
+                    onOpenProtocol={() => setView("protocol")}
                   />
-                )}
-
-                <DocumentInspector
-                  document={detail}
-                  tab={tab}
-                  onTabChange={setTab}
-                  onOverride={detail.compliance && !offline ? () => setOverrideOpen(true) : undefined}
-                  ledger={offline ? null : ledger}
-                  onSeal={canSeal ? () => setSealOpen(true) : undefined}
-                />
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
+        </div>
+
+        <div hidden={view !== "copilot"}>
+          <CopilotView
+            document={detail}
+            documents={documents}
+            onSelect={setSelectedId}
+            modelLabel={modelLabel}
+            modelReady={modelReady}
+            active={view === "copilot"}
+            onBusyChange={setCopilotBusy}
+          />
+        </div>
+
+        <div hidden={view !== "protocol"}>
+          <ProtocolView
+            document={detail}
+            documents={documents}
+            ledger={offline ? null : ledger}
+            rulesetVersion={kpis?.ruleset_version ?? null}
+            dlpRuleset={settings?.dlp?.ruleset_version ?? null}
+            active={view === "protocol"}
+            onRefreshLedger={async () => {
+              setLedger(await api.verifyLedger().catch(() => null));
+            }}
+            onOpenExport={() => setExportOpen(true)}
+            notify={notify}
+          />
         </div>
       </main>
 
       <footer className="border-t border-line py-4 no-print">
         <div className="mx-auto flex w-full max-w-[1920px] flex-col items-center justify-between gap-1 px-4 text-xs text-subtle sm:flex-row sm:px-6 2xl:max-w-[2400px] 2xl:px-10">
-          <span>Enterprise Compliance Agent <span className="font-mono tabular-nums">v{health?.version ?? "2.4.1"}</span></span>
-          <span>VO (EU) 2024/1689 · § 14 UStG · DSGVO · GoBD-Hash-Kette</span>
-          <span>{settings?.is_cloud ? "Cloud-Inferenz über Privacy Gateway" : "Lokale Inferenz · Zero Data Leakage"}</span>
+          <span>Enterprise Compliance Agent{health?.version ? <span className="tabular-nums"> · v{health.version}</span> : null}</span>
+          <span>VO (EU) 2024/1689 · § 14 UStG · EN 16931 · DSGVO · GoBD</span>
+          <span>{settings?.is_cloud ? "Cloud-Inferenz über das Privacy Gateway" : "Lokale Inferenz · kein Dokumentinhalt verlässt den Rechner"}</span>
         </div>
       </footer>
 
       <SettingsModal
         open={settingsOpen}
         settings={settings}
-        version={health?.version ?? "2.4.1"}
+        health={health}
+        version={health?.version ?? ""}
         onClose={() => setSettingsOpen(false)}
         onSaved={(updated) => {
           setSettings(updated);
@@ -602,7 +636,6 @@ export default function DashboardPage() {
         }}
         notify={notify}
       />
-      <CopilotDrawer document={detail} open={copilotOpen} onClose={() => setCopilotOpen(false)} modelLabel={modelLabel} />
       <WelcomeModal
         open={welcomeOpen}
         onStartTour={() => {

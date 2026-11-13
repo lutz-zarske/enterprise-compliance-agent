@@ -11,25 +11,34 @@ Werte vor dem Versand pseudonymisiert.  Siehe ``app/inference.py``.
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from app.llm import DEFAULT_SEED, LLMError, LLMResponseError, StructuredLLMClient
 
+if TYPE_CHECKING:
+    from app.ai_budget import CloudBudget
+
+logger = logging.getLogger(__name__)
+
 #: Antwortlaenge fuer strukturierte Audits (JSON mit Begruendungen).
 MAX_OUTPUT_TOKENS = 4096
+
+#: HTTP-Status, bei denen eine Wiederholung bzw. die naechste Stufe der Kaskade lohnt.
+OVERLOAD_STATUS = frozenset({408, 429, 500, 502, 503, 504, 529})
 
 
 class ProviderNotConfiguredError(LLMError):
     """Cloud-Modus gewaehlt, aber kein API-Key hinterlegt."""
 
     code = "provider_not_configured"
-    hint = "API-Key im Einstellungsdialog (Zahnrad) hinterlegen oder auf 'Lokal' umschalten."
+    hint = "API-Key unter Einstellungen › KI-Modelle hinterlegen oder auf 'Lokal' umschalten."
 
 
 class ProviderAuthError(LLMError):
-    """Der Provider lehnt den API-Key ab."""
+    """Der Provider lehnt den API-Key ab - bewusst ohne Wiederholung und ohne Wechsel."""
 
     code = "provider_auth_failed"
     hint = "API-Key pruefen; ggf. Berechtigung fuer das gewaehlte Modell freischalten."
@@ -39,12 +48,16 @@ class ProviderUnavailableError(LLMError):
     """Provider nicht erreichbar, ueberlastet oder Kontingent erschoepft."""
 
     code = "provider_unavailable"
-    hint = "Spaeter erneut versuchen oder auf den lokalen Modus umschalten."
+    hint = "Die Ausweich-Kaskade (Einstellungen) uebernimmt automatisch; sonst spaeter erneut pruefen."
+    failover = True
+    retry = True
 
 
 class ProviderTimeoutError(LLMError):
     code = "provider_timeout"
     hint = "CLOUD_TIMEOUT_SECONDS erhoehen oder ein schnelleres Modell waehlen."
+    failover = True
+    retry = True
 
 
 class CloudLLMClient(StructuredLLMClient):
@@ -61,12 +74,14 @@ class CloudLLMClient(StructuredLLMClient):
         base_url: str,
         timeout_seconds: float = 180.0,
         client: httpx.AsyncClient | None = None,
+        budget: CloudBudget | None = None,
     ) -> None:
         if not api_key:
             raise ProviderNotConfiguredError(f"Fuer {self.label} ist kein API-Key hinterlegt.")
         self._api_key = api_key
         self._model = model
         self._base_url = base_url.rstrip("/")
+        self._budget = budget
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(connect=10.0, read=timeout_seconds, write=30.0, pool=10.0)
@@ -76,25 +91,43 @@ class CloudLLMClient(StructuredLLMClient):
     def model(self) -> str:
         return self._model
 
+    @property
+    def key_hint(self) -> str:
+        """Letzte vier Zeichen des Schluessels - unterscheidet Ausweich-Schluessel im Protokoll."""
+        return f"...{self._api_key[-4:]}" if len(self._api_key) >= 8 else "****"
+
     async def aclose(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+    def _budget_check(self) -> None:
+        if self._budget is not None:
+            self._budget.check()
+
+    def _budget_book(self, data: dict[str, Any], messages: list[dict[str, str]]) -> None:
+        if self._budget is None:
+            return
+        from app.ai_budget import tokens_from_response
+
+        chars = sum(len(message.get("content", "")) for message in messages)
+        self._budget.book(self.provider, self._model, tokens_from_response(self.provider, data, chars))
 
     async def _send(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         try:
             response = await self._client.request(method, url, **kwargs)
         except httpx.TimeoutException as exc:
-            raise ProviderTimeoutError(f"{self.label}: Zeitueberschreitung.") from exc
+            raise ProviderTimeoutError(f"{self.label} antwortet nicht rechtzeitig (Zeitueberschreitung).") from exc
         except httpx.HTTPError as exc:
-            raise ProviderUnavailableError(f"{self.label} nicht erreichbar: {type(exc).__name__}") from exc
+            logger.debug("%s nicht erreichbar: %r", self.label, exc)
+            raise ProviderUnavailableError(f"{self.label} ist nicht erreichbar (Verbindungsfehler).") from exc
 
         if response.status_code in (401, 403):
             raise ProviderAuthError(f"{self.label} lehnt den API-Key ab (HTTP {response.status_code}).")
         if response.status_code == 404:
             raise LLMResponseError(f"{self.label}: Modell '{self._model}' nicht gefunden (HTTP 404).")
-        if response.status_code == 429 or response.status_code >= 500:
+        if response.status_code in OVERLOAD_STATUS or response.status_code >= 500:
             raise ProviderUnavailableError(
-                f"{self.label} antwortet mit HTTP {response.status_code} (Ueberlast/Kontingent)."
+                f"{self.label} ist ausgelastet (HTTP {response.status_code}, Ueberlast oder Kontingent)."
             )
         if response.status_code >= 400:
             # Fehlertext des Providers kann Prompt-Auszuege enthalten -> gekuerzt.
@@ -142,12 +175,14 @@ class GeminiClient(CloudLLMClient):
         if system:
             body["systemInstruction"] = {"parts": [{"text": system}]}
 
+        self._budget_check()
         data = await self._send(
             "POST",
             f"{self._base_url}/models/{self._model}:generateContent",
             json=body,
             headers={"x-goog-api-key": self._api_key},
         )
+        self._budget_book(data, messages)
         try:
             parts = data["candidates"][0]["content"]["parts"]
             return "".join(part.get("text", "") for part in parts)
@@ -191,7 +226,9 @@ class AnthropicClient(CloudLLMClient):
             "system": system,
             "messages": [{"role": m["role"], "content": m["content"]} for m in rest],
         }
+        self._budget_check()
         data = await self._send("POST", f"{self._base_url}/messages", json=body, headers=self._headers())
+        self._budget_book(data, messages)
         blocks = data.get("content") or []
         text = "".join(block.get("text", "") for block in blocks if block.get("type") == "text")
         if not text:
@@ -224,9 +261,11 @@ class OpenAIClient(CloudLLMClient):
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+        self._budget_check()
         data = await self._send(
             "POST", f"{self._base_url}/chat/completions", json=body, headers=self._headers()
         )
+        self._budget_book(data, messages)
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:

@@ -28,15 +28,25 @@ services:
       UPLOAD_DIR: data/uploads
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:14b-instruct}
-      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-32768}
       MASK_PII_IN_STORAGE: ${MASK_PII_IN_STORAGE:-true}
       PII_STRICTNESS: ${PII_STRICTNESS:-standard}
       INFERENCE_MODE: ${INFERENCE_MODE:-local}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
+      LLM_RETRY_DELAYS: ${LLM_RETRY_DELAYS:-2,5}
+      HEURISTIC_FALLBACK: ${HEURISTIC_FALLBACK:-true}
+      CLOUD_DAILY_TOKEN_LIMIT: ${CLOUD_DAILY_TOKEN_LIMIT:--1}
+      ANALYSIS_WORKERS: ${ANALYSIS_WORKERS:-1}
+      DLP_TERMS: ${DLP_TERMS:-}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      # Im Container gibt es kein lokales Ollama-Programm: Start/Stopp ueber den Dienst unten.
+      RUNNING_IN_CONTAINER: "1"
     volumes:
       # Benanntes Volume statt Bind-Mount: Docker uebernimmt beim ersten Start
       # Inhalt und Besitzrechte (appuser, UID 10001) aus dem Image. Ein
@@ -70,6 +80,10 @@ services:
     restart: unless-stopped
     ports:
       - "11434:11434"
+    environment:
+      # 32k Kontext eines 14B-Modells in 16 GB Grafikspeicher.
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: q8_0
     volumes:
       - ollama-models:/root/.ollama
 

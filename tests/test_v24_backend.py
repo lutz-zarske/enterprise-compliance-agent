@@ -76,7 +76,7 @@ def test_kaskade_wechselt_bei_429_und_protokolliert(
         json={"inference_mode": "gemini", "api_keys": {"gemini": "AIza-key-1234567890"}, "fallbacks": ["local"]},
     )
     document_id = uploaded_document_id(client, invoice_pdf)
-    response = client.post(f"/documents/{document_id}/extract")
+    response = client.post(f"/documents/{document_id}/extract?wait=true")
     assert response.status_code == 200, response.text
 
     detail = client.get(f"/documents/{document_id}").json()
@@ -100,19 +100,31 @@ def test_kaskade_ueberspringt_stufe_ohne_key(
               "fallbacks": ["openai", "local"]},
     )
     document_id = uploaded_document_id(client, invoice_pdf)
-    assert client.post(f"/documents/{document_id}/extract").status_code == 200
+    assert client.post(f"/documents/{document_id}/extract?wait=true").status_code == 200
     assert client.get(f"/documents/{document_id}").json()["provider"] == "local"
 
 
-def test_ohne_kaskade_bleibt_der_fehler_sichtbar(
+def test_ohne_kaskade_und_ohne_regelwerk_bleibt_der_fehler_sichtbar(
+    make_full_client: Callable[..., TestClient], invoice_pdf: bytes
+) -> None:
+    client = make_full_client(cloud_handler=_gemini_overloaded, heuristic_fallback=False)
+    client.post("/api/settings", json={"inference_mode": "gemini", "api_keys": {"gemini": "AIza-key-1234567890"}})
+    document_id = uploaded_document_id(client, invoice_pdf)
+    response = client.post(f"/documents/{document_id}/extract?wait=true")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "provider_unavailable"
+
+
+def test_ohne_kaskade_schliesst_das_regelwerk_markiert_ab(
     make_full_client: Callable[..., TestClient], invoice_pdf: bytes
 ) -> None:
     client = make_full_client(cloud_handler=_gemini_overloaded)
     client.post("/api/settings", json={"inference_mode": "gemini", "api_keys": {"gemini": "AIza-key-1234567890"}})
     document_id = uploaded_document_id(client, invoice_pdf)
-    response = client.post(f"/documents/{document_id}/extract")
-    assert response.status_code == 503
-    assert response.json()["error"]["code"] == "provider_unavailable"
+    response = client.post(f"/documents/{document_id}/extract?wait=true")
+    assert response.status_code == 200, response.text
+    assert response.json()["compliance"]["heuristic"] is True
+    assert client.get(f"/documents/{document_id}").json()["provider"] == "heuristic"
 
 
 # --- Modellwechsel im Ledger ----------------------------------------------------------

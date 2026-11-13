@@ -1,10 +1,11 @@
-"""FastAPI-Anwendung mit den fuenf Endpunkten des Compliance-Agenten.
+"""FastAPI-Anwendung des Enterprise Compliance Agent.
 
 Die Endpunkte bleiben bewusst duenn: Validierung, Autorisierung und
 Fehlerabbildung liegen hier, die gesamte Fachlogik in ``app.services``.
 Jeder Fehler verlaesst die Anwendung im einheitlichen Format
 ``{"error": {"code", "message", "hint"}}`` - maschinenlesbar und mit
-konkretem Handlungshinweis.
+konkretem Handlungshinweis.  Analysen laufen als Hintergrund-Jobs
+(``app.jobs``); kein Request wartet minutenlang auf ein Sprachmodell.
 """
 
 from __future__ import annotations
@@ -32,22 +33,31 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import local_ai
+from app.ai_budget import CloudBudget
 from app.audit_ledger import NO_DOCUMENT_HASH, SYSTEM_DOCUMENT_ID, AuditEventType, AuditLedger
 from app.config import APP_TITLE, APP_VERSION, BASE_DIR, Settings, get_settings
-from app.db import build_repository, utcnow
+from app.db import DocumentRecord, build_repository, utcnow
 from app.gobd_export import build_gobd_package
+from app.jobs import Job, JobContext, JobManager
 from app.procedural_doc import build_procedural_doc
 from app.procedural_doc import render_html as render_procedural_html
 from app.procedural_doc import render_markdown as render_procedural_markdown
 from app.inference import InferenceRouter
-from app.llm import PROMPT_HASH, LLMError, OllamaClient, OllamaUnavailableError
+from app.llm import PROMPT_HASH, LLMError, OllamaClient, OllamaUnavailableError, suggest_local_model
 from app.providers import (
     ProviderNotConfiguredError,
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
 from app.reporting import REPORT_CSP, build_report, render_html, render_markdown
-from app.runtime_settings import CLOUD_PROVIDERS, SUGGESTED_MODELS, InferenceMode, RuntimeSettingsStore
+from app.runtime_settings import (
+    CLOUD_PROVIDERS,
+    SUGGESTED_MODELS,
+    InferenceMode,
+    RuntimeSettingsStore,
+    SettingsError,
+)
 from app.model_catalog import parse_catalog, suggest_upgrade
 from app.redact import RULESET_VERSION as DLP_RULESET
 from app.redact import redact as redact_text_dlp
@@ -69,6 +79,7 @@ from app.schemas import (
     ErrorResponse,
     ExtractionResponse,
     HealthResponse,
+    JobSubmitRequest,
     OllamaHealth,
     PinRequest,
     ArchiveRequest,
@@ -83,14 +94,21 @@ from app.schemas import (
 )
 from app.vies import ViesClient
 from app.services import (
+    COPILOT_STEPS,
     PROGRESS,
     DocumentNotAnalyzedError,
-    ReleaseUpdateRunningError,
     DocumentService,
+    ExtractionOutcome,
+    ReleaseUpdateRunningError,
     ServiceError,
     UploadTooLargeError,
     UploadValidationError,
+    parse_compliance,
+    parse_einvoice,
+    parse_extraction,
+    parse_scorecard,
     to_detail,
+    uses_structured_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,8 +137,11 @@ Institutionelles Backend zur automatisierten Pruefung von Geschaeftsdokumenten.
   werden deterministisch gelesen; bei hybriden Rechnungen ist der XML-Teil massgeblich.
 * **Pruefdatenpaket (ZIP)** mit Originalbeleg, XML, Ledger-Auszug, Zertifikat und
   Ed25519-signiertem Manifest.
-* **Multi-Provider-Inferenz**: lokal (Ollama, Default) oder Gemini / Claude / GPT -
-  Cloud-Aufrufe ausschliesslich ueber das Privacy Gateway (Pseudonymisierung).
+* **Multi-Provider-Inferenz mit Ausweich-Kaskade**: lokal (Ollama) oder Gemini / Claude / GPT;
+  Wiederholung mit Backoff, Ausweichmodell, Ausweich-Schluessel, lokales Modell und zuletzt das
+  deterministische Regelwerk. Cloud-Aufrufe ausschliesslich ueber das Privacy Gateway.
+* **Hintergrund-Jobs**: Analysen laufen asynchron mit Phase, Fortschritt, Restzeit und Abbruch
+  (`/api/v1/jobs`); `POST /documents/{id}/extract?wait=true` wartet fuer Skripte auf das Ergebnis.
 
 **Authentifizierung**: Ist `API_KEY` gesetzt, verlangen alle Endpunkte ausser
 `/health` den Header `X-API-Key`. Ohne gesetzten Wert ist die Pruefung deaktiviert -
@@ -130,6 +151,8 @@ dann kann jeder im Netz auch die Einstellungen aendern; produktiv immer setzen.
 TAGS_METADATA = [
     {"name": "System", "description": "Betriebszustand von Datenbank, Ollama und Modell."},
     {"name": "Dokumente", "description": "Upload, Extraktion, Compliance-Audit und Uebersicht."},
+    {"name": "Jobs", "description": "Asynchrone Analysen: Warteschlange, Fortschritt, Restzeit, Abbruch."},
+    {"name": "Lokale KI", "description": "Ollama erkennen, starten und stoppen (nur direkt am Server)."},
     {"name": "Audit-Ledger", "description": "Hash-verkettetes Pruefprotokoll (EU AI Act Art. 12, GoBD)."},
     {"name": "Human Oversight", "description": "Pruefbericht und Siegel durch eine Pruefperson (Art. 14)."},
     {"name": "Compliance Copilot", "description": "Dokumentbezogene Fragen an das aktive Modell."},
@@ -159,10 +182,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     signer = SystemSigner(settings.data_dir / ".signing.key")
     ledger = AuditLedger(engine, signer=signer)
     runtime = RuntimeSettingsStore(settings, engine)
+    budget = CloudBudget(settings.cloud_daily_token_limit, settings.data_dir / "ai_usage.json")
     router = InferenceRouter(
-        settings, runtime, llm, cloud_transport=getattr(app.state, "cloud_transport", None)
+        settings, runtime, llm, cloud_transport=getattr(app.state, "cloud_transport", None), budget=budget
     )
     vies = ViesClient(settings, transport=getattr(app.state, "vies_transport", None))
+    release = ReleaseManager(
+        FsPath(settings.release_repo_dir) if settings.release_repo_dir else BASE_DIR, APP_VERSION
+    )
 
     app.state.engine = engine
     app.state.repository = repository
@@ -170,10 +197,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ledger = ledger
     app.state.runtime = runtime
     app.state.router = router
+    app.state.budget = budget
     app.state.signer = signer
     app.state.vies = vies
-    app.state.release = ReleaseManager(
-        FsPath(settings.release_repo_dir) if settings.release_repo_dir else BASE_DIR, APP_VERSION
+    app.state.release = release
+    app.state.jobs = JobManager(
+        max_parallel=settings.analysis_workers,
+        retention_seconds=settings.job_retention_seconds,
+        stall_seconds=max(settings.ollama_timeout_seconds, settings.cloud_timeout_seconds) + 60,
+        is_paused=lambda: release.busy,
     )
     app.state.service = DocumentService(
         settings, repository, router, ledger=ledger, runtime=runtime, progress=PROGRESS
@@ -190,6 +222,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await app.state.jobs.shutdown()
         await router.aclose()
         await llm.aclose()
         await vies.aclose()
@@ -253,6 +286,62 @@ def get_runtime(request: Request) -> RuntimeSettingsStore:
 
 class ApiKeyError(Exception):
     """Fehlender oder falscher API-Key."""
+
+
+class LocalOnlyError(ServiceError):
+    """Aktion nur direkt am Server erlaubt (Prozesse starten, Releases einspielen)."""
+
+    code = "local_only"
+    status_code = 403
+    hint = "Direkt am Server (http://127.0.0.1) ausfuehren."
+
+
+class JobNotFoundError(ServiceError):
+    code = "job_not_found"
+    status_code = 404
+    hint = "Beendete Jobs bleiben JOB_RETENTION_SECONDS abrufbar; die Liste liefert GET /api/v1/jobs."
+
+
+class JobCancelledError(ServiceError):
+    code = "job_cancelled"
+    status_code = 409
+    hint = "Die Analyse wurde abgebrochen; der Beleg behaelt sein vorheriges Ergebnis."
+
+
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_local_request(request: Request) -> bool:
+    return (request.client.host if request.client else "") in _LOCAL_HOSTS
+
+
+def _analysis_summary(outcome: ExtractionOutcome) -> dict[str, object]:
+    scorecard = outcome.scorecard
+    return {
+        "document_id": outcome.record.id,
+        "score": scorecard.score if scorecard else None,
+        "band": scorecard.band.value if scorecard else None,
+        "release_recommendation": scorecard.release_recommendation if scorecard else None,
+        "release_blocked": scorecard.release_blocked if scorecard else None,
+        "provider": outcome.provider,
+        "model": outcome.compliance.model,
+        "heuristic": outcome.compliance.heuristic,
+        "failover": outcome.compliance.failover or [],
+        "duration_ms": outcome.duration_ms,
+        "audit_entry_id": outcome.audit_entry_id,
+    }
+
+
+def submit_analysis(jobs: JobManager, service: DocumentService, record: DocumentRecord) -> Job:
+    """Reiht die Pruefung eines Belegs ein (laeuft fuer ihn schon eine, kommt diese zurueck)."""
+
+    async def runner(context: JobContext) -> dict[str, object]:
+        current = await service.require_document(record.id)
+        outcome = await service.extract_and_audit(current, on_stage=context.stage, on_event=context.event)
+        return _analysis_summary(outcome)
+
+    path = "structured" if uses_structured_path(parse_einvoice(record)) else "llm"
+    return jobs.submit(document_id=record.id, title=record.original_filename, runner=runner, path=path)
 
 
 async def require_api_key(
@@ -349,6 +438,10 @@ def _register_exception_handlers(application: FastAPI) -> None:
     async def _handle_service_error(_request: Request, exc: ServiceError) -> JSONResponse:
         return _error_response(exc.status_code, exc.code, str(exc), exc.hint)
 
+    @application.exception_handler(SettingsError)
+    async def _handle_settings_error(_request: Request, exc: SettingsError) -> JSONResponse:
+        return _error_response(422, "invalid_settings", str(exc), "Eingaben im Einstellungsdialog pruefen.")
+
     @application.exception_handler(PdfReadError)
     async def _handle_pdf_error(_request: Request, exc: PdfReadError) -> JSONResponse:
         return _error_response(
@@ -418,6 +511,21 @@ async def _read_upload(upload: UploadFile, max_bytes: int) -> bytes:
                 f"Die Datei ueberschreitet das Limit von {max_bytes / 1_048_576:.1f} MB."
             )
     return bytes(buffer)
+
+
+def _settings_view(request: Request) -> dict[str, object]:
+    """Laufzeit-Konfiguration plus Betriebswerte (Regelwerk-Fallback, Budget, DLP) - Keys nur maskiert."""
+    settings: Settings = request.app.state.settings
+    runtime: RuntimeSettingsStore = request.app.state.runtime
+    budget: CloudBudget | None = getattr(request.app.state, "budget", None)
+    terms = [term for term in settings.dlp_terms.split(",") if term.strip()]
+    return {
+        **runtime.public_view(),
+        "heuristic_fallback": settings.heuristic_fallback,
+        "retry_delays": list(settings.retry_delays),
+        "cloud_budget": budget.status() if budget else None,
+        "dlp": {"ruleset_version": DLP_RULESET, "configured_terms": len(terms), "endpoint": "/api/v1/redact"},
+    }
 
 
 def _attachment_header(filename: str) -> str:
@@ -491,22 +599,23 @@ def _register_routes(application: FastAPI) -> None:
             logger.warning("Datenbank-Health fehlgeschlagen: %s", exc)
             database = DatabaseHealth(status="unavailable", detail=str(exc)[:300])
 
-        # --- Ollama ---
+        # --- Ollama (eingestelltes lokales Modell der Laufzeit-Konfiguration) ---
+        runtime: RuntimeSettingsStore = request.app.state.runtime
+        snap = runtime.snapshot()
+        local_model = snap.models["local"]
         started = time.perf_counter()
         try:
             models = await llm.list_models()
-            available = await llm.is_model_available(models)
+            wanted = {local_model, f"{local_model}:latest", local_model.removesuffix(":latest")}
+            available = any(name in wanted for name in models)
             ollama = OllamaHealth(
                 status="ok" if available else "degraded",
-                detail=(
-                    None
-                    if available
-                    else f"Modell '{settings.ollama_model}' ist nicht installiert."
-                ),
+                detail=None if available else f"Modell '{local_model}' ist nicht installiert.",
                 base_url=settings.ollama_base_url,
-                model=settings.ollama_model,
+                model=local_model,
                 model_available=available,
                 available_models=sorted(models),
+                suggested_model=None if available else suggest_local_model(local_model, models),
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
             )
         except LLMError as exc:
@@ -514,11 +623,8 @@ def _register_routes(application: FastAPI) -> None:
                 status="unavailable",
                 detail=str(exc)[:300],
                 base_url=settings.ollama_base_url,
-                model=settings.ollama_model,
+                model=local_model,
             )
-
-        runtime: RuntimeSettingsStore = request.app.state.runtime
-        snap = runtime.snapshot()
         is_cloud = snap.inference_mode in CLOUD_PROVIDERS
         inference = {
             "mode": snap.inference_mode.value,
@@ -526,6 +632,10 @@ def _register_routes(application: FastAPI) -> None:
             "is_cloud": is_cloud,
             "privacy_gateway_active": is_cloud,
             "configured": (not is_cloud) or bool(snap.key_for(snap.inference_mode.value)),
+            "uses_local": any(stage.provider is InferenceMode.LOCAL for stage in snap.effective_chain()),
+            "chain_length": len(snap.effective_chain()),
+            "heuristic_fallback": settings.heuristic_fallback,
+            "open_jobs": request.app.state.jobs.open_count,
         }
         components: list[ComponentHealth] = [database, ollama]
         if is_cloud:
@@ -599,52 +709,137 @@ def _register_routes(application: FastAPI) -> None:
     # --- POST /documents/{id}/extract --------------------------------------
     @application.post(
         "/documents/{document_id}/extract",
-        response_model=ExtractionResponse,
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=None,
         tags=["Dokumente"],
-        summary="Extraktion und Compliance-Audit ausfuehren",
+        summary="Pruefung starten (Hintergrund-Job; mit ?wait=true blockierend fuer Skripte)",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("extract", "rate_limit_extract_per_minute")),
         ],
         responses={
             **error_responses,
+            200: {"model": ExtractionResponse, "description": "Ergebnis (nur mit wait=true)"},
+            202: {"description": "Job angenommen - Zustand ueber GET /api/v1/jobs/{job_id}"},
+            409: {"model": ErrorResponse, "description": "Release-Wechsel laeuft oder Analyse abgebrochen"},
             422: {"model": ErrorResponse, "description": "Kein Text zum Dokument vorhanden"},
             429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"},
             502: {"model": ErrorResponse, "description": "Modellantwort unbrauchbar"},
-            503: {"model": ErrorResponse, "description": "Ollama nicht erreichbar"},
+            503: {"model": ErrorResponse, "description": "Keine KI-Stufe erreichbar und Regelwerk-Fallback aus"},
         },
     )
     async def extract_document(
         request: Request,
         document_id: str = Path(..., description="UUID des Dokuments."),
+        wait: bool = Query(False, description="true = auf das Ergebnis warten (Skripte, CI); Standard: sofort 202."),
         service: DocumentService = Depends(get_service),
-    ) -> ExtractionResponse:
-        """Startet beide LLM-Durchlaeufe und persistiert das Ergebnis.
+    ) -> JSONResponse:
+        """Nimmt die Pruefung sofort als Hintergrund-Job an (HTTP 202 mit ``job_id``).
 
-        Durchlauf 1 extrahiert die fachlichen Kerndaten, Durchlauf 2 fuehrt das
-        Compliance-Audit (EU AI Act + DSGVO) aus. Anschliessend laufen
-        deterministische Kontrollen: IBAN-Pruefsumme, Regex-basierter
-        PII-Scan als Zweitmeinung, Maskierung aller Treffer und die
-        Hochstufung auf "high", wenn eine Anhang-III-Kategorie belegt ist.
-
-        Der Aufruf ist wiederholbar; ein erneuter Aufruf ueberschreibt das
-        vorherige Ergebnis.
+        Ablauf in vier Phasen: Text-Layer & XML-Vorrang -> PII-Scanner & Privacy Vault ->
+        Paragraf-14-Extraktion & Pruefung -> EU AI Act, Scorecard & Ledger.  Danach laufen
+        deterministische Kontrollen (IBAN-Pruefsumme, Regex-PII-Scan als Zweitmeinung,
+        Maskierung, Anhang-III-Eskalation).  Faellt die ganze KI-Kaskade aus, schliesst das
+        Regelwerk die Pruefung gekennzeichnet ab.  Ein erneuter Aufruf ueberschreibt das
+        vorherige Ergebnis; laeuft fuer den Beleg bereits ein Job, kommt dieser zurueck.
         """
         if request.app.state.release.busy:
             raise ReleaseUpdateRunningError("Ein Release-Wechsel laeuft gerade - keine neue Analyse.")
         record = await service.require_document(document_id)
-        outcome = await service.extract_and_audit(record)
-        return ExtractionResponse(
-            id=outcome.record.id,
-            status=DocumentStatus(outcome.record.status),
-            model=outcome.compliance.model,
-            extraction=outcome.extraction,
-            compliance=outcome.compliance,
-            duration_ms=outcome.duration_ms,
-            scorecard=outcome.scorecard,
-            provider=outcome.provider,
-            audit_entry_id=outcome.audit_entry_id,
+        jobs: JobManager = request.app.state.jobs
+        job = submit_analysis(jobs, service, record)
+        if not wait:
+            return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=jobs.snapshot(job))
+        await jobs.wait(job)
+        if job.status == "cancelled":
+            raise JobCancelledError("Die Analyse wurde abgebrochen.")
+        if job.status != "done":
+            if job.exception is not None:
+                raise job.exception
+            raise ServiceError((job.error or {}).get("message", "Analyse fehlgeschlagen."))
+        updated = await service.require_document(document_id)
+        compliance = parse_compliance(updated)
+        result = job.result or {}
+        response = ExtractionResponse(
+            id=updated.id,
+            status=DocumentStatus(updated.status),
+            model=compliance.model if compliance else (updated.model or ""),
+            extraction=parse_extraction(updated),  # type: ignore[arg-type]
+            compliance=compliance,  # type: ignore[arg-type]
+            duration_ms=int(result.get("duration_ms") or 0),  # type: ignore[call-overload]
+            scorecard=parse_scorecard(updated),
+            provider=updated.provider or "local",
+            audit_entry_id=result.get("audit_entry_id"),  # type: ignore[arg-type]
         )
+        return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+    # --- Jobs ----------------------------------------------------------------
+    @application.post(
+        "/api/v1/jobs",
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["Jobs"],
+        summary="Einen oder mehrere Belege zur Pruefung einreihen (Batch)",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("extract", "rate_limit_extract_per_minute")),
+        ],
+    )
+    async def submit_jobs(
+        request: Request, body: JobSubmitRequest, service: DocumentService = Depends(get_service)
+    ) -> dict[str, object]:
+        """Jeder Beleg wird einzeln eingereiht; unbekannte IDs erscheinen unter ``rejected``."""
+        if request.app.state.release.busy:
+            raise ReleaseUpdateRunningError("Ein Release-Wechsel laeuft gerade - keine neue Analyse.")
+        jobs: JobManager = request.app.state.jobs
+        accepted: list[dict[str, object]] = []
+        rejected: list[dict[str, str]] = []
+        for document_id in dict.fromkeys(body.document_ids):
+            try:
+                record = await service.require_document(document_id)
+            except ServiceError as exc:
+                rejected.append({"document_id": document_id, "code": exc.code, "message": str(exc)})
+                continue
+            accepted.append(jobs.snapshot(submit_analysis(jobs, service, record)))
+        return {"jobs": accepted, "rejected": rejected}
+
+    @application.get(
+        "/api/v1/jobs",
+        tags=["Jobs"],
+        summary="Warteschlange: laufende, wartende und kuerzlich beendete Jobs",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def list_jobs(
+        request: Request, active: bool = Query(False, description="true = nur wartende und laufende Jobs.")
+    ) -> dict[str, object]:
+        jobs: JobManager = request.app.state.jobs
+        items = [jobs.snapshot(job) for job in jobs.list(include_finished=not active)]
+        return {"jobs": items, "open": jobs.open_count}
+
+    @application.get(
+        "/api/v1/jobs/{job_id}",
+        tags=["Jobs"],
+        summary="Zustand eines Jobs (Phase, Fortschritt 0-1, Restzeit, Ergebnis)",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def get_job(request: Request, job_id: str = Path(..., max_length=64)) -> dict[str, object]:
+        jobs: JobManager = request.app.state.jobs
+        job = jobs.get(job_id)
+        if job is None:
+            raise JobNotFoundError(f"Kein Job mit der ID '{job_id}'.")
+        return jobs.snapshot(job)
+
+    @application.post(
+        "/api/v1/jobs/{job_id}/cancel",
+        tags=["Jobs"],
+        summary="Job abbrechen (der Beleg behaelt sein vorheriges Ergebnis)",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def cancel_job(request: Request, job_id: str = Path(..., max_length=64)) -> dict[str, object]:
+        jobs: JobManager = request.app.state.jobs
+        job = jobs.cancel(job_id)
+        if job is None:
+            raise JobNotFoundError(f"Kein Job mit der ID '{job_id}'.")
+        return jobs.snapshot(job)
 
     # --- GET /documents ----------------------------------------------------
     @application.get(
@@ -990,12 +1185,80 @@ def _register_routes(application: FastAPI) -> None:
     async def copilot(
         body: CopilotRequest, document_id: str = Path(...), service: DocumentService = Depends(get_service)
     ) -> CopilotResponse:
-        """Antwort des aktiven Modells, geerdet auf nummeriertem Dokumenttext und Pruefergebnis."""
+        """Antwort des aktiven Modells, geerdet auf nummeriertem Dokumenttext und Pruefergebnis.
+
+        Mit ``progress_id`` liefert ``GET /api/v1/copilot/progress/{id}`` die Arbeitsschritte live
+        (inklusive Neuversuch und Wechsel auf ein Ausweichmodell).
+        """
         record = await service.require_document(document_id)
         result = await service.copilot(
-            record, body.question, [turn.model_dump() for turn in body.history]
+            record,
+            body.question,
+            [turn.model_dump() for turn in body.history],
+            thinking=body.thinking,
+            progress_id=body.progress_id,
         )
         return CopilotResponse.model_validate(result)
+
+    @application.get(
+        "/api/v1/copilot/progress/{progress_id}",
+        tags=["Compliance Copilot"],
+        summary="Live-Arbeitsschritte einer laufenden Copilot-Anfrage",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def copilot_progress(progress_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{6,64}$")) -> dict[str, object]:
+        return COPILOT_STEPS.get(progress_id)
+
+    # --- Lokale KI ---------------------------------------------------------------
+    @application.get(
+        "/api/v1/ai/local",
+        tags=["Lokale KI"],
+        summary="Lokale KI erkennen (Ollama, LM Studio): installiert, laeuft, steuerbar?",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def local_ai_status(request: Request) -> dict[str, object]:
+        settings_: Settings = request.app.state.settings
+        result = await anyio.to_thread.run_sync(local_ai.detect, settings_.ollama_base_url)
+        allowed = _is_local_request(request) or not settings_.local_ai_control_local_only
+        return {**result, "control_allowed": allowed and bool(result["controllable"])}
+
+    @application.post(
+        "/api/v1/ai/start-ollama",
+        tags=["Lokale KI"],
+        summary="Ollama im Hintergrund starten (Flash Attention, 8-Bit-KV-Cache)",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
+        responses={403: {"model": ErrorResponse, "description": "Nur direkt am Server"}},
+    )
+    async def local_ai_start(request: Request) -> dict[str, object]:
+        settings_: Settings = request.app.state.settings
+        if settings_.local_ai_control_local_only and not _is_local_request(request):
+            raise LocalOnlyError("Lokale KI laesst sich nur direkt am Server starten.")
+        result = await anyio.to_thread.run_sync(local_ai.start_ollama)
+        logger.info("Lokale KI starten: %s", result.get("message"))
+        return result
+
+    @application.post(
+        "/api/v1/ai/stop-local",
+        tags=["Lokale KI"],
+        summary="Ollama beenden und den Grafikspeicher freigeben",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
+        responses={403: {"model": ErrorResponse, "description": "Nur direkt am Server"}},
+    )
+    async def local_ai_stop(request: Request) -> dict[str, object]:
+        settings_: Settings = request.app.state.settings
+        if settings_.local_ai_control_local_only and not _is_local_request(request):
+            raise LocalOnlyError("Lokale KI laesst sich nur direkt am Server stoppen.")
+        if request.app.state.jobs.open_count:
+            raise ServiceError("Waehrend einer laufenden Analyse wird die lokale KI nicht gestoppt.")
+        result = await anyio.to_thread.run_sync(local_ai.stop_ollama)
+        logger.info("Lokale KI stoppen: %s", result.get("message"))
+        return result
 
     # --- Dashboard & Demo ---------------------------------------------------
     @application.get(
@@ -1033,8 +1296,8 @@ def _register_routes(application: FastAPI) -> None:
         summary="Aktive Inferenz- und Compliance-Konfiguration (Keys maskiert)",
         dependencies=[Depends(require_api_key)],
     )
-    async def get_runtime_settings(runtime: RuntimeSettingsStore = Depends(get_runtime)) -> dict[str, object]:
-        return runtime.public_view()
+    async def get_runtime_settings(request: Request) -> dict[str, object]:
+        return _settings_view(request)
 
     @application.post(
         "/api/settings",
@@ -1075,7 +1338,7 @@ def _register_routes(application: FastAPI) -> None:
                 risk_tier="none",
                 details={"before": before, "after": after},
             )
-        return runtime.public_view()
+        return _settings_view(request)
 
     @application.get(
         "/api/settings/models",
@@ -1138,8 +1401,10 @@ def _register_routes(application: FastAPI) -> None:
                 models = await llm.list_models()
                 wanted = {model, f"{model}:latest", model.removesuffix(":latest")}
                 if not any(name in wanted for name in models):
-                    return {"ok": False, "provider": mode.value, "model": model,
-                            "message": f"Ollama erreichbar, Modell '{model}' aber nicht installiert."}
+                    suggestion = suggest_local_model(model, models)
+                    return {"ok": False, "provider": mode.value, "model": model, "suggested_model": suggestion,
+                            "message": f"Ollama erreichbar, Modell '{model}' aber nicht installiert."
+                                       + (f" Installiert ist {suggestion} – per Klick übernehmen." if suggestion else "")}
                 message = f"Ollama erreichbar, Modell {model} installiert."
             else:
                 router: InferenceRouter = request.app.state.router
@@ -1179,7 +1444,8 @@ def _register_routes(application: FastAPI) -> None:
             if settings_.release_update_local_only and host not in {"127.0.0.1", "::1", "localhost"}:
                 raise ReleaseError("local_only", "Updates nur direkt am Server (localhost) einspielen.", 403)
             release = await anyio.to_thread.run_sync(
-                partial(manager.preflight, body.tag, body.commit, active_analyses=PROGRESS.active)
+                partial(manager.preflight, body.tag, body.commit,
+                        active_analyses=PROGRESS.active + request.app.state.jobs.open_count)
             )
             database_file = (
                 FsPath(settings_.resolved_database_url.removeprefix("sqlite:///")) if settings_.is_sqlite else None

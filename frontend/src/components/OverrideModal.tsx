@@ -5,7 +5,7 @@ import { api, ApiError } from "../lib/api";
 import { cx, RISK_LABELS } from "../lib/format";
 import type { AIActRiskLevel, DocumentDetail } from "../types/api";
 import { Scale } from "./icons";
-import { Modal, Spinner } from "./ui";
+import { AutoTextarea, Modal, Spinner } from "./ui";
 
 const AUDITOR_STORAGE = "eca-auditor-name";
 const MIN_REASON = 20;
@@ -123,7 +123,7 @@ export function OverrideModal({ document, open, onClose, onDone, notify }: Props
                 )}
               >
                 {RISK_LABELS[value]}
-                {value === current && <span className="ml-auto font-mono text-xs">aktuell</span>}
+                {value === current && <span className="ml-auto text-xs">aktuell</span>}
               </button>
             ))}
           </div>
@@ -149,12 +149,14 @@ export function OverrideModal({ document, open, onClose, onDone, notify }: Props
         <label className="block">
           <span className="flex items-baseline justify-between">
             <span className="label-caps">Begründung</span>
-            <span className={cx("font-mono text-xs tabular-nums", reason.trim().length >= MIN_REASON ? "text-subtle" : "text-warn")}>
+            <span className={cx("text-xs tabular-nums", reason.trim().length >= MIN_REASON ? "text-subtle" : "text-warn")}>
               {reason.trim().length}/{MIN_REASON}
             </span>
           </span>
-          <textarea
-            className="input mt-1 min-h-[96px]"
+          <AutoTextarea
+            className="mt-1 leading-relaxed"
+            minRows={4}
+            maxRows={9}
             name="override-reason"
             value={reason}
             onChange={(event) => setReason(event.target.value)}

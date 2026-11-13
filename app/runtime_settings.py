@@ -1,18 +1,32 @@
-"""Laufzeit-Einstellungen: Inferenz-Modus, Modelle, PII-Strenge, Provider-Keys.
+"""Laufzeit-Einstellungen: Inferenz-Modus, Modelle, Ausweich-Kaskade, PII-Strenge, Provider-Keys.
 
 Startwerte kommen aus der Umgebung (``Settings``); Aenderungen ueber
 ``POST /api/settings`` werden in der Tabelle ``app_settings`` gespeichert und
 ueberleben einen Neustart.
 
+Ausweich-Kaskade (seit v2.5)
+----------------------------
+1. Hauptmodell des aktiven Providers (Hauptschluessel)
+2. Ausweichmodell desselben Anbieters (``ausweich_modelle``, gleicher Schluessel)
+3. Ausweich-Schluessel der Reihe nach (``ausweich_schluessel``, hoechstens sechs, auch
+   mehrere Schluessel desselben Anbieters, z. B. ein zweiter Gemini-Key)
+4. Anbieter-Fallbacks aus v2.4 (``fallbacks``: weitere Anbieter mit ihrem Hauptschluessel,
+   ``local`` = lokales Ollama)
+5. Deterministisches Regelwerk (``services``), wenn alle KI-Stufen ausfallen
+
+Stufen 2 und 3 gelten nur, wenn der aktive Provider ein Cloud-Anbieter ist: Eine
+lokal eingestellte Pruefung geht nie automatisch in die Cloud.
+
 Schluesselverwaltung
 --------------------
-Provider-API-Keys werden mit **Fernet** (AES-128-CBC + HMAC-SHA256,
-``cryptography``) verschluesselt abgelegt.  Der Fernet-Schluessel stammt aus
-``SETTINGS_ENCRYPTION_KEY``; fehlt er, wird einmalig ``data/.settings.key``
-(Dateirechte 0600) erzeugt.  Ehrliche Einordnung: Liegt der Schluessel neben
-der Datenbank, schuetzt das vor dem versehentlichen Leak eines DB-Backups,
-nicht vor einem Angreifer mit Vollzugriff auf den Server.  Produktiv gehoert
-der Schluessel in einen Secret-Store (Vault, Azure Key Vault, AWS KMS).
+Provider-API-Keys und Ausweich-Schluessel werden mit **Fernet** (AES-128-CBC +
+HMAC-SHA256, ``cryptography``) verschluesselt abgelegt.  Der Fernet-Schluessel
+stammt aus ``SETTINGS_ENCRYPTION_KEY``; fehlt er, wird einmalig
+``data/.settings.key`` (Dateirechte 0600) erzeugt.  Ehrliche Einordnung: Liegt
+der Schluessel neben der Datenbank, schuetzt das vor dem versehentlichen Leak
+eines DB-Backups, nicht vor einem Angreifer mit Vollzugriff auf den Server.
+Produktiv gehoert der Schluessel in einen Secret-Store (Vault, Azure Key Vault,
+AWS KMS).
 
 Nach aussen verlassen Keys diese Klasse nur maskiert (``sk-...a1b2``).
 """
@@ -22,6 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 from dataclasses import dataclass, field
 from enum import Enum
@@ -59,12 +74,23 @@ CLOUD_PROVIDERS: tuple[InferenceMode, ...] = (
     InferenceMode.OPENAI,
 )
 
-#: Auswahl im Einstellungsdialog (freie Eingabe bleibt moeglich).
+#: Hoechstzahl der Ausweich-Schluessel.
+MAX_BACKUP_KEYS = 6
+
+#: Auswahl im Einstellungsdialog, solange kein Key hinterlegt ist (mit Key liefert die
+#: Modell-Liste des Anbieters die tatsaechlich verfuegbaren Modelle, neueste zuerst).
 SUGGESTED_MODELS: dict[str, list[str]] = {
     "local": ["qwen2.5:14b-instruct", "qwen2.5:7b-instruct", "llama3.1:8b-instruct-q8_0"],
-    "gemini": ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"],
-    "anthropic": ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5-20251001"],
-    "openai": ["gpt-4o", "gpt-4o-mini"],
+    "gemini": ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"],
+    "anthropic": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"],
+    "openai": ["gpt-4o"],
+}
+
+#: Vorschlag fuer das Ausweichmodell desselben Anbieters (leichter, seltener ueberlastet).
+SUGGESTED_FALLBACK_MODELS: dict[str, str] = {
+    "gemini": "gemini-3.7-flash",
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai": "gpt-4o",
 }
 
 PROVIDER_LABELS: dict[str, str] = {
@@ -73,6 +99,12 @@ PROVIDER_LABELS: dict[str, str] = {
     "anthropic": "Anthropic Claude",
     "openai": "OpenAI",
 }
+
+_BACKUP_ID = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+
+
+class SettingsError(ValueError):
+    """Ungueltige Einstellung (wird als HTTP 422 gemeldet)."""
 
 
 def mask_secret(value: str | None) -> str | None:
@@ -85,6 +117,39 @@ def mask_secret(value: str | None) -> str | None:
     return f"{prefix}...{value[-4:]}"
 
 
+@dataclass(frozen=True, slots=True)
+class BackupKey:
+    """Ein Ausweich-Schluessel (Stufe 3 der Kaskade)."""
+
+    id: str
+    provider: InferenceMode
+    model: str
+    api_key: str = field(repr=False)
+
+    def public(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "provider": self.provider.value,
+            "model": self.model,
+            "has_key": bool(self.api_key),
+            "key_hint": mask_secret(self.api_key),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ChainStage:
+    """Eine Stufe der effektiven Kaskade - ohne Schluessel, fuer Ledger und Oberflaeche."""
+
+    stage: str  # primary | ausweichmodell | ausweich_schluessel | fallback
+    provider: InferenceMode
+    model: str
+    backup_id: str | None = None
+
+    def public(self) -> dict[str, Any]:
+        return {"stage": self.stage, "provider": self.provider.value, "model": self.model,
+                **({"backup_id": self.backup_id} if self.backup_id else {})}
+
+
 @dataclass(slots=True)
 class RuntimeSnapshot:
     """Unveraenderlicher Blick auf die aktuelle Konfiguration."""
@@ -95,24 +160,54 @@ class RuntimeSnapshot:
     enforce_ustg_check: bool
     ai_act_escalation: bool
     keys: dict[str, str | None] = field(repr=False)
-    #: Ausweich-Provider in Reihenfolge (ohne den primaeren), z. B. ``[anthropic, local]``.
+    #: Anbieter-Fallbacks in Reihenfolge (ohne den primaeren), z. B. ``[anthropic, local]``.
     fallbacks: tuple[InferenceMode, ...] = ()
+    #: Ausweichmodell desselben Anbieters je Cloud-Provider ("" = aus).
+    ausweich_modelle: dict[str, str] = field(default_factory=dict)
+    #: Ausweich-Schluessel in Reihenfolge.
+    ausweich_schluessel: tuple[BackupKey, ...] = field(default=(), repr=False)
 
     @property
     def active_model(self) -> str:
         return self.models[self.inference_mode.value]
 
     @property
+    def is_cloud(self) -> bool:
+        return self.inference_mode in CLOUD_PROVIDERS
+
+    @property
+    def ausweich_modell(self) -> str:
+        """Ausweichmodell des aktiven Anbieters (leer, wenn aus oder gleich dem Hauptmodell)."""
+        if not self.is_cloud:
+            return ""
+        value = self.ausweich_modelle.get(self.inference_mode.value, "")
+        return "" if value == self.active_model else value
+
+    @property
     def chain(self) -> tuple[InferenceMode, ...]:
-        """Primaerer Provider plus Ausweich-Provider, ohne Dubletten."""
+        """Primaerer Provider plus Anbieter-Fallbacks, ohne Dubletten (Kompatibilitaet v2.4)."""
         return (self.inference_mode, *(mode for mode in self.fallbacks if mode is not self.inference_mode))
+
+    def effective_chain(self) -> list[ChainStage]:
+        """Alle KI-Stufen in der Reihenfolge, in der die Kaskade sie probiert."""
+        stages = [ChainStage("primary", self.inference_mode, self.active_model)]
+        if self.is_cloud:
+            if self.ausweich_modell:
+                stages.append(ChainStage("ausweichmodell", self.inference_mode, self.ausweich_modell))
+            stages.extend(
+                ChainStage("ausweich_schluessel", key.provider, key.model, key.id) for key in self.ausweich_schluessel
+            )
+        stages.extend(ChainStage("fallback", mode, self.models[mode.value]) for mode in self.chain[1:])
+        return stages
 
     def fingerprint(self) -> dict[str, Any]:
         """Was eine Bewertung beeinflusst: Provider-Kette und Modell je Stufe (fuer das Ledger)."""
+        stages = self.effective_chain()
         return {
             "inference_mode": self.inference_mode.value,
             "model": self.active_model,
-            "fallbacks": [{"provider": mode.value, "model": self.models[mode.value]} for mode in self.chain[1:]],
+            "fallbacks": [{"provider": stage.provider.value, "model": stage.model, "stage": stage.stage}
+                          for stage in stages[1:]],
         }
 
     def key_for(self, provider: str) -> str | None:
@@ -157,6 +252,8 @@ class RuntimeSettingsStore:
             "enforce_ustg_check": True,
             "ai_act_escalation": True,
             "fallbacks": (),
+            "ausweich_modelle": {provider.value: "" for provider in CLOUD_PROVIDERS},
+            "ausweich_schluessel": (),
             "keys": {
                 "gemini": settings.gemini_api_key,
                 "anthropic": settings.anthropic_api_key,
@@ -189,7 +286,18 @@ class RuntimeSettingsStore:
                     self._state[key] = self._coerce_strictness(value)
                 elif key == "fallbacks":
                     self._state[key] = self._coerce_fallbacks(json.loads(value))
-            except (InvalidToken, ValueError, TypeError):
+                elif key == "ausweich_modelle":
+                    loaded = json.loads(value)
+                    for provider in self._state["ausweich_modelle"]:
+                        self._state["ausweich_modelle"][provider] = str(loaded.get(provider) or "")
+                elif key == "ausweich_schluessel":
+                    raw = json.loads(self._fernet.decrypt(value.encode()).decode()) if value else []
+                    self._state[key] = tuple(
+                        BackupKey(str(item["id"]), InferenceMode(item["provider"]), str(item["model"]),
+                                  str(item["api_key"]))
+                        for item in raw[:MAX_BACKUP_KEYS]
+                    )
+            except (InvalidToken, ValueError, TypeError, KeyError):
                 logger.warning("Gespeicherte Einstellung '%s' nicht lesbar - Startwert bleibt.", key)
 
     def _persist(self, values: dict[str, str | None]) -> None:
@@ -239,7 +347,35 @@ class RuntimeSettingsStore:
                 ai_act_escalation=self._state["ai_act_escalation"],
                 keys=dict(self._state["keys"]),
                 fallbacks=self._state["fallbacks"],
+                ausweich_modelle=dict(self._state["ausweich_modelle"]),
+                ausweich_schluessel=self._state["ausweich_schluessel"],
             )
+
+    def _merge_backup_keys(self, entries: list[dict[str, Any]]) -> tuple[BackupKey, ...]:
+        """Ganze Liste uebernehmen; Eintraege ohne ``api_key`` behalten den Schluessel gleicher ID."""
+        if len(entries) > MAX_BACKUP_KEYS:
+            raise SettingsError(f"Hoechstens {MAX_BACKUP_KEYS} Ausweich-Schluessel.")
+        known = {key.id: key for key in self._state["ausweich_schluessel"]}
+        merged: list[BackupKey] = []
+        for entry in entries:
+            backup_id = str(entry.get("id") or "").strip()
+            if not _BACKUP_ID.fullmatch(backup_id) or any(item.id == backup_id for item in merged):
+                raise SettingsError("Ausweich-Schluessel braucht eine eindeutige ID (Buchstaben, Ziffern, - und _).")
+            try:
+                provider = InferenceMode(entry.get("provider"))
+            except ValueError as exc:
+                raise SettingsError("Unbekannter Anbieter fuer einen Ausweich-Schluessel.") from exc
+            if provider not in CLOUD_PROVIDERS:
+                raise SettingsError("Ausweich-Schluessel gibt es nur fuer Cloud-Anbieter (Gemini, Claude, OpenAI).")
+            secret = (entry.get("api_key") or "").strip()
+            previous = known.get(backup_id)
+            if not secret and previous is not None and previous.provider is provider:
+                secret = previous.api_key
+            if not secret:
+                raise SettingsError(f"Ausweich-Schluessel '{backup_id}' ohne API-Key.")
+            model = (entry.get("model") or "").strip() or self._state["models"][provider.value]
+            merged.append(BackupKey(backup_id, provider, model[:120], secret))
+        return tuple(merged)
 
     def _update(self, changes: dict[str, Any]) -> RuntimeSnapshot:
         persisted: dict[str, str | None] = {}
@@ -263,6 +399,19 @@ class RuntimeSettingsStore:
                     self._state["models"][provider] = model.strip()
             if models:
                 persisted["models"] = json.dumps(self._state["models"])
+            ausweich = changes.get("ausweich_modelle") or {}
+            for provider, model in ausweich.items():
+                if provider in self._state["ausweich_modelle"] and model is not None:
+                    self._state["ausweich_modelle"][provider] = model.strip()[:120]
+            if ausweich:
+                persisted["ausweich_modelle"] = json.dumps(self._state["ausweich_modelle"])
+            if changes.get("ausweich_schluessel") is not None:
+                self._state["ausweich_schluessel"] = self._merge_backup_keys(list(changes["ausweich_schluessel"]))
+                payload = json.dumps([
+                    {"id": key.id, "provider": key.provider.value, "model": key.model, "api_key": key.api_key}
+                    for key in self._state["ausweich_schluessel"]
+                ])
+                persisted["ausweich_schluessel"] = self._fernet.encrypt(payload.encode()).decode()
             keys = changes.get("api_keys") or {}
             for provider, secret in keys.items():
                 if provider not in self._state["keys"] or secret is None:
@@ -287,14 +436,20 @@ class RuntimeSettingsStore:
             "inference_mode": snap.inference_mode.value,
             "active_provider_label": PROVIDER_LABELS[snap.inference_mode.value],
             "active_model": snap.active_model,
-            "is_cloud": snap.inference_mode in CLOUD_PROVIDERS,
-            "privacy_gateway_active": snap.inference_mode in CLOUD_PROVIDERS,
+            "is_cloud": snap.is_cloud,
+            "privacy_gateway_active": snap.is_cloud,
             "models": snap.models,
             "suggested_models": SUGGESTED_MODELS,
+            "suggested_fallback_models": SUGGESTED_FALLBACK_MODELS,
             "pii_strictness": snap.pii_strictness.value,
             "enforce_ustg_check": snap.enforce_ustg_check,
             "ai_act_escalation": snap.ai_act_escalation,
             "fallbacks": [mode.value for mode in snap.chain[1:]],
+            "ausweich_modell": snap.ausweich_modell,
+            "ausweich_modelle": snap.ausweich_modelle,
+            "ausweich_schluessel": [key.public() for key in snap.ausweich_schluessel],
+            "max_ausweich_schluessel": MAX_BACKUP_KEYS,
+            "chain": [stage.public() for stage in snap.effective_chain()],
             "has_gemini_key": bool(snap.keys.get("gemini")),
             "has_anthropic_key": bool(snap.keys.get("anthropic")),
             "has_openai_key": bool(snap.keys.get("openai")),

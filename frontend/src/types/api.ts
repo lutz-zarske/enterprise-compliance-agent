@@ -59,6 +59,9 @@ export interface ComplianceAudit {
   privacy_gateway: Record<string, number> | null;
   /** Provider-Wechsel waehrend der Analyse (Ausweich-Kaskade, seit v2.4). */
   failover?: FailoverSwitch[] | null;
+  /** Alle KI-Stufen ausgefallen: das Regelwerk hat die Pruefung abgeschlossen (seit v2.5). */
+  heuristic?: boolean;
+  fallback_reason?: string | null;
   headline: string;
 }
 
@@ -70,6 +73,8 @@ export interface FailoverSwitch {
   reason_code: string;
   reason: string;
   at: string;
+  from_stage?: string;
+  to_stage?: string;
 }
 
 export type Money = number | string | null;
@@ -411,6 +416,7 @@ export interface KpiResponse {
   high_risk_quota: number;
   sealed_count: number;
   reference_count: number;
+  heuristic_count?: number;
   ruleset_version: string;
 }
 
@@ -429,8 +435,120 @@ export interface RuntimeSettings {
   has_anthropic_key: boolean;
   has_openai_key: boolean;
   masked_keys: Record<string, string | null>;
-  /** Ausweich-Provider in Reihenfolge (ohne den primaeren). */
+  /** Anbieter-Fallbacks in Reihenfolge (ohne den primaeren), "local" = Ollama. */
   fallbacks: InferenceMode[];
+  /** Ausweichmodell des aktiven Anbieters ("" = aus). */
+  ausweich_modell: string;
+  ausweich_modelle: Record<CloudMode, string>;
+  ausweich_schluessel: BackupKey[];
+  max_ausweich_schluessel: number;
+  suggested_fallback_models: Record<string, string>;
+  /** Effektive Kaskade in Reihenfolge (ohne Schluessel). */
+  chain: ChainStage[];
+  heuristic_fallback: boolean;
+  retry_delays: number[];
+  cloud_budget: CloudBudget | null;
+  dlp: { ruleset_version: string; configured_terms: number; endpoint: string };
+}
+
+export type CloudMode = Exclude<InferenceMode, "local">;
+
+export interface BackupKey {
+  id: string;
+  provider: CloudMode;
+  model: string;
+  has_key: boolean;
+  key_hint: string | null;
+}
+
+export interface ChainStage {
+  stage: "primary" | "ausweichmodell" | "ausweich_schluessel" | "fallback";
+  provider: InferenceMode;
+  model: string;
+  backup_id?: string;
+}
+
+export interface CloudBudget {
+  date: string;
+  tokens: number;
+  calls: number;
+  limit: number;
+  enabled: boolean;
+  remaining: number | null;
+}
+
+export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+
+export interface JobSnapshot {
+  job_id: string;
+  kind: string;
+  document_id: string;
+  title: string;
+  status: JobStatus;
+  phase: string | null;
+  phase_label: string | null;
+  phase_index: number;
+  phases: { key: string; label: string }[];
+  message: string;
+  progress: number;
+  eta_seconds: number | null;
+  queue_position: number;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  stalled: boolean;
+  cancel_requested: boolean;
+  events: { kind: "retry" | "switch"; at: number; [key: string]: unknown }[];
+  result: {
+    document_id: string;
+    score: number | null;
+    band: ScoreBand | null;
+    release_recommendation: string | null;
+    release_blocked: boolean | null;
+    provider: string;
+    model: string;
+    heuristic: boolean;
+    failover: FailoverSwitch[];
+    duration_ms: number;
+  } | null;
+  error: { code: string; message: string; hint?: string | null } | null;
+}
+
+export interface JobListResponse {
+  jobs: JobSnapshot[];
+  open: number;
+}
+
+export interface LocalAiStatus {
+  services: { key: string; name: string; port: number; running: boolean; installed: boolean; startable: boolean; stoppable: boolean }[];
+  running: boolean;
+  startable: boolean;
+  stoppable: boolean;
+  controllable: boolean;
+  control_allowed: boolean;
+  text: string;
+}
+
+export interface LocalAiResult {
+  ok: boolean;
+  message: string;
+  already_running?: boolean;
+}
+
+export interface CopilotProgress {
+  current: string | null;
+  steps: string[];
+  done: boolean;
+  started_at: number | null;
+}
+
+export type ThinkingLevel = "low" | "medium" | "high";
+
+export interface RedactResult {
+  redacted_text: string;
+  counts: Record<string, number>;
+  total: number;
+  ruleset_version: string;
 }
 
 export interface ModelCatalog {
@@ -484,6 +602,8 @@ export interface SettingsUpdate {
   enforce_ustg_check?: boolean;
   ai_act_escalation?: boolean;
   fallbacks?: InferenceMode[];
+  ausweich_modelle?: Partial<Record<CloudMode, string>>;
+  ausweich_schluessel?: { id: string; provider: CloudMode; model?: string; api_key?: string }[];
 }
 
 export interface ConnectionTestResult {
@@ -492,6 +612,7 @@ export interface ConnectionTestResult {
   model: string;
   message: string;
   code?: string;
+  suggested_model?: string | null;
 }
 
 export interface CopilotTurn {
@@ -505,6 +626,9 @@ export interface CopilotResponse {
   provider: string;
   duration_ms: number;
   reference: boolean;
+  heuristic?: boolean;
+  failover?: FailoverSwitch[] | null;
+  notice?: string | null;
 }
 
 /** POST /api/vat/verify - VIES-Momentaufnahme, nicht gespeichert, ohne Score-Einfluss. */
@@ -543,6 +667,7 @@ export interface HealthResponse {
     model: string;
     model_available: boolean;
     available_models: string[];
+    suggested_model?: string | null;
   };
   inference: {
     mode: InferenceMode;
@@ -550,5 +675,9 @@ export interface HealthResponse {
     is_cloud: boolean;
     privacy_gateway_active: boolean;
     configured: boolean;
+    uses_local?: boolean;
+    chain_length?: number;
+    heuristic_fallback?: boolean;
+    open_jobs?: number;
   } | null;
 }

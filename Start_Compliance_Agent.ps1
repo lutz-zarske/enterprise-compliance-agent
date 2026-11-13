@@ -21,6 +21,17 @@ $ErrorActionPreference = "Stop"
 $AppDir = $PSScriptRoot
 $RunDir = Join-Path $AppDir ".run"
 $LogDir = Join-Path $RunDir "logs"
+
+# Liegt das Projekt in einem OneDrive-Ordner (z. B. auf einem Zweitrechner), wandern
+# Logs und Python-Bytecode nach %LOCALAPPDATA%: Sonst synchronisiert OneDrive bei jedem
+# Start Hunderte kurzlebiger Dateien. Die PID-Dateien bleiben in .run (Stop-Skript).
+if ($AppDir -match '\\OneDrive' -and $env:LOCALAPPDATA) {
+    $LokalBasis = Join-Path $env:LOCALAPPDATA "EnterpriseComplianceAgent"
+    $LogDir = Join-Path $LokalBasis "logs"
+    $env:PYTHONPYCACHEPREFIX = Join-Path $LokalBasis "pycache"
+    New-Item -ItemType Directory -Force -Path $env:PYTHONPYCACHEPREFIX | Out-Null
+}
+New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 function Schreibe([string]$text, [string]$farbe = "Gray") { Write-Host $text -ForegroundColor $farbe }
@@ -95,7 +106,7 @@ try {
 
 if ($py.Geaendert -or $paketeFehlen) {
     Write-Host "[>] Installiere bzw. aktualisiere Python-Abhängigkeiten..." -ForegroundColor Cyan
-    & $PythonExe -m pip install --disable-pip-version-check -q -r (Join-Path $AppDir "requirements.txt")
+    & $PythonExe -m pip install --disable-pip-version-check --no-warn-script-location -q -r (Join-Path $AppDir "requirements.txt")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FEHLER: pip install ist fehlgeschlagen (siehe Ausgabe oben)." -ForegroundColor Red
         exit 1
@@ -209,21 +220,22 @@ try {
     Write-Host "[OK] Lokale Ollama-Engine ist aktiv." -ForegroundColor Green
 } catch {
     Write-Host "[i] Hinweis: Lokale Ollama-Engine ist nicht aktiv." -ForegroundColor Yellow
-    Write-Host "    (Für lokale 14B-Inferenz bei Bedarf 'ollama serve' starten." -ForegroundColor DarkGray
-    Write-Host "     Cloud-Modelle [Gemini/Claude/GPT] sowie Musterdaten-Audits funktionieren sofort.)" -ForegroundColor DarkGray
+    Write-Host "    (Start per Klick in der Oberfläche: Hinweis 'Lokale KI aus' oder Einstellungen > KI-Modelle." -ForegroundColor DarkGray
+    Write-Host "     Cloud-Modelle, Musterdaten und das Regelwerk-Audit funktionieren sofort.)" -ForegroundColor DarkGray
 }
 
-# 5. Browser öffnen
+# 5. Browser öffnen (127.0.0.1 statt localhost: Windows löst localhost zuerst nach ::1 auf)
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "   Enterprise Compliance Agent ist vollständig online!   " -ForegroundColor Green
-Write-Host "   URL: http://localhost:$FrontendPort                     " -ForegroundColor Green
+Write-Host "   URL: http://127.0.0.1:$FrontendPort                     " -ForegroundColor Green
+Write-Host "   Logs: $LogDir" -ForegroundColor DarkGray
 Write-Host "   Beenden: Stop_Compliance_Agent.bat                     " -ForegroundColor DarkGray
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host ""
 
 if (-not $NoBrowser) {
-    Start-Process "http://localhost:$FrontendPort"
+    Start-Process "http://127.0.0.1:$FrontendPort"
 }
 
 # Das grüne [OK] noch 3 Sekunden sichtbar lassen, bevor sich das Fenster schließt.

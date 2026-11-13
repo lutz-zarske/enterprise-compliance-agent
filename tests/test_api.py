@@ -140,7 +140,7 @@ def test_extraktion_liefert_strukturierte_daten_und_compliance_audit(
     client: TestClient, invoice_pdf: bytes
 ) -> None:
     document_id = uploaded_document_id(client, invoice_pdf)
-    response = client.post(f"/documents/{document_id}/extract")
+    response = client.post(f"/documents/{document_id}/extract?wait=true")
     body = response.json()
 
     assert response.status_code == 200
@@ -170,7 +170,7 @@ def test_extraktion_liefert_strukturierte_daten_und_compliance_audit(
 def test_pii_wird_nur_maskiert_persistiert(client: TestClient, invoice_pdf: bytes) -> None:
     """Kernversprechen des Projekts: keine Klartext-PII in der Datenbank."""
     document_id = uploaded_document_id(client, invoice_pdf)
-    client.post(f"/documents/{document_id}/extract")
+    client.post(f"/documents/{document_id}/extract?wait=true")
 
     detail = client.get(f"/documents/{document_id}").json()
     gdpr = detail["compliance"]["gdpr"]
@@ -211,7 +211,7 @@ def test_extraktion_ergaenzt_fehlende_pflichtangaben(
     }
 
     document_id = uploaded_document_id(client, simple_pdf)
-    issues = client.post(f"/documents/{document_id}/extract").json()["extraction"]["issues"]
+    issues = client.post(f"/documents/{document_id}/extract?wait=true").json()["extraction"]["issues"]
 
     assert any("Rechnungsnummer" in issue for issue in issues)
     assert any("Ausstellungsdatum" in issue for issue in issues)
@@ -227,42 +227,70 @@ def test_extraktion_ohne_ki_bezug_bleibt_bei_not_applicable(
     }
 
     document_id = uploaded_document_id(client, simple_pdf)
-    compliance = client.post(f"/documents/{document_id}/extract").json()["compliance"]
+    compliance = client.post(f"/documents/{document_id}/extract?wait=true").json()["compliance"]
 
     assert compliance["ai_act"]["overall_risk_level"] == "not_applicable"
     assert compliance["ai_act"]["is_high_risk"] is False
 
 
-def test_extraktion_meldet_ollama_ausfall_als_503(
-    client: TestClient, invoice_pdf: bytes, fake_ollama: FakeOllama
+def test_extraktion_ohne_regelwerk_fallback_meldet_ollama_ausfall_als_503(
+    make_client: Callable[..., TestClient], invoice_pdf: bytes, fake_ollama: FakeOllama
 ) -> None:
+    client = make_client(heuristic_fallback=False)
     document_id = uploaded_document_id(client, invoice_pdf)
     fake_ollama.offline = True
 
-    response = client.post(f"/documents/{document_id}/extract")
+    response = client.post(f"/documents/{document_id}/extract?wait=true")
     error = response.json()["error"]
 
     assert response.status_code == 503
     assert error["code"] == "ollama_unavailable"
     assert "ollama serve" in error["hint"]
 
-    # Der Fehler ist am Dokument dokumentiert, nicht verschluckt.
+    # Der Fehler ist am Dokument dokumentiert - verstaendlich, ohne Klassennamen.
     detail = client.get(f"/documents/{document_id}").json()
     assert detail["status"] == "failed"
-    assert "OllamaUnavailableError" in detail["error"]
+    assert "nicht erreichbar" in detail["error"]
+    assert "Error" not in detail["error"]
+
+
+def test_extraktion_ohne_modell_schliesst_mit_regelwerk_ab(
+    client: TestClient, invoice_pdf: bytes, fake_ollama: FakeOllama
+) -> None:
+    """Zero-Failure: Faellt jede KI-Stufe aus, liefert das Regelwerk ein valides, gekennzeichnetes Ergebnis."""
+    document_id = uploaded_document_id(client, invoice_pdf)
+    fake_ollama.offline = True
+
+    response = client.post(f"/documents/{document_id}/extract?wait=true")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["provider"] == "heuristic"
+    assert body["compliance"]["heuristic"] is True
+    assert "nicht erreichbar" in body["compliance"]["fallback_reason"]
+    # Recruiting-KI im Beleg: konservativ Hochrisiko (Anhang III Nr. 4), Score gedeckelt.
+    assert body["compliance"]["ai_act"]["overall_risk_level"] == "high"
+    assert body["scorecard"]["score"] <= 59
+    assert body["extraction"]["document_number"] == "RE-2024-0815"
+    assert body["extraction"]["iban"] == "DE89370400440532013000"
+    assert body["compliance"]["gdpr"]["contains_special_categories"] is True  # Attest -> Art. 9
+
+    entry = client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"][0]
+    assert entry["event_type"] == "analysis"
+    assert entry["details"]["heuristic_fallback"] is True
+    assert entry["result_summary"].startswith("Regelbasiertes Referenz-Audit")
 
 
 def test_extraktion_ist_wiederholbar(
     client: TestClient, invoice_pdf: bytes, fake_ollama: FakeOllama
 ) -> None:
     document_id = uploaded_document_id(client, invoice_pdf)
-    client.post(f"/documents/{document_id}/extract")
+    client.post(f"/documents/{document_id}/extract?wait=true")
 
     updated = copy.deepcopy(DEFAULT_COMPLIANCE)
     updated["ai_act"]["systems"][0]["annex_iii_categories"] = ["critical_infrastructure"]
     fake_ollama.compliance_response = updated
 
-    second = client.post(f"/documents/{document_id}/extract").json()
+    second = client.post(f"/documents/{document_id}/extract?wait=true").json()
     assert second["compliance"]["ai_act"]["systems"][0]["annex_iii_categories"] == [
         "critical_infrastructure"
     ]
@@ -277,7 +305,7 @@ def test_uebersicht_zeigt_compliance_kennzahlen_je_zeile(
     client: TestClient, invoice_pdf: bytes, simple_pdf: bytes
 ) -> None:
     extracted_id = uploaded_document_id(client, invoice_pdf)
-    client.post(f"/documents/{extracted_id}/extract")
+    client.post(f"/documents/{extracted_id}/extract?wait=true")
     uploaded_document_id(client, simple_pdf, filename="klein.pdf")
 
     body = client.get("/documents").json()
@@ -298,7 +326,7 @@ def test_uebersicht_zeigt_compliance_kennzahlen_je_zeile(
 
 def test_uebersicht_filtert_und_blaettert(client: TestClient, invoice_pdf: bytes) -> None:
     first = uploaded_document_id(client, invoice_pdf)
-    client.post(f"/documents/{first}/extract")
+    client.post(f"/documents/{first}/extract?wait=true")
     uploaded_document_id(client, build_second_pdf(), filename="zweite.pdf")
 
     filtered = client.get("/documents", params={"status": "extracted"}).json()
@@ -327,7 +355,7 @@ def test_detailansicht_enthaelt_textvorschau_und_pruefsumme(
 def test_unbekannte_id_liefert_404_im_einheitlichen_fehlerformat(client: TestClient) -> None:
     for method, path in (
         ("get", "/documents/gibt-es-nicht"),
-        ("post", "/documents/gibt-es-nicht/extract"),
+        ("post", "/documents/gibt-es-nicht/extract?wait=true"),
     ):
         response = getattr(client, method)(path)
         error = response.json()["error"]

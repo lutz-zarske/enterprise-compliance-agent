@@ -49,7 +49,7 @@ def test_xrechnung_xml_upload_und_analyse_ohne_modell(client: TestClient, fake_o
     document_id = response.json()["id"]
     assert response.json()["page_count"] == 0
 
-    extracted = client.post(f"/documents/{document_id}/extract")
+    extracted = client.post(f"/documents/{document_id}/extract?wait=true")
     assert extracted.status_code == 200, extracted.text
     body = extracted.json()
     assert (body["model"], body["provider"]) == ("en16931-parser", "structured")
@@ -79,7 +79,7 @@ def test_hybride_pdf_upload(client: TestClient) -> None:
 
 def test_hybride_pdf_mit_diskrepanz_ueber_api(client: TestClient) -> None:
     document_id = _hybrid_id(client, visual_override={"grand": Decimal("5812.00")})
-    card = client.post(f"/documents/{document_id}/extract").json()["scorecard"]
+    card = client.post(f"/documents/{document_id}/extract?wait=true").json()["scorecard"]
     primacy = next(c for t in card["tiles"] for c in t["checks"] if c["id"] == "xml_primacy")
     assert primacy["status"] == "warn" and primacy["deduction"] == 10
     assert card["score"] == 90
@@ -132,7 +132,7 @@ def test_batch_mit_pdf_und_xml(client: TestClient) -> None:
 
 def test_zertifikat_enthaelt_e_rechnungs_abschnitt(client: TestClient) -> None:
     document_id = _hybrid_id(client)
-    client.post(f"/documents/{document_id}/extract")
+    client.post(f"/documents/{document_id}/extract?wait=true")
     html = client.get(f"/documents/{document_id}/report").text
     assert "E-Rechnung (EN 16931)" in html and "factur-x.xml" in html
     assert "keine KI-Inferenz" in html
@@ -160,7 +160,7 @@ def test_paket_erst_nach_analyse(client: TestClient) -> None:
 
 def test_paket_hybride_rechnung(client: TestClient) -> None:
     document_id = _hybrid_id(client)
-    client.post(f"/documents/{document_id}/extract")
+    client.post(f"/documents/{document_id}/extract?wait=true")
     response = client.get(f"/api/documents/{document_id}/export/gobd")
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "application/zip"
@@ -192,7 +192,7 @@ def test_paket_hybride_rechnung(client: TestClient) -> None:
 def test_paket_reine_pdf_ohne_xml(client: TestClient, fake_ollama: FakeOllama) -> None:
     fake_ollama.extraction_response = {"doc_type": "invoice", "sender": "Muster GmbH", "total_amount": 1190}
     document_id = uploaded_document_id(client, build_pdf([PLAIN_INVOICE]), filename="Rechnung_März.pdf")
-    assert client.post(f"/documents/{document_id}/extract").status_code == 200
+    assert client.post(f"/documents/{document_id}/extract?wait=true").status_code == 200
     response = client.get(f"/api/documents/{document_id}/export/gobd")
     names = _zip(response.content).namelist()
     assert names == [
@@ -205,7 +205,7 @@ def test_paket_reine_pdf_ohne_xml(client: TestClient, fake_ollama: FakeOllama) -
 
 def test_manipuliertes_paket_wird_erkannt(client: TestClient) -> None:
     document_id = _hybrid_id(client)
-    client.post(f"/documents/{document_id}/extract")
+    client.post(f"/documents/{document_id}/extract?wait=true")
     original = client.get(f"/api/documents/{document_id}/export/gobd").content
     fingerprint = client.get("/api/audit/signing-key").json()["fingerprint"]
 
@@ -239,7 +239,7 @@ def test_manipuliertes_paket_wird_erkannt(client: TestClient) -> None:
 
 def test_paket_bei_fehlender_originaldatei(client: TestClient, settings) -> None:
     document_id = _hybrid_id(client)
-    client.post(f"/documents/{document_id}/extract")
+    client.post(f"/documents/{document_id}/extract?wait=true")
     for file in settings.upload_path.glob(f"{document_id}.*"):
         file.unlink()
     response = client.get(f"/api/documents/{document_id}/export/gobd")
@@ -287,7 +287,7 @@ def test_copilot_ohne_musterantwort_fuer_fremde_e_rechnung(client: TestClient, f
     pdf = build_hybrid_pdf(HYBRID_INVOICE, visual_override={"grand": Decimal("5812.00")})
     response = _upload(client, pdf, "Rechnung_ZUGFeRD_Hybrid.pdf", "application/pdf")
     document_id = response.json()["id"]
-    client.post(f"/documents/{document_id}/extract")
+    client.post(f"/documents/{document_id}/extract?wait=true")
     answer = client.post(
         f"/documents/{document_id}/copilot", json={"question": "Welche Pflichtangaben fehlen in dieser Rechnung?"}
     ).json()

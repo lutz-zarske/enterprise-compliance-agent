@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "../lib/format";
-import { popoverStyle } from "../lib/popover";
+import { popoverStyle, usePopoverExclusive } from "../lib/popover";
 import { Check, ChevronDown } from "./icons";
 
 export interface SelectOption<T extends string = string> {
@@ -35,6 +35,9 @@ export function Select<T extends string = string>({ value, options, onChange, ar
   const listRef = useRef<HTMLUListElement>(null);
   const id = useId();
   const selected = options.find((option) => option.value === value);
+  const close = useCallback(() => setOpen(false), []);
+  // Hoechstens ein Menue offen: oeffnet sich ein anderes, schliesst dieses.
+  usePopoverExclusive(open, close, `select-${id}`);
 
   useEffect(() => {
     if (open) setActive(Math.max(0, options.findIndex((option) => option.value === value)));
@@ -64,7 +67,9 @@ export function Select<T extends string = string>({ value, options, onChange, ar
 
   useLayoutEffect(() => {
     if (open && buttonRef.current) {
-      setStyle(popoverStyle(buttonRef.current.getBoundingClientRect(), { width, align: "right" }));
+      const rect = buttonRef.current.getBoundingClientRect();
+      // Mindestens so breit wie das Feld; am Fensterrand geklemmt (popoverStyle).
+      setStyle(popoverStyle(rect, { width: Math.max(width, Math.round(rect.width)), align: "right" }));
     }
   }, [open, width]);
 

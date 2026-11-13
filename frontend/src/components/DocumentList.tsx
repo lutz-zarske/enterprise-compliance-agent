@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DocumentSummary } from "../types/api";
 import { cx, DOC_TYPE_LABELS, formatBytes, formatDate, formatMoney, toNumber, TONE_CLASSES, toneForBand } from "../lib/format";
-import { AlertTriangle, Archive, ArchiveRestore, FileText, Hourglass, Lock, Pin, Search, XCircle } from "./icons";
+import { AlertTriangle, Archive, ArchiveRestore, FileText, Hourglass, ListChecks, Lock, Pin, Search, XCircle } from "./icons";
 import { Select } from "./Select";
 import { EmptyState, isTypingTarget, Kbd, Spinner } from "./ui";
 
@@ -55,9 +55,17 @@ function StatusBadge({ doc }: { doc: DocumentSummary }) {
       </span>
     );
   }
+  if (doc.status === "extracted" && doc.provider === "heuristic") {
+    return (
+      <span className="chip border-warn-line bg-warn-soft text-warn" title="Regelbasiertes Referenz-Audit – alle KI-Stufen waren überlastet. Bei Bedarf neu prüfen.">
+        <AlertTriangle size={12} aria-hidden="true" /> Regelwerk-Audit
+      </span>
+    );
+  }
   return (
     <span className="chip border-line bg-surface-2 text-muted">
-      <Hourglass size={12} aria-hidden="true" /> In Prüfung
+      <Hourglass size={12} aria-hidden="true" />
+      {doc.status === "uploaded" ? "Ungeprüft" : doc.status === "processing" ? "Analyse läuft" : "Siegel offen"}
     </span>
   );
 }
@@ -67,16 +75,16 @@ function MetaLine({ doc }: { doc: DocumentSummary }) {
   const parts: React.ReactNode[] =
     doc.status === "extracted"
       ? [
-          `${doc.provider === "reference" ? "Referenz · " : ""}${DOC_TYPE_LABELS[doc.doc_type ?? "other"]}`,
+          `${doc.provider === "reference" ? "Referenz · " : doc.provider === "heuristic" ? "Regelwerk · " : ""}${DOC_TYPE_LABELS[doc.doc_type ?? "other"]}`,
           doc.sender,
-          doc.total_amount != null ? <span className="font-mono tabular-nums">{formatMoney(doc.total_amount, doc.currency)}</span> : null,
-          doc.document_date ? <span className="font-mono tabular-nums">{formatDate(doc.document_date)}</span> : null,
+          doc.total_amount != null ? <span className="tabular-nums">{formatMoney(doc.total_amount, doc.currency)}</span> : null,
+          doc.document_date ? <span className="tabular-nums">{formatDate(doc.document_date)}</span> : null,
         ]
       : doc.status === "processing"
         ? ["Analyse läuft…"]
         : doc.status === "failed"
           ? ["Erneut prüfen oder Modell wechseln"]
-          : [`Hochgeladen ${formatDate(doc.created_at)}`, <span key="size" className="font-mono tabular-nums">{formatBytes(doc.size_bytes)}</span>];
+          : [`Hochgeladen ${formatDate(doc.created_at)}`, <span key="size" className="tabular-nums">{formatBytes(doc.size_bytes)}</span>];
   const shown = parts.filter(Boolean);
   return (
     <span className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs text-subtle">
@@ -94,7 +102,10 @@ function MetaLine({ doc }: { doc: DocumentSummary }) {
 interface Props {
   documents: DocumentSummary[];
   selectedId: string | null;
-  extractingId: string | null;
+  /** Belege mit wartendem oder laufendem Pruef-Job. */
+  analysingIds: ReadonlySet<string>;
+  /** Batch: alle ungeprueften Belege einreihen (fehlt ohne Backend). */
+  onAnalyzeAll?: (ids: string[]) => void;
   onSelect: (id: string) => void;
   onTogglePin: (doc: DocumentSummary) => void;
   onToggleArchive: (doc: DocumentSummary) => void;
@@ -102,7 +113,7 @@ interface Props {
   shortcutsEnabled: boolean;
 }
 
-export function DocumentList({ documents, selectedId, extractingId, onSelect, onTogglePin, onToggleArchive, shortcutsEnabled }: Props) {
+export function DocumentList({ documents, selectedId, analysingIds, onAnalyzeAll, onSelect, onTogglePin, onToggleArchive, shortcutsEnabled }: Props) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
@@ -144,6 +155,10 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
   }, [documents, query, filter, sort]);
 
   const listRef = useRef<HTMLUListElement>(null);
+  const pending = useMemo(
+    () => documents.filter((doc) => !doc.archived && (doc.status === "uploaded" || doc.status === "failed") && !analysingIds.has(doc.id)),
+    [documents, analysingIds],
+  );
 
   /** Naechstes/vorheriges Dokument in der sichtbaren Reihenfolge (Filter und Sortierung). */
   const move = useCallback(
@@ -198,6 +213,16 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-fg">Dokumente</h2>
           <span className="flex items-center gap-2">
+            {onAnalyzeAll && pending.length > 1 && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => onAnalyzeAll(pending.map((doc) => doc.id))}
+                title="Alle ungeprüften Belege nacheinander im Hintergrund prüfen"
+              >
+                <ListChecks size={13} aria-hidden="true" /> <span className="tabular-nums">{pending.length}</span> prüfen
+              </button>
+            )}
             <span className="hidden items-center gap-1 text-xs text-subtle xl:flex" title="Nächstes / vorheriges Dokument (auch Pfeiltasten)">
               <Kbd>J</Kbd>
               <Kbd>K</Kbd>
@@ -234,7 +259,7 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
               )}
             >
               {option.label}
-              <span className="font-mono tabular-nums opacity-80">{counts[option.value]}</span>
+              <span className="tabular-nums opacity-80">{counts[option.value]}</span>
             </button>
           ))}
         </div>
@@ -262,7 +287,7 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
           const title = doc.document_number ? `Nr. ${doc.document_number}` : doc.filename;
           return (
             <li key={doc.id}>
-              <div className={cx("group flex items-center gap-0.5 pr-2 transition-colors duration-150", selected ? "bg-accent-soft" : "hover:bg-surface-2")}>
+              <div className={cx("group flex items-center gap-0.5 pr-2 transition-colors duration-150", selected ? "bg-accent-soft" : "hover:bg-surface-hover")}>
                 <button
                   type="button"
                   onClick={() => onSelect(doc.id)}
@@ -272,12 +297,12 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
                 >
                   <span
                     className={cx(
-                      "flex h-10 w-11 shrink-0 flex-col items-center justify-center rounded-lg border font-mono",
+                      "flex h-10 w-11 shrink-0 flex-col items-center justify-center rounded-lg border",
                       doc.compliance_score != null ? TONE_CLASSES[tone] : "border-line bg-surface-2 text-subtle",
                     )}
                     aria-label={doc.compliance_score != null ? `Compliance-Score ${doc.compliance_score} von 100` : "Noch nicht geprüft"}
                   >
-                    {extractingId === doc.id ? <Spinner size={14} /> : <span className="text-sm font-semibold tabular-nums" aria-hidden="true">{doc.compliance_score ?? "–"}</span>}
+                    {analysingIds.has(doc.id) ? <Spinner size={14} /> : <span className="text-sm font-semibold tabular-nums" aria-hidden="true">{doc.compliance_score ?? "–"}</span>}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -289,7 +314,7 @@ export function DocumentList({ documents, selectedId, extractingId, onSelect, on
                       <span className="mt-1 flex flex-wrap gap-1">
                         {isHighRisk(doc) && <span className="chip border-bad-line bg-bad-soft text-bad">EU AI Act Anhang III</span>}
                         {doc.einvoice_profile && (
-                          <span className="chip border-accent-line bg-accent-soft font-mono text-accent">E-Rechnung · {doc.einvoice_profile}</span>
+                          <span className="chip border-accent-line bg-accent-soft text-accent">E-Rechnung · {doc.einvoice_profile}</span>
                         )}
                       </span>
                     )}

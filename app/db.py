@@ -257,6 +257,8 @@ class DocumentRepository(Protocol):
 
     async def mark_failed(self, document_id: str, error: str) -> None: ...
 
+    async def restore_status(self, document_id: str, status: str) -> None: ...
+
     async def ping(self) -> dict[str, Any]: ...
 
 
@@ -439,6 +441,10 @@ class SqlDocumentRepository:
         await anyio.to_thread.run_sync(
             partial(self._update, document_id, {"status": "failed", "error": error[:2000]})
         )
+
+    async def restore_status(self, document_id: str, status: str) -> None:
+        """Nach einem Abbruch: vorheriger Status, vorhandenes Ergebnis bleibt unangetastet."""
+        await anyio.to_thread.run_sync(partial(self._update, document_id, {"status": status, "error": None}))
 
     async def ping(self) -> dict[str, Any]:
         return await anyio.to_thread.run_sync(self._ping)

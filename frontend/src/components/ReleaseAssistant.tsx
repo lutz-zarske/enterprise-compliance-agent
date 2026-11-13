@@ -70,8 +70,8 @@ export function ReleasePanel({ initial, onApplied, notify }: {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-fg">
-          Installiert: <span className="font-mono tabular-nums">v{status?.current_version ?? "…"}</span>
-          {status?.current_commit && <span className="ml-2 font-mono text-xs tabular-nums text-subtle">{status.current_commit.slice(0, 10)}</span>}
+          Installiert: <span className="tabular-nums">v{status?.current_version ?? "…"}</span>
+          {status?.current_commit && <span className="ml-2 text-xs tabular-nums text-subtle">{status.current_commit.slice(0, 10)}</span>}
         </p>
         <button className="btn" onClick={() => void check()} disabled={checking || busy}>
           {checking ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />} Nach Updates suchen

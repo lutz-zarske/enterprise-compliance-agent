@@ -15,13 +15,17 @@ regeln), die das Modellergebnis korrigieren statt ihm blind zu vertrauen.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import re
+import time
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import anyio.to_thread
 
@@ -37,7 +41,17 @@ from app.extractors import (
     to_extraction,
 )
 from app.extractors.einvoice import looks_like_xml
-from app.llm import PROMPT_HASH, ComplianceAuditPayload, StructuredLLMClient
+from app.heuristics import (
+    HEURISTIC_LABEL,
+    HEURISTIC_MODEL,
+    HEURISTIC_PROVIDER,
+    heuristic_audit,
+    heuristic_copilot_answer,
+    heuristic_extraction,
+)
+from app.inference import is_failover_error
+from app.jobs import PHASES
+from app.llm import PROMPT_HASH, ComplianceAuditPayload, LLMError, StructuredLLMClient
 from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import PrivacyVault
 from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
@@ -181,6 +195,13 @@ def sanitize_filename(filename: str) -> str:
 
 def compute_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def describe_failure(exc: BaseException) -> str:
+    """Ruhige, verstaendliche Fehlermeldung fuer Beleg und Oberflaeche - nie ein Klassenname."""
+    if isinstance(exc, (LLMError, ServiceError)):
+        return str(exc)
+    return "Unerwarteter Fehler bei der Analyse – Details stehen im Serverprotokoll."
 
 
 def _truncate_for_prompt(text: str, limit: int) -> str:
@@ -338,13 +359,12 @@ def uses_structured_path(einvoice: EInvoiceData | None) -> bool:
 # Fortschritt der Pipeline (fuer den Live-Audit-Stepper im Frontend)
 # ---------------------------------------------------------------------------
 
-#: Reihenfolge der echten Verarbeitungsschritte in ``extract_and_audit``.
-PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
-    ("text_check", "Text-Layer & PDF-Check"),
-    ("pii_scan", "PII-Scanner & DSGVO-Maskierung"),
-    ("ustg_check", "§ 14 UStG Rechnungsprüfung"),
-    ("ai_act", "EU AI Act Risikobewertung"),
-)
+#: Reihenfolge der echten Verarbeitungsschritte in ``extract_and_audit`` (eine Quelle: ``app.jobs``).
+PIPELINE_STAGES: tuple[tuple[str, str], ...] = tuple((key, label) for key, label, _weight in PHASES)
+
+#: Rueckrufe fuer Live-Fortschritt: Phase (Job-Monitor) und Kaskaden-Ereignis (Neuversuch, Wechsel).
+StageHook = Callable[[str], None]
+EventHook = Callable[[str, dict[str, Any]], None]
 
 
 class ProgressTracker:
@@ -417,9 +437,15 @@ class DocumentService:
         self._progress = progress or PROGRESS
 
     # --- Konfiguration -----------------------------------------------------
-    def _acquire_client(self) -> StructuredLLMClient:
+    def _acquire_client(self, on_event: EventHook | None = None) -> StructuredLLMClient:
         acquire = getattr(self._llm, "acquire", None)
-        return acquire() if callable(acquire) else self._llm  # type: ignore[return-value]
+        if callable(acquire):
+            return acquire(on_event=on_event)  # type: ignore[no-any-return]
+        return self._llm  # type: ignore[return-value]
+
+    @property
+    def heuristic_fallback(self) -> bool:
+        return self._settings.heuristic_fallback
 
     @property
     def pii_level(self) -> str:
@@ -550,16 +576,36 @@ class DocumentService:
         return einvoice, render_reading_text(einvoice), 0
 
     # --- Extraktion & Audit ------------------------------------------------
-    async def extract_and_audit(self, record: DocumentRecord) -> ExtractionOutcome:
-        """Vier echte Pipeline-Stufen; jede Stufe meldet sich im ProgressTracker.
+    async def extract_and_audit(
+        self,
+        record: DocumentRecord,
+        *,
+        on_stage: StageHook | None = None,
+        on_event: EventHook | None = None,
+    ) -> ExtractionOutcome:
+        """Vier echte Pipeline-Stufen; jede Stufe meldet sich im ProgressTracker und beim Job.
 
-        1. Text-Layer-Pruefung
+        1. Text-Layer & XML-Vorrang (E-Rechnungen laufen deterministisch ueber den Datensatz)
         2. Regelbasierter PII-Scan; bei Cloud-Inferenz Pseudonymisierung im Vault
         3. LLM-Extraktion + Paragraf-14-Kontrollen
         4. LLM-Audit (EU AI Act, DSGVO), Eskalationsregeln, Scorecard, Ledger
+
+        Scheitern alle KI-Stufen an Ueberlast oder Ausfall, schliesst das Regelwerk
+        die Pruefung ab (``heuristic_fallback``) - gekennzeichnet in UI und Ledger.
+        Ein Abbruch stellt den vorherigen Status wieder her; ein vorhandenes
+        Ergebnis bleibt unangetastet.
         """
         progress = self._progress
-        progress.set(record.id, "text_check")
+        previous_status = record.status if record.status != DocumentStatus.PROCESSING.value else (
+            DocumentStatus.EXTRACTED.value if record.scorecard else DocumentStatus.UPLOADED.value
+        )
+
+        def stage(key: str) -> None:
+            progress.set(record.id, key)
+            if on_stage is not None:
+                on_stage(key)
+
+        stage("text_check")
         text = record.raw_text or ""
         if len(text.strip()) < 1:
             progress.clear(record.id)
@@ -569,36 +615,51 @@ class DocumentService:
 
         einvoice = parse_einvoice(record)
         if uses_structured_path(einvoice):
-            return await self._structured_analysis(record, einvoice)  # type: ignore[arg-type]
+            return await self._structured_analysis(record, einvoice, stage)  # type: ignore[arg-type]
 
         prompt_text = _truncate_for_prompt(text, self._settings.max_prompt_chars)
         enforce_ustg, escalate = self._flags()
 
         try:
-            client = self._acquire_client()
+            client = self._acquire_client(on_event)
         except Exception:
             progress.clear(record.id)
             raise
         await self._repository.mark_processing(record.id)
 
         vault = _vault_of(client)
+        rule_findings: list[PIIFinding] = []
         try:
-            progress.set(record.id, "pii_scan")
+            stage("pii_scan")
             rule_findings = scan_text(text)
             if vault is not None:
                 # Mapping vorab aufbauen: gleiche Platzhalter fuer beide LLM-Aufrufe.
                 vault.pseudonymize(prompt_text)
 
-            progress.set(record.id, "ustg_check")
+            stage("ustg_check")
             extraction, extraction_ms = await client.extract_document(prompt_text)
             extraction = augment_extraction_issues(extraction)
 
-            progress.set(record.id, "ai_act")
+            stage("ai_act")
             audit_payload, audit_ms = await client.audit_document(prompt_text)
-        except Exception as exc:
-            await self._repository.mark_failed(record.id, f"{type(exc).__name__}: {exc}")
+        except asyncio.CancelledError:
+            if vault is not None:
+                vault.clear()
+            await self._repository.restore_status(record.id, previous_status)
             progress.clear(record.id)
             await self._log_failover(record, client)
+            raise
+        except Exception as exc:
+            if vault is not None:
+                vault.clear()
+            switches = await self._log_failover(record, client)
+            if is_failover_error(exc) and self.heuristic_fallback:
+                return await self._heuristic_analysis(
+                    record, reason=exc, rule_findings=rule_findings or scan_text(text), stage=stage,
+                    enforce_ustg=enforce_ustg, escalate=escalate, einvoice=einvoice, failover=switches,
+                )
+            await self._repository.mark_failed(record.id, describe_failure(exc))
+            progress.clear(record.id)
             raise
 
         provider = getattr(client, "provider", "local")
@@ -622,6 +683,50 @@ class DocumentService:
             failover=switches or None,
         )
 
+    async def _heuristic_analysis(
+        self,
+        record: DocumentRecord,
+        *,
+        reason: BaseException,
+        rule_findings: list[PIIFinding],
+        stage: StageHook,
+        enforce_ustg: bool,
+        escalate: bool,
+        einvoice: EInvoiceData | None,
+        failover: list[dict[str, str]],
+    ) -> ExtractionOutcome:
+        """Stufe 5: deterministisches Regelwerk, wenn keine KI-Stufe antwortet."""
+        logger.warning("Dokument %s: alle KI-Stufen ausgefallen (%s) - Regelwerk uebernimmt.",
+                       record.id, getattr(reason, "code", type(reason).__name__))
+        text = record.raw_text or ""
+        stage("ustg_check")
+        extraction = augment_extraction_issues(heuristic_extraction(text))
+        stage("ai_act")
+        audit_payload = heuristic_audit(text)
+        fallback_reason = describe_failure(reason)
+        return await self._finalize_analysis(
+            record,
+            extraction=extraction,
+            audit_payload=audit_payload,
+            rule_findings=rule_findings,
+            model=HEURISTIC_MODEL,
+            provider=HEURISTIC_PROVIDER,
+            vault_report=None,
+            duration_ms=0,
+            audit_ms=0,
+            enforce_ustg=enforce_ustg,
+            escalate=escalate,
+            einvoice=einvoice,
+            failover=failover or None,
+            heuristic_reason=fallback_reason,
+            ledger_details={
+                "heuristic_fallback": True,
+                "label": HEURISTIC_LABEL,
+                "reason_code": getattr(reason, "code", "llm_error"),
+                "reason": fallback_reason[:300],
+            },
+        )
+
     async def _log_failover(self, record: DocumentRecord, client: object) -> list[dict[str, str]]:
         """Schreibt jeden Provider-Wechsel als eigenen Ledger-Eintrag (auch bei spaeterem Fehlschlag)."""
         switches: list[dict[str, str]] = list(getattr(client, "switches", None) or [])
@@ -642,7 +747,9 @@ class DocumentService:
                 )
         return switches
 
-    async def _structured_analysis(self, record: DocumentRecord, einvoice: EInvoiceData) -> ExtractionOutcome:
+    async def _structured_analysis(
+        self, record: DocumentRecord, einvoice: EInvoiceData, stage: StageHook | None = None
+    ) -> ExtractionOutcome:
         """Deterministischer Pfad fuer E-Rechnungen: XML ist massgeblich, kein Sprachmodell.
 
         Die Rechnungsdaten stammen vollstaendig aus dem EN-16931-Datensatz; der
@@ -651,14 +758,15 @@ class DocumentService:
         oder Betreiberpflichten; massgeblich ist der zugrunde liegende Vertrag.
         """
         progress = self._progress
+        mark = stage or (lambda key: progress.set(record.id, key))
         enforce_ustg, escalate = self._flags()
         await self._repository.mark_processing(record.id)
         try:
-            progress.set(record.id, "pii_scan")
+            mark("pii_scan")
             rule_findings = scan_text(record.raw_text or "")
-            progress.set(record.id, "ustg_check")
+            mark("ustg_check")
             extraction = augment_extraction_issues(to_extraction(einvoice))
-            progress.set(record.id, "ai_act")
+            mark("ai_act")
             audit_payload = ComplianceAuditPayload.model_validate(
                 {
                     "ai_act": {
@@ -682,7 +790,7 @@ class DocumentService:
                 }
             )
         except Exception as exc:
-            await self._repository.mark_failed(record.id, f"{type(exc).__name__}: {exc}")
+            await self._repository.mark_failed(record.id, describe_failure(exc))
             progress.clear(record.id)
             raise
         return await self._finalize_analysis(
@@ -723,6 +831,7 @@ class DocumentService:
         ledger_details: dict[str, object] | None = None,
         einvoice: EInvoiceData | None = None,
         failover: list[dict[str, str]] | None = None,
+        heuristic_reason: str | None = None,
     ) -> ExtractionOutcome:
         """Gemeinsamer Abschluss fuer Live- und Referenz-Audits.
 
@@ -761,6 +870,8 @@ class DocumentService:
             provider=provider,
             privacy_gateway=vault_report,
             failover=failover,
+            heuristic=heuristic_reason is not None,
+            fallback_reason=heuristic_reason,
         )
 
         pdf_bytes = await anyio.to_thread.run_sync(self._read_pdf, record)
@@ -791,7 +902,9 @@ class DocumentService:
                 sha256_hash=record.sha256,
                 model_name=model,
                 prompt_hash=PROMPT_HASH,
-                result_summary=f"{scorecard.release_recommendation} | {compliance.headline}",
+                result_summary=(
+                    f"{HEURISTIC_LABEL} | " if heuristic_reason else ""
+                ) + f"{scorecard.release_recommendation} | {compliance.headline}",
                 compliance_score=scorecard.score,
                 risk_tier=ai_act.overall_risk_level.value,
                 details={
@@ -1085,39 +1198,87 @@ class DocumentService:
 
     # --- Compliance Copilot -------------------------------------------------
     async def copilot(
-        self, record: DocumentRecord, question: str, history: list[dict[str, str]]
+        self,
+        record: DocumentRecord,
+        question: str,
+        history: list[dict[str, str]],
+        *,
+        thinking: str = "medium",
+        progress_id: str | None = None,
     ) -> dict[str, object]:
-        """Beantwortet eine Pruefer-Frage, geerdet auf Dokumenttext und Pruefergebnis."""
-        if not record.raw_text:
-            raise NoTextAvailableError(f"Zum Dokument {record.id} liegt kein Text vor.")
+        """Beantwortet eine Pruefer-Frage, geerdet auf Dokumenttext und Pruefergebnis.
 
-        # Musterdokumente mit Referenz-Audit: Standardfragen ohne Sprachmodell.
-        from app.demo import REFERENCE_PROVIDER, hybrid_demo_sha256, reference_answer
+        ``progress_id`` meldet die Arbeitsschritte live (``GET /api/v1/copilot/progress/{id}``),
+        inklusive Neuversuch und Wechsel auf ein Ausweichmodell.  Faellt die ganze
+        Kaskade aus, antwortet das Regelwerk aus dem gespeicherten Pruefergebnis.
+        """
+        steps = COPILOT_STEPS
+        steps.step(progress_id, "Frage verstehen")
+        try:
+            if not record.raw_text:
+                raise NoTextAvailableError(f"Zum Dokument {record.id} liegt kein Text vor.")
 
-        is_demo_einvoice = record.provider == STRUCTURED_PROVIDER and record.sha256 == hybrid_demo_sha256()
-        if record.provider == REFERENCE_PROVIDER or is_demo_einvoice:
-            answer = reference_answer(record.original_filename, question)
-            if answer is not None:
-                return {"answer": answer, "model": "reference-answer", "provider": REFERENCE_PROVIDER,
-                        "duration_ms": 0, "reference": True}
+            # Musterdokumente mit Referenz-Audit: Standardfragen ohne Sprachmodell.
+            from app.demo import REFERENCE_PROVIDER, hybrid_demo_sha256, reference_answer
 
-        client = self._acquire_client()
-        grounding = build_copilot_grounding(record, self._settings.max_prompt_chars)
-        messages = [
-            *[
-                {"role": turn["role"], "content": turn["content"][:2000]}
-                for turn in history[-8:]
-                if turn.get("role") in {"user", "assistant"} and turn.get("content")
-            ],
-            {"role": "user", "content": f"{grounding}\n\nFRAGE DES PRUEFERS:\n{question.strip()}"},
-        ]
-        answer, duration_ms = await client.chat_text(system_prompt=COPILOT_SYSTEM_PROMPT, messages=messages)
-        provider = getattr(client, "provider", "local")
-        vault = _vault_of(client)
-        if vault is not None:
-            vault.clear()
-        return {"answer": answer, "model": client.model, "provider": provider, "duration_ms": duration_ms,
-                "reference": False}
+            is_demo_einvoice = record.provider == STRUCTURED_PROVIDER and record.sha256 == hybrid_demo_sha256()
+            if record.provider == REFERENCE_PROVIDER or is_demo_einvoice:
+                answer = reference_answer(record.original_filename, question)
+                if answer is not None:
+                    return {"answer": answer, "model": "reference-answer", "provider": REFERENCE_PROVIDER,
+                            "duration_ms": 0, "reference": True}
+
+            def on_event(kind: str, info: dict[str, Any]) -> None:
+                if kind == "retry":
+                    steps.step(progress_id, f"Modell antwortet nicht – automatischer Neuversuch "
+                                            f"({info.get('attempt')}/{info.get('total')})…")
+                elif kind == "switch":
+                    steps.step(progress_id, f"Wechsle auf Ausweichmodell {info.get('to_model')}…")
+
+            client = self._acquire_client(on_event)
+            steps.step(progress_id, "Beleg und Prüfergebnis laden")
+            grounding = build_copilot_grounding(record, self._settings.max_prompt_chars)
+            messages = [
+                *[
+                    {"role": turn["role"], "content": turn["content"][:2000]}
+                    for turn in history[-8:]
+                    if turn.get("role") in {"user", "assistant"} and turn.get("content")
+                ],
+                {"role": "user", "content": f"{grounding}\n\nFRAGE DES PRUEFERS:\n{question.strip()}"},
+            ]
+            vault = _vault_of(client)
+            if vault is not None:
+                steps.step(progress_id, "Pseudonymisieren (Privacy Vault)")
+            steps.step(progress_id, "Modell denkt nach")
+            system_prompt = COPILOT_SYSTEM_PROMPT + THINKING_INSTRUCTIONS.get(thinking, "")
+            try:
+                answer, duration_ms = await client.chat_text(system_prompt=system_prompt, messages=messages)
+            except LLMError as exc:
+                if vault is not None:
+                    vault.clear()
+                if not (is_failover_error(exc) and self.heuristic_fallback):
+                    raise
+                steps.step(progress_id, "Regelwerk antwortet (KI temporär überlastet)")
+                return {
+                    "answer": heuristic_copilot_answer(record, question, describe_failure(exc)),
+                    "model": HEURISTIC_MODEL, "provider": HEURISTIC_PROVIDER, "duration_ms": 0,
+                    "reference": False, "heuristic": True,
+                    "failover": list(getattr(client, "switches", None) or []) or None,
+                    "notice": HEURISTIC_LABEL,
+                }
+            if vault is not None:
+                steps.step(progress_id, "Antwort re-identifizieren")
+                vault.clear()
+            steps.step(progress_id, "Antwort formulieren")
+            switches = list(getattr(client, "switches", None) or [])
+            return {
+                "answer": answer, "model": client.model, "provider": getattr(client, "provider", "local"),
+                "duration_ms": duration_ms, "reference": False, "heuristic": False,
+                "failover": switches or None,
+                "notice": f"Ausweichmodell {client.model} hat geantwortet." if switches else None,
+            }
+        finally:
+            steps.finish(progress_id)
 
     # --- Kennzahlen ---------------------------------------------------------
     async def kpis(self) -> dict[str, object]:
@@ -1145,6 +1306,7 @@ class DocumentService:
             "high_risk_quota": round(high_risk / len(analyzed) * 100, 1) if analyzed else 0.0,
             "sealed_count": sum(1 for r in records if r.sign_off),
             "reference_count": sum(1 for r in records if r.provider == "reference"),
+            "heuristic_count": sum(1 for r in records if r.provider == HEURISTIC_PROVIDER),
             "ruleset_version": RULESET_VERSION,
         }
 
@@ -1178,10 +1340,59 @@ Verbindliche Regeln:
 2. Verweise auf Textstellen mit der Zeilennummer in eckigen Klammern, z. B. [Z. 4].
 3. Nenne Rechtsnormen praezise (z. B. "§ 14 Abs. 4 Satz 1 Nr. 2 UStG",
    "Art. 6 Abs. 2 i. V. m. Anhang III Nr. 4 VO (EU) 2024/1689", "Art. 9 DSGVO").
-4. Antworte sachlich, knapp und auf Deutsch. Nutze kurze Aufzaehlungen.
+4. Antworte sachlich, knapp und auf Deutsch. Nutze kurze Aufzaehlungen und
+   schlichtes Markdown (Absaetze, Aufzaehlungen, **fett**), keine Tabellen.
 5. Du gibst keine verbindliche Rechts- oder Steuerberatung; weise bei
    Grenzfaellen auf die Pruefung durch eine Fachperson hin.
 """
+
+#: Denkstufen des Copilot: steuern Gruendlichkeit und Laenge ueber die Anweisung
+#: (anbieterunabhaengig - nicht jeder Anbieter kennt ein eigenes Reasoning-Budget).
+THINKING_INSTRUCTIONS: dict[str, str] = {
+    "low": "\nDENKSTUFE NIEDRIG: Antworte in hoechstens fuenf kurzen Punkten, nur das Wesentliche.",
+    "medium": "",
+    "high": (
+        "\nDENKSTUFE HOCH: Pruefe gruendlich. Gehe jede einschlaegige Norm einzeln durch, belege jede "
+        "Aussage mit [Z. n] und benenne Unsicherheiten oder fehlende Angaben ausdruecklich."
+    ),
+}
+
+
+class StepTracker:
+    """Live-Arbeitsschritte je Copilot-Anfrage (die letzten 20, aelter als 15 Minuten fallen weg)."""
+
+    MAX_AGE_SECONDS = 900
+
+    def __init__(self) -> None:
+        self._items: dict[str, dict[str, Any]] = {}
+
+    def _prune(self, now: float) -> None:
+        for key in [key for key, item in self._items.items() if now - item["at"] > self.MAX_AGE_SECONDS]:
+            self._items.pop(key, None)
+
+    def step(self, progress_id: str | None, text: str) -> None:
+        if not progress_id:
+            return
+        now = time.time()
+        self._prune(now)
+        item = self._items.setdefault(progress_id, {"steps": [], "at": now, "started": now, "done": False})
+        if not item["steps"] or item["steps"][-1] != text:
+            item["steps"] = (item["steps"] + [text])[-20:]
+        item["at"] = now
+
+    def finish(self, progress_id: str | None) -> None:
+        if progress_id and progress_id in self._items:
+            self._items[progress_id]["done"] = True
+
+    def get(self, progress_id: str) -> dict[str, Any]:
+        item = self._items.get(progress_id)
+        if item is None:
+            return {"current": None, "steps": [], "done": False, "started_at": None}
+        return {"current": item["steps"][-1] if item["steps"] else None, "steps": list(item["steps"]),
+                "done": bool(item["done"]), "started_at": item["started"]}
+
+
+COPILOT_STEPS = StepTracker()
 
 
 def build_copilot_grounding(record: DocumentRecord, max_chars: int) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from fastapi.testclient import TestClient
 
@@ -86,7 +87,7 @@ def test_erneuter_seed_ueberschreibt_kein_live_audit(full_client: TestClient) ->
     seeded = _seed(full_client)
     recruiting = seeded["KI_Recruiting_Dienstleistervertrag.pdf"]["id"]
     # Live-Audit mit dem (gemockten) lokalen Modell.
-    assert full_client.post(f"/documents/{recruiting}/extract").status_code == 200
+    assert full_client.post(f"/documents/{recruiting}/extract?wait=true").status_code == 200
     entries_before = full_client.get("/api/audit/verify").json()["entries"]
 
     again = _seed(full_client)
@@ -136,11 +137,31 @@ def test_copilot_musterantwort_ohne_modell(full_client: TestClient, fake_ollama:
     assert fake_ollama.calls == []
 
 
-def test_freie_frage_ohne_modell_liefert_klaren_fehler(full_client: TestClient, fake_ollama: FakeOllama) -> None:
+def test_freie_frage_ohne_modell_antwortet_das_regelwerk(full_client: TestClient, fake_ollama: FakeOllama) -> None:
+    """Copilot-Rueckfall: ohne erreichbares Modell antwortet das Regelwerk - gekennzeichnet, nie still."""
     fake_ollama.offline = True
     seeded = _seed(full_client)
     document_id = seeded["Rechnung_Gueltig_14UStG.pdf"]["id"]
-    response = full_client.post(f"/documents/{document_id}/copilot", json={"question": "Wer ist der Lieferant?"})
+    response = full_client.post(
+        f"/documents/{document_id}/copilot",
+        json={"question": "Wer ist der Lieferant?", "progress_id": "test-progress-1"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["heuristic"] is True and body["provider"] == "heuristic"
+    assert "Regelbasiertes Referenz-Audit" in body["answer"] and "Score" in body["answer"]
+    steps = full_client.get("/api/v1/copilot/progress/test-progress-1").json()
+    assert steps["done"] is True
+    assert any("Neuversuch" in step for step in steps["steps"])  # erst wiederholt, dann Regelwerk
+
+
+def test_freie_frage_ohne_modell_und_ohne_fallback_bleibt_fehler(
+    make_full_client: Callable[..., TestClient], fake_ollama: FakeOllama
+) -> None:
+    client = make_full_client(heuristic_fallback=False)
+    fake_ollama.offline = True
+    document_id = _seed(client)["Rechnung_Gueltig_14UStG.pdf"]["id"]
+    response = client.post(f"/documents/{document_id}/copilot", json={"question": "Wer ist der Lieferant?"})
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "ollama_unavailable"
 
@@ -148,7 +169,7 @@ def test_freie_frage_ohne_modell_liefert_klaren_fehler(full_client: TestClient, 
 def test_nach_live_audit_antwortet_das_modell(full_client: TestClient, fake_ollama: FakeOllama) -> None:
     seeded = _seed(full_client)
     document_id = seeded["Rechnung_Gueltig_14UStG.pdf"]["id"]
-    full_client.post(f"/documents/{document_id}/extract")
+    full_client.post(f"/documents/{document_id}/extract?wait=true")
     body = full_client.post(
         f"/documents/{document_id}/copilot", json={"question": STANDARD_QUESTIONS[0]}
     ).json()

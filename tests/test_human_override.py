@@ -76,7 +76,7 @@ def test_override_hebt_siegel_auf(full_client: TestClient) -> None:
 def test_neue_analyse_verwirft_override(full_client: TestClient) -> None:
     document_id = _recruiting(full_client)
     full_client.post(f"/api/documents/{document_id}/override", json=OVERRIDE)
-    reanalysed = full_client.post(f"/documents/{document_id}/extract").json()
+    reanalysed = full_client.post(f"/documents/{document_id}/extract?wait=true").json()
     assert reanalysed["scorecard"]["human_override"] is None
     events = [e["event_type"] for e in full_client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"]]
     assert events[:2] == ["analysis", "human_override"]  # Historie bleibt erhalten

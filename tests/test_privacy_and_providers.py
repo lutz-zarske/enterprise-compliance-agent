@@ -299,7 +299,7 @@ def test_cloud_analyse_ohne_klartext_pii(make_full_client: Callable[..., TestCli
     client.post("/api/settings", json={"inference_mode": "gemini", "api_keys": {"gemini": "AIza-key-1234567890"}})
 
     document_id = uploaded_document_id(client, invoice_pdf)
-    response = client.post(f"/documents/{document_id}/extract")
+    response = client.post(f"/documents/{document_id}/extract?wait=true")
     assert response.status_code == 200, response.text
     body = response.json()
 
@@ -332,7 +332,7 @@ def test_cloud_modus_ohne_key_liefert_400(full_client: TestClient, invoice_pdf: 
     full_client.post("/api/settings", json={"inference_mode": "openai"})
     document_id = uploaded_document_id(full_client, invoice_pdf)
 
-    response = full_client.post(f"/documents/{document_id}/extract")
+    response = full_client.post(f"/documents/{document_id}/extract?wait=true")
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "provider_not_configured"
     # Das Dokument bleibt unveraendert verarbeitbar.
@@ -342,7 +342,8 @@ def test_cloud_modus_ohne_key_liefert_400(full_client: TestClient, invoice_pdf: 
 def test_health_meldet_inferenzmodus(full_client: TestClient) -> None:
     body = full_client.get("/health").json()
     assert body["inference"] == {"mode": "local", "model": "qwen2.5:14b-instruct", "is_cloud": False,
-                                 "privacy_gateway_active": False, "configured": True}
+                                 "privacy_gateway_active": False, "configured": True, "uses_local": True,
+                                 "chain_length": 1, "heuristic_fallback": True, "open_jobs": 0}
     full_client.post("/api/settings", json={"inference_mode": "anthropic"})
     degraded = full_client.get("/health").json()
     assert degraded["status"] == "degraded" and degraded["inference"]["configured"] is False

@@ -49,7 +49,7 @@ async def test_extraktion_ruft_ollama_mit_den_geforderten_optionen(
     assert payload["model"] == "qwen2.5:14b-instruct"
     assert payload["format"] == "json"
     assert payload["stream"] is False
-    assert payload["options"] == {"temperature": 0.0, "num_ctx": 16384, "seed": DEFAULT_SEED}
+    assert payload["options"] == {"temperature": 0.0, "num_ctx": 32_768, "seed": DEFAULT_SEED}
     assert payload["messages"][0]["role"] == "system"
     assert "Beispieltext" in payload["messages"][1]["content"]
 

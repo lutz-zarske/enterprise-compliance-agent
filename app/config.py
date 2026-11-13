@@ -8,6 +8,7 @@ produktionstaugliche Defaults.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -17,8 +18,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Projektwurzel (…/enterprise-compliance-agent), unabhaengig vom CWD.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-APP_VERSION = "2.4.1"
-APP_TITLE = "Enterprise KI-Compliance- & Dokumenten-Agent"
+APP_VERSION = "2.5.0"
+APP_TITLE = "Enterprise Compliance Agent"
+
+_LOOPBACK_HOST = re.compile(r"^(https?://)localhost(?=[:/]|$)", re.IGNORECASE)
+
+
+def normalize_loopback(url: str) -> str:
+    """``http://localhost:11434`` -> ``http://127.0.0.1:11434``.
+
+    Windows loest ``localhost`` bevorzugt nach ``::1`` (IPv6) auf; Ollama lauscht
+    auf IPv4.  Der Umweg kostet rund 2 s je Anfrage und reisst damit das
+    Health-Timeout von 1,5 s - der Dienst wirkt offline, obwohl er laeuft.
+    """
+    return _LOOPBACK_HOST.sub(r"\g<1>127.0.0.1", url.strip())
 
 
 class Settings(BaseSettings):
@@ -50,8 +63,31 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://127.0.0.1:11434")
     ollama_model: str = Field(default="qwen2.5:14b-instruct")
     ollama_timeout_seconds: float = Field(default=300.0, gt=0)
-    ollama_num_ctx: int = Field(default=16384, ge=512)
+    #: 32k Token: lange Vertraege passen samt Prompt in den Kontext (Ollama nimmt sonst 2-4k
+    #: und schneidet vorne ab - samt Anweisungen).  Mit OLLAMA_FLASH_ATTENTION=1 und
+    #: OLLAMA_KV_CACHE_TYPE=q8_0 passt ein 14B-Modell damit in 16 GB Grafikspeicher.
+    ollama_num_ctx: int = Field(default=32_768, ge=512)
     ollama_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+
+    # --- Ausfallsicherheit der KI-Kaskade -------------------------------------
+    #: Wartezeiten (s) fuer Wiederholungen derselben Stufe bei 408/429/5xx, Verbindungsfehler
+    #: oder Zeitueberschreitung, bevor die naechste Stufe uebernimmt ("2,5" = 2 s, dann 5 s).
+    llm_retry_delays: str = Field(default="2,5")
+    #: Scheitern alle KI-Stufen an Ueberlast oder Ausfall, schliesst das deterministische
+    #: Regelwerk die Pruefung ab (markiert in UI und Ledger).  false = Fehler sichtbar lassen.
+    heuristic_fallback: bool = Field(default=True)
+    #: Optionales Tagesbudget fuer Cloud-Tokens (eigener Schluessel); -1 = ohne Limit.
+    cloud_daily_token_limit: int = Field(default=-1, ge=-1)
+
+    # --- Hintergrund-Jobs ------------------------------------------------------
+    #: Gleichzeitige Analysen (lokales Modell: 1; reine Cloud-Kaskade vertraegt mehr).
+    analysis_workers: int = Field(default=1, ge=1, le=8)
+    #: Beendete Jobs bleiben so lange abrufbar (Sekunden).
+    job_retention_seconds: int = Field(default=3600, ge=60)
+
+    # --- Lokale KI aus der Oberflaeche steuern -------------------------------------
+    #: Start/Stopp von Ollama nur fuer Anfragen direkt am Server (localhost).
+    local_ai_control_local_only: bool = Field(default=True)
 
     #: Zeichenlimit fuer den an das LLM uebergebenen Dokumenttext.
     max_prompt_chars: int = Field(default=24_000, ge=1000)
@@ -92,7 +128,7 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default="gemini-3.8-flash")
     gemini_base_url: str = Field(default="https://generativelanguage.googleapis.com/v1beta")
     anthropic_api_key: str | None = Field(default=None)
-    anthropic_model: str = Field(default="claude-sonnet-5-5")
+    anthropic_model: str = Field(default="claude-sonnet-5")
     anthropic_base_url: str = Field(default="https://api.anthropic.com/v1")
     openai_api_key: str | None = Field(default=None)
     openai_model: str = Field(default="gpt-4o")
@@ -126,13 +162,26 @@ class Settings(BaseSettings):
 
     @field_validator("ollama_base_url")
     @classmethod
-    def _strip_trailing_slash(cls, value: str) -> str:
-        return value.rstrip("/")
+    def _normalize_ollama_url(cls, value: str) -> str:
+        return normalize_loopback(value).rstrip("/")
 
     # --- Abgeleitete Werte -------------------------------------------------
     @property
     def auth_enabled(self) -> bool:
         return self.api_key is not None
+
+    @property
+    def retry_delays(self) -> tuple[float, ...]:
+        """``"2,5"`` -> ``(2.0, 5.0)``; ungueltige Teile werden ignoriert, hoechstens fuenf."""
+        delays: list[float] = []
+        for part in self.llm_retry_delays.replace(";", ",").split(","):
+            try:
+                value = float(part.strip())
+            except ValueError:
+                continue
+            if value >= 0:
+                delays.append(min(value, 60.0))
+        return tuple(delays[:5])
 
     @property
     def cors_origin_list(self) -> list[str]:

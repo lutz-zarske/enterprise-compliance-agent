@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CheckStatus } from "../types/api";
-import { cx, TONE_CLASSES, type Tone } from "../lib/format";
+import { cx, formatEta, TONE_CLASSES, type Tone } from "../lib/format";
 import { AlertTriangle, Check, CheckCircle, Copy, Info, MinusCircle, ShieldAlert, ShieldCheck, X, XCircle } from "./icons";
 
 export function Chip({ tone = "neutral", children, className, title }: {
@@ -25,13 +26,15 @@ export function StatusIcon({ status, size = 16 }: { status: CheckStatus; size?: 
   return <MinusCircle size={size} className="text-subtle shrink-0" />;
 }
 
-export function Modal({ open, onClose, title, subtitle, children, width = "max-w-2xl" }: {
+export function Modal({ open, onClose, title, subtitle, children, width = "max-w-2xl", padded = true }: {
   open: boolean;
   onClose: () => void;
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   width?: string;
+  /** false: Inhalt ohne Innenabstand (z. B. zweispaltige Einstellungen). */
+  padded?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   // onClose ist meist eine Inline-Funktion: ueber eine Ref gelesen, damit ein
@@ -50,7 +53,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
 
   if (!open) return null;
   return (
-    <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--backdrop)] p-4 pt-[8vh] backdrop-blur-md no-print">
+    <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--backdrop)] p-4 pt-[6vh] backdrop-blur-md no-print">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}
@@ -58,19 +61,111 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className={cx("anim-panel relative w-full rounded-xl border border-line bg-surface-solid shadow-2xl outline-none", width)}
+        className={cx("anim-panel relative w-full rounded-2xl border border-line bg-surface-solid shadow-2xl outline-none", width)}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div>
             <h2 className="text-base font-semibold text-fg">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-subtle">{subtitle}</p>}
           </div>
-          <button className="btn btn-icon" onClick={onClose} aria-label="Schließen">
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Schließen">
             <X size={16} />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className={padded ? "px-5 py-4" : undefined}>{children}</div>
       </div>
+    </div>
+  );
+}
+
+export interface PillTabItem<T extends string> {
+  key: T;
+  label: React.ReactNode;
+  badge?: React.ReactNode;
+  title?: string;
+  disabled?: boolean;
+  /** Kleiner Statuspunkt am Tab (z. B. laufende Analyse). */
+  dot?: "live" | "warn" | null;
+}
+
+/**
+ * Segmentschalter mit gleitendem Indikator (einzige Bewegung mit Funktion: Sie zeigt,
+ * wohin die Auswahl wandert).  Der Indikator wird am aktiven Tab ausgemessen - ohne
+ * Animationsbibliothek; bei reduzierter Bewegung springt er.
+ */
+export function PillTabs<T extends string>({ items, value, onChange, className, ariaLabel, size = "md", role = "tablist" }: {
+  items: PillTabItem<T>[];
+  value: T;
+  onChange: (key: T) => void;
+  className?: string;
+  ariaLabel?: string;
+  size?: "sm" | "md";
+  role?: "tablist" | "radiogroup";
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+  const radio = role === "radiogroup";
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const button = listRef.current?.querySelector<HTMLButtonElement>('[data-active="true"]');
+      if (!button) return setIndicator(null);
+      setIndicator({ left: button.offsetLeft, width: button.offsetWidth });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (listRef.current) observer.observe(listRef.current);
+    return () => observer.disconnect();
+  }, [value, items.length]);
+
+  // Bei schmaler Spalte scrollt die Leiste: der aktive Tab bleibt immer sichtbar.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLButtonElement>('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [value]);
+
+  return (
+    <div
+      ref={listRef}
+      role={role}
+      aria-label={ariaLabel}
+      className={cx("pill-tabs max-w-full overflow-x-auto [scrollbar-width:none]", size === "sm" && "pill-tabs-sm", className)}
+    >
+      {indicator && (
+        <span
+          className="pill-indikator"
+          aria-hidden="true"
+          style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
+        />
+      )}
+      {items.map((item) => {
+        const active = item.key === value;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            role={radio ? "radio" : "tab"}
+            aria-selected={radio ? undefined : active}
+            aria-checked={radio ? active : undefined}
+            data-active={active}
+            title={item.title}
+            disabled={item.disabled}
+            onClick={() => onChange(item.key)}
+            className="pill-tab"
+          >
+            {item.label}
+            {item.badge}
+            {item.dot === "live" && (
+              <span className="relative inline-flex h-1.5 w-1.5 text-accent" aria-hidden="true">
+                <span className="status-pulse" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+              </span>
+            )}
+            {item.dot === "warn" && <span className="h-1.5 w-1.5 rounded-full bg-warn" aria-label="Hinweis" />}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -81,66 +176,140 @@ export function Tabs<T extends string>({ tabs, active, onChange, className }: {
   onChange: (key: T) => void;
   className?: string;
 }) {
-  const listRef = useRef<HTMLDivElement>(null);
-  // Bei schmaler Spalte scrollt die Leiste: der aktive Tab bleibt immer sichtbar.
-  useEffect(() => {
-    const button = listRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
-    button?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [active]);
-  return (
-    <div
-      ref={listRef}
-      role="tablist"
-      className={cx("flex max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-surface-2 p-0.5 [scrollbar-width:none]", className)}
-    >
-      {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          role="tab"
-          aria-selected={active === tab.key}
-          title={tab.title}
-          onClick={() => onChange(tab.key)}
-          className={cx(
-            "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-[background-color,color,box-shadow] duration-150 ease-out",
-            active === tab.key
-              ? "bg-surface-solid text-fg shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-line"
-              : "text-subtle hover:text-fg",
-          )}
-        >
-          {tab.label}
-          {tab.badge}
-        </button>
-      ))}
-    </div>
-  );
+  return <PillTabs items={tabs} value={active} onChange={onChange} className={className} />;
 }
 
-export function Segmented<T extends string>({ options, value, onChange, size = "md" }: {
+export function Segmented<T extends string>({ options, value, onChange, size = "md", ariaLabel }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
   size?: "sm" | "md";
+  ariaLabel?: string;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-line bg-surface-2 p-0.5" role="radiogroup">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          role="radio"
-          aria-checked={value === option.value}
-          onClick={() => onChange(option.value)}
-          className={cx(
-            "rounded-md font-medium transition-colors duration-150",
-            size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-xs",
-            value === option.value ? "bg-surface-solid text-fg shadow-sm" : "text-subtle hover:text-fg",
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
+    <PillTabs
+      role="radiogroup"
+      size={size}
+      ariaLabel={ariaLabel}
+      value={value}
+      onChange={onChange}
+      items={options.map((option) => ({ key: option.value, label: option.label }))}
+    />
+  );
+}
+
+/** Fortschrittsbalken; ``null`` = unbestimmt (laufender Balken). */
+export function ProgressBar({ value, className, label }: { value: number | null; className?: string; label?: string }) {
+  const indeterminate = value === null || !Number.isFinite(value);
+  const pct = indeterminate ? 0 : Math.max(0, Math.min(100, value * 100));
+  return (
+    <div
+      className={cx("progress-track", className)}
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={indeterminate ? undefined : Math.round(pct)}
+    >
+      <div className="progress-fill" data-indeterminate={indeterminate} style={{ width: `${pct}%` }} />
     </div>
   );
 }
+
+/** Kleiner Fortschrittsring (16 px) fuer die Kopfzeile - platzsparender als ein Balken. */
+export function MiniRing({ value }: { value: number }) {
+  const r = 6;
+  const circumference = 2 * Math.PI * r;
+  const share = Math.max(0, Math.min(1, value));
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0 -rotate-90" aria-hidden="true">
+      <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeWidth="2" className="opacity-25" />
+      <circle
+        cx="8"
+        cy="8"
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - share)}
+        className="transition-[stroke-dashoffset] duration-500 ease-out"
+      />
+    </svg>
+  );
+}
+
+/** Restzeit, die zwischen zwei Meldungen sekuendlich weiterzaehlt und sich weich angleicht. */
+export function Eta({ seconds, className }: { seconds: number | null | undefined; className?: string }) {
+  const anchor = useRef<{ value: number; at: number } | null>(null);
+  const [shown, setShown] = useState<number | null>(null);
+  useEffect(() => {
+    if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
+      anchor.current = null;
+      setShown(null);
+      return;
+    }
+    const now = performance.now();
+    const previous = anchor.current;
+    const local = previous ? Math.max(0, previous.value - (now - previous.at) / 1000) : seconds;
+    const value = previous ? local + 0.35 * (seconds - local) : seconds;
+    anchor.current = { value, at: now };
+    setShown(value);
+  }, [seconds]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const current = anchor.current;
+      if (current) setShown(Math.max(1, current.value - (performance.now() - current.at) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  if (shown === null) return null;
+  return <span className={cx("tabular-nums", className)}>{formatEta(shown)}</span>;
+}
+
+/**
+ * Mehrzeiliges Eingabefeld, das mit dem Inhalt waechst (bis ``maxRows``), danach
+ * scrollt - ohne manuelle Zieh-Ecke.
+ */
+export const AutoTextarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  minRows?: number;
+  maxRows?: number;
+}>(function AutoTextarea({ minRows = 2, maxRows = 8, className, value, onChange, ...rest }, forwarded) {
+  const inner = useRef<HTMLTextAreaElement>(null);
+  const setRef = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      inner.current = node;
+      if (typeof forwarded === "function") forwarded(node);
+      else if (forwarded) forwarded.current = node;
+    },
+    [forwarded],
+  );
+  useLayoutEffect(() => {
+    const node = inner.current;
+    if (!node) return;
+    const style = window.getComputedStyle(node);
+    const line = parseFloat(style.lineHeight) || 20;
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    node.style.height = "auto";
+    const min = line * minRows + padding + border;
+    const max = line * maxRows + padding + border;
+    const height = Math.min(max, Math.max(min, node.scrollHeight + border));
+    node.style.height = `${height}px`;
+    node.style.overflowY = node.scrollHeight + border > max ? "auto" : "hidden";
+  }, [value, minRows, maxRows]);
+  return (
+    <textarea
+      ref={setRef}
+      rows={minRows}
+      value={value}
+      onChange={onChange}
+      className={cx("input scroll-area resize-none", className)}
+      {...rest}
+    />
+  );
+});
 
 export function Toggle({ checked, onChange, label, description }: {
   checked: boolean;
@@ -303,9 +472,16 @@ export function Spinner({ size = 14 }: { size?: number }) {
   );
 }
 
+const TIP_MARGIN = 8;
+/** Nach dem ersten Tooltip erscheinen weitere sofort (eine Leiste fuehlt sich dadurch schneller an). */
+let lastTipClosedAt = 0;
+
 /**
- * Tooltip ohne JavaScript: erscheint bei Hover und bei Tastaturfokus im
- * Ausloeser (WCAG 1.4.13: per Fokus erreichbar, ohne Zeigergeraet bedienbar).
+ * Tooltip per Portal: haengt mit fester Position an ``<body>`` und wird an das
+ * Fenster geklemmt - in Scrollbereichen, Karten mit ``overflow: hidden`` und am
+ * Bildschirmrand (1080p) wird nichts abgeschnitten.  Erscheint bei Hover und
+ * Tastaturfokus (WCAG 1.4.13), Escape schliesst.  ``align``/``side`` sind nur
+ * Vorzugsrichtungen.
  */
 export function Tooltip({ content, children, align = "left", side = "top", className }: {
   content: React.ReactNode;
@@ -314,20 +490,86 @@ export function Tooltip({ content, children, align = "left", side = "top", class
   side?: "top" | "bottom";
   className?: string;
 }) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const bubbleRef = useRef<HTMLSpanElement>(null);
+  const timer = useRef<number | null>(null);
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  const show = useCallback(() => {
+    if (timer.current) window.clearTimeout(timer.current);
+    const instant = Date.now() - lastTipClosedAt < 400;
+    timer.current = window.setTimeout(() => setOpen(true), instant ? 0 : 180);
+  }, []);
+  const hide = useCallback(() => {
+    if (timer.current) window.clearTimeout(timer.current);
+    setOpen((was) => {
+      if (was) lastTipClosedAt = Date.now();
+      return false;
+    });
+    setPosition(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (timer.current) window.clearTimeout(timer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && hide();
+    const onScroll = () => hide();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open, hide]);
+
+  useLayoutEffect(() => {
+    if (!open || !anchorRef.current || !bubbleRef.current) return;
+    const anchor = anchorRef.current.getBoundingClientRect();
+    const bubble = bubbleRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left =
+      align === "left" ? anchor.left : align === "right" ? anchor.right - bubble.width : anchor.left + anchor.width / 2 - bubble.width / 2;
+    left = Math.max(TIP_MARGIN, Math.min(left, vw - bubble.width - TIP_MARGIN));
+    const below = anchor.bottom + 6;
+    const above = anchor.top - bubble.height - 6;
+    let top = side === "bottom" ? below : above;
+    if (side === "bottom" && below + bubble.height > vh - TIP_MARGIN && above >= TIP_MARGIN) top = above;
+    if (side === "top" && above < TIP_MARGIN) top = below;
+    setPosition({ top: Math.max(TIP_MARGIN, top), left });
+  }, [open, align, side]);
+
   if (!content) return <>{children}</>;
   return (
-    <span className={cx("group/tt relative inline-flex", className)}>
+    <span
+      ref={anchorRef}
+      className={cx("inline-flex", className)}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      aria-describedby={open ? id : undefined}
+    >
       {children}
-      <span
-        role="tooltip"
-        className={cx(
-          "pointer-events-none absolute z-30 hidden w-max max-w-[320px] rounded-md border border-line bg-surface-solid px-2.5 py-2 text-left font-sans text-xs font-normal leading-snug text-fg shadow-lg group-hover/tt:block group-focus-within/tt:block",
-          side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5",
-          align === "left" ? "left-0" : align === "right" ? "right-0" : "left-1/2 -translate-x-1/2",
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <span
+            ref={bubbleRef}
+            id={id}
+            role="tooltip"
+            className="tip-bubble"
+            style={{ top: position?.top ?? 0, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}
+          >
+            {content}
+          </span>,
+          document.body,
         )}
-      >
-        {content}
-      </span>
     </span>
   );
 }
@@ -418,17 +660,18 @@ export function CopyButton({ value, label, className }: { value: string; label: 
   );
 }
 
-/** Kopierbarer Wert in Monospace (Rechnungsnummer, Leitweg-ID, IBAN). */
-export function CopyValue({ value, label, display, className }: {
+/** Kopierbarer Wert mit Tabellenziffern (Rechnungsnummer, Leitweg-ID, IBAN); ``mono`` nur fuer Hashes/IDs. */
+export function CopyValue({ value, label, display, className, mono = false }: {
   value: string | null | undefined;
   label: string;
   display?: React.ReactNode;
   className?: string;
+  mono?: boolean;
 }) {
   if (!value) return <span className="text-subtle">–</span>;
   return (
     <span className={cx("inline-flex max-w-full items-center gap-1", className)}>
-      <span className="min-w-0 font-mono tabular-nums [overflow-wrap:anywhere]">{display ?? value}</span>
+      <span className={cx("min-w-0 tabular-nums [overflow-wrap:anywhere]", mono && "font-mono")}>{display ?? value}</span>
       <CopyButton value={value} label={label} />
     </span>
   );
@@ -449,9 +692,9 @@ export function HashBadge({ value, label = "SHA-256", verified = null, verifiedL
   const tone = verified === true ? "ok" : verified === false ? "bad" : "neutral";
   const status = verified === true ? verifiedLabel ?? "verifiziert" : verified === false ? "Befund" : null;
   return (
-    <span className={cx("inline-flex max-w-full flex-wrap items-center gap-1", className)}>
+    <span className={cx("inline-flex max-w-full items-center gap-1", className)}>
       <span
-        className={cx("chip font-mono text-xs tabular-nums", TONE_CLASSES[tone])}
+        className={cx("chip min-w-0 font-mono text-xs tabular-nums", TONE_CLASSES[tone])}
         title={`${label} ${value}`}
       >
         {verified === true && <ShieldCheck size={11} aria-hidden="true" />}
