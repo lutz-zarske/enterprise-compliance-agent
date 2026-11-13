@@ -379,6 +379,56 @@ def test_fortschritt_kriecht_monoton_und_bleibt_unter_eins() -> None:
     assert values[0] >= 0.16  # Phase 3 beginnt nach Text- und PII-Phase
 
 
+def test_abbruch_eines_wartenden_jobs_gibt_die_sperre_frei() -> None:
+    async def scenario() -> tuple[dict[str, Any], int, int, str]:
+        manager = JobManager(max_parallel=1)
+        gate = asyncio.Event()
+
+        async def runner(_context: Any) -> dict[str, Any]:
+            await gate.wait()
+            return {"provider": "local"}
+
+        first = manager.submit(document_id="doc-aaaaaaaa", title="erster", runner=runner)
+        # Abbruch, bevor der Event-Loop den zweiten Task auch nur einmal angefasst hat.
+        second = manager.submit(document_id="doc-bbbbbbbb", title="zweiter", runner=runner)
+        manager.cancel(second.job_id)
+        snapshot = manager.snapshot(second)
+        await asyncio.wait_for(manager.wait(second), 1.0)
+        open_while_first_runs = manager.open_count
+        gate.set()
+        await manager.wait(first)
+        return snapshot, open_while_first_runs, manager.open_count, first.status
+
+    snapshot, open_while_first_runs, open_after, first_status = asyncio.run(scenario())
+    assert snapshot["status"] == "cancelled" and snapshot["message"] == "Abgebrochen"
+    assert snapshot["finished_at"] is not None
+    assert open_while_first_runs == 1 and open_after == 0 and first_status == "done"
+
+
+def test_ledger_zusammenfassung_widerspricht_dem_score_nicht() -> None:
+    from types import SimpleNamespace
+
+    from app.services import analysis_summary
+
+    def tile(key: str, deduction: int) -> SimpleNamespace:
+        return SimpleNamespace(key=key, title=key, deduction=deduction)
+
+    clean = SimpleNamespace(headline="Keine Compliance-Auffaelligkeiten")
+    steuerfalle = SimpleNamespace(
+        score=45, release_recommendation="Freigabe gesperrt — Nachforderung nötig",
+        tiles=[tile("formal", 30), tile("regulatory", 0), tile("privacy", 0), tile("math", 25)],
+    )
+    summary = analysis_summary(steuerfalle, clean)  # type: ignore[arg-type]
+    assert summary == "Freigabe gesperrt — Nachforderung nötig | Score 45: § 14 UStG −30, Finanzmathematik −25"
+    assert "Keine Compliance-Auffaelligkeiten" not in summary
+
+    gueltig = SimpleNamespace(score=100, release_recommendation="Zur Auszahlung freigegeben", tiles=[tile("formal", 0)])
+    assert analysis_summary(gueltig, clean) == "Zur Auszahlung freigegeben | Keine Compliance-Auffaelligkeiten"  # type: ignore[arg-type]
+
+    hochrisiko = SimpleNamespace(headline="EU AI Act: Hochrisiko")
+    assert analysis_summary(steuerfalle, hochrisiko).endswith("| EU AI Act: Hochrisiko")  # type: ignore[arg-type]
+
+
 # --- Lokale KI -------------------------------------------------------------------------------
 
 

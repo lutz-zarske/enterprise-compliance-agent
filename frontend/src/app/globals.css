@@ -283,6 +283,7 @@ body {
     outline: none;
     border-color: var(--accent);
     background: var(--surface-solid);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
   }
   /* Mehrzeilige Eingaben wachsen mit (AutoTextarea), ohne Zieh-Ecke. */
   textarea.input {
@@ -475,8 +476,9 @@ body {
     background: rgba(255, 255, 255, 0.72);
     border-color: rgba(15, 23, 42, 0.12);
     box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 8px 24px -12px rgba(15, 23, 42, 0.2);
+    /* Nur die Standard-Eigenschaft: Das -webkit-Praefix ergaenzt der Build (Lightning CSS).
+       Beide von Hand notiert, behielt er nur das Praefix - in Chromium ohne Wirkung. */
     backdrop-filter: blur(24px) saturate(150%);
-    -webkit-backdrop-filter: blur(24px) saturate(150%);
   }
   .dark .kopf-kapsel {
     background: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06)), rgba(15, 23, 42, 0.9);
@@ -540,8 +542,7 @@ body {
   line-height: 1.45;
   text-align: left;
   box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%); /* Praefix ergaenzt der Build */
   pointer-events: none;
   animation: eca-fade-in 120ms ease-out both;
 }
@@ -578,10 +579,16 @@ a,
   top: 0.75rem;
 }
 
-/* Fokus sichtbar halten (Tastaturbedienung, WCAG 2.4.7). */
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/*
+ * Fokus sichtbar halten (Tastaturbedienung, WCAG 2.4.7).  Bewusst in @layer base:
+ * Eingabefelder (.input, @layer components) zeigen ihren eigenen Ring und erben so
+ * keinen zweiten Outline-Rahmen; Buttons und Links behalten den Akzent-Ring.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 /* Schlanke Scrollbalken aus der Palette (Standard-Eigenschaften; WebKit darunter). */
@@ -719,8 +726,7 @@ a,
   border: 1px solid var(--menu-line);
   border-radius: 0.75rem;
   box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%); /* Praefix ergaenzt der Build */
   transform-origin: var(--origin, top);
   animation: eca-menu-in 150ms var(--ease-out, ease-out) both;
 }

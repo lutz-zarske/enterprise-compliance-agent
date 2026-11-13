@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import React, { useCallback, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { HealthResponse, JobSnapshot, LedgerVerification, RuntimeSettings } from "../types/api";
 import { getApiBase } from "../lib/api";
 import { cx, formatModel, PROVIDER_NAMES } from "../lib/format";
-import { useDismiss, usePopoverExclusive } from "../lib/popover";
+import { useAnchoredStyle, useDismiss, usePopoverExclusive } from "../lib/popover";
 import { HelpCircle, Moon, Settings, Sun, WifiOff } from "./icons";
 import { JobMonitor, type FinishedJob } from "./JobMonitor";
 import { Notifications } from "./Notifications";
@@ -18,10 +19,11 @@ import { PillTabs, Tooltip } from "./ui";
 /** Drei fokussierte Ansichten statt einer ueberfrachteten Einzelseite. */
 export type View = "workspace" | "copilot" | "protocol";
 
+/** Ein Wort je Bereich - in der Kapsel wie in der kompakten Leiste. */
 export const VIEW_LABELS: Record<View, string> = {
-  workspace: "Prüf-Workspace",
-  copilot: "Compliance Copilot",
-  protocol: "Protokoll & Regelwerk",
+  workspace: "Prüfung",
+  copilot: "Copilot",
+  protocol: "Protokoll",
 };
 
 type Notify = (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
@@ -53,9 +55,11 @@ interface HeaderProps {
 function LogoVersion({ version, ruleset }: { version: string | null; ruleset: string | null }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   usePopoverExclusive(open, close, "logo-version");
-  useDismiss(open, close, [ref]);
+  useDismiss(open, close, [ref, menuRef]);
+  const style = useAnchoredStyle(open, ref, { width: 288, maxHeight: 280 });
   return (
     <div ref={ref} className="relative flex min-w-0 items-center">
       <button
@@ -66,25 +70,28 @@ function LogoVersion({ version, ruleset }: { version: string | null; ruleset: st
         aria-label="Enterprise Compliance Agent – Version anzeigen"
         className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-0.5 transition-colors duration-150 hover:bg-surface-hover"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#0b0e15] p-1">
+        {/* Freigestellt wie im Kaltstart-Splash; nur im Dark Mode sitzt der Schild auf einer dunklen Kachel. */}
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg p-1 dark:border dark:border-white/10 dark:bg-[#0b0e15]">
           <Image src="/compliance-logo-transparent.png" alt="" width={24} height={24} priority unoptimized className="h-full w-full object-contain" />
         </span>
         <span className="truncate text-[15px] font-semibold tracking-tight text-fg">Enterprise Compliance Agent</span>
       </button>
-      {open && (
-        <div role="dialog" aria-label="Version" className="glass-menu absolute left-0 top-full z-[70] mt-2 w-72 p-3 text-sm">
-          <p className="font-semibold text-fg">Enterprise Compliance Agent</p>
-          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-            <dt className="text-subtle">Version</dt>
-            <dd className="tabular-nums text-fg">{version ? `v${version}` : "–"}</dd>
-            <dt className="text-subtle">Regelwerk</dt>
-            <dd className="tabular-nums text-fg">{ruleset ?? "–"}</dd>
-            <dt className="text-subtle">Backend</dt>
-            <dd className="truncate text-fg">{getApiBase()}</dd>
-          </dl>
-          <p className="mt-2 text-xs leading-relaxed text-subtle">Technische Vorprüfung – keine Rechts- oder Steuerberatung.</p>
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div ref={menuRef} role="dialog" aria-label="Version" style={style} className="glass-menu z-[70] p-3 text-sm">
+            <p className="font-semibold text-fg">Enterprise Compliance Agent</p>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              <dt className="text-subtle">Version</dt>
+              <dd className="tabular-nums text-fg">{version ? `v${version}` : "–"}</dd>
+              <dt className="text-subtle">Regelwerk</dt>
+              <dd className="tabular-nums text-fg">{ruleset ?? "–"}</dd>
+              <dt className="text-subtle">Backend</dt>
+              <dd className="truncate text-fg">{getApiBase()}</dd>
+            </dl>
+            <p className="mt-2 text-xs leading-relaxed text-subtle">Technische Vorprüfung – keine Rechts- oder Steuerberatung.</p>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -207,9 +214,9 @@ export function Header(props: HeaderProps) {
           value={view}
           onChange={onViewChange}
           items={[
-            { key: "workspace", label: "Prüfung" },
-            { key: "copilot", label: "Copilot" },
-            { key: "protocol", label: "Protokoll" },
+            { key: "workspace", label: VIEW_LABELS.workspace },
+            { key: "copilot", label: VIEW_LABELS.copilot },
+            { key: "protocol", label: VIEW_LABELS.protocol },
           ]}
         />
       </nav>

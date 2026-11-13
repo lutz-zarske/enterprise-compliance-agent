@@ -121,41 +121,41 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
         {scorecard.tiles.map((tile) => {
           const tileTone = toneForStatus(tile.status);
           const risks = tile.checks.filter((check) => check.deduction > 0 && check.risk_note);
+          const riskList = risks.map((check) => (
+            <span key={check.id} className="block py-0.5">
+              <span className="tabular-nums text-bad">−{check.deduction}</span> {check.risk_note}
+            </span>
+          ));
           return (
-            <button
-              key={tile.key}
-              onClick={() => onOpenTile(tile.key)}
-              className="group/tile relative rounded-lg border border-line bg-surface-2 p-3 text-left transition-colors duration-150 hover:border-line-strong"
-              aria-describedby={risks.length ? `risk-${tile.key}` : undefined}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-subtle">{TILE_LABELS[tile.key]}</span>
-                <StatusIcon status={tile.status} size={14} />
-              </div>
-              <p className={cx("mt-1.5 text-sm font-semibold", tileTone === "neutral" ? "text-fg" : TONE_TEXT[tileTone])}>
-                {tile.headline || "–"}
-              </p>
-              <p className={cx("mt-0.5 text-xs tabular-nums", tile.deduction > 0 ? "text-bad" : "text-subtle")}>
-                {tile.deduction > 0 ? (
-                  <span className={cx(risks.length > 0 && "underline decoration-dotted underline-offset-2")}>−{tile.deduction} Punkte</span>
-                ) : (
-                  "keine Abzüge"
-                )}
-              </p>
+            <Tooltip key={tile.key} content={risks.length ? riskList : null} className="w-full">
+              <button
+                type="button"
+                onClick={() => onOpenTile(tile.key)}
+                className="w-full rounded-lg border border-line bg-surface-2 p-3 text-left transition-colors duration-150 hover:border-line-strong"
+                aria-describedby={risks.length ? `risk-${tile.key}` : undefined}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-subtle">{TILE_LABELS[tile.key]}</span>
+                  <StatusIcon status={tile.status} size={14} />
+                </div>
+                <p className={cx("mt-1.5 text-sm font-semibold", tileTone === "neutral" ? "text-fg" : TONE_TEXT[tileTone])}>
+                  {tile.headline || "–"}
+                </p>
+                <p className={cx("mt-0.5 text-xs tabular-nums", tile.deduction > 0 ? "text-bad" : "text-subtle")}>
+                  {tile.deduction > 0 ? (
+                    <span className={cx(risks.length > 0 && "underline decoration-dotted underline-offset-2")}>−{tile.deduction} Punkte</span>
+                  ) : (
+                    "keine Abzüge"
+                  )}
+                </p>
+              </button>
+              {/* Rechtsfolgen fuer Screenreader dauerhaft verknuepft; sichtbar im Portal-Tooltip. */}
               {risks.length > 0 && (
-                <span
-                  id={`risk-${tile.key}`}
-                  role="tooltip"
-                  className="pointer-events-none absolute bottom-full left-0 z-30 mb-1.5 hidden w-[min(320px,80vw)] rounded-md border border-line bg-surface-solid p-2.5 text-xs font-normal leading-snug text-fg shadow-lg group-hover/tile:block group-focus-visible/tile:block"
-                >
-                  {risks.map((check) => (
-                    <span key={check.id} className="block py-0.5">
-                      <span className="tabular-nums text-bad">−{check.deduction}</span> {check.risk_note}
-                    </span>
-                  ))}
+                <span id={`risk-${tile.key}`} className="sr-only">
+                  {risks.map((check) => `−${check.deduction}: ${check.risk_note}`).join(" ")}
                 </span>
               )}
-            </button>
+            </Tooltip>
           );
         })}
       </div>

@@ -215,7 +215,17 @@ function TextViewer({ view, evidenceLines, evidenceTone: tone, activeSpans, acti
               if (part.spanIndex === undefined) return <React.Fragment key={partIndex}>{part.text}</React.Fragment>;
               const span = view.spans[part.spanIndex];
               return (
-                <span key={partIndex} className="group relative">
+                <Tooltip
+                  key={partIndex}
+                  inline
+                  content={
+                    <span className="font-sans">
+                      <span className="block font-semibold">{span.label}</span>
+                      <span className="block text-subtle">Quelle: {SOURCE_LABELS[span.source] ?? span.source}</span>
+                      <span className="block text-subtle">{span.masked ? "Geschwärzt" : "Nur markiert, nicht geschwärzt"}</span>
+                    </span>
+                  }
+                >
                   <button
                     type="button"
                     onClick={() => onSpanClick(span)}
@@ -226,15 +236,7 @@ function TextViewer({ view, evidenceLines, evidenceTone: tone, activeSpans, acti
                   >
                     {part.text}
                   </button>
-                  <span
-                    role="tooltip"
-                    className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-max max-w-[260px] rounded-md border border-line bg-surface-solid px-2.5 py-1.5 font-sans text-xs leading-snug text-fg shadow-lg group-hover:block group-focus-within:block"
-                  >
-                    <span className="block font-semibold">{span.label}</span>
-                    <span className="block text-subtle">Quelle: {SOURCE_LABELS[span.source] ?? span.source}</span>
-                    <span className="block text-subtle">{span.masked ? "Geschwärzt" : "Nur markiert, nicht geschwärzt"}</span>
-                  </span>
-                </span>
+                </Tooltip>
               );
             })}
           </span>
@@ -599,7 +601,7 @@ function PiiPanel({ document, highlight }: { document: DocumentDetail; highlight
   );
 }
 
-/** Feldbezeichner in Versalien, Wert in text-sm semibold; Kennungen in Monospace. */
+/** Feldbezeichner in Versalien, Wert in text-sm semibold; Kennungen in Inter mit tabular-nums. */
 function Fact({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">
@@ -700,7 +702,7 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
 
 // --- XML-Datensatz (EN 16931) ------------------------------------------------
 
-/** Namen in Proportionalschrift, Kennungen und Beträge in Monospace. */
+/** Namen ohne Tabellenziffern; Kennungen und Beträge in Inter mit tabular-nums. */
 const NAME_TERMS = new Set(["BT-27", "BT-44"]);
 /** Beträge stehen im Summenblock (rechtsbündig), nicht in der Kennungen-Tabelle. */
 const MONEY_TERMS = ["BT-109", "BT-110", "BT-115", "BT-112"];
@@ -1003,7 +1005,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
   onTabChange: (tab: InspectorTab) => void;
   onOverride?: () => void;
   ledger: LedgerVerification | null;
-  /** Wechselt in die Ansicht "Protokoll & Regelwerk" (vollstaendige Hash-Kette). */
+  /** Wechselt in die Ansicht "Protokoll" (vollstaendige Hash-Kette). */
   onOpenProtocol?: () => void;
   /** Oeffnet den Siegel-Dialog; fehlt, solange nicht gesiegelt werden kann. */
   onSeal?: () => void;

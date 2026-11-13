@@ -1445,7 +1445,8 @@ def _register_routes(application: FastAPI) -> None:
                 raise ReleaseError("local_only", "Updates nur direkt am Server (localhost) einspielen.", 403)
             release = await anyio.to_thread.run_sync(
                 partial(manager.preflight, body.tag, body.commit,
-                        active_analyses=PROGRESS.active + request.app.state.jobs.open_count)
+                        # Ein laufender Job zaehlt in beiden Zaehlern - Maximum statt Summe.
+                        active_analyses=max(PROGRESS.active, request.app.state.jobs.open_count))
             )
             database_file = (
                 FsPath(settings_.resolved_database_url.removeprefix("sqlite:///")) if settings_.is_sqlite else None

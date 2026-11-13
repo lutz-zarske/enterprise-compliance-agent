@@ -520,8 +520,14 @@ class OllamaClient(StructuredLLMClient):
                 f"Ollama unter {self._settings.ollama_base_url} ist nicht erreichbar."
             ) from exc
 
-        payload = response.json()
-        return [entry.get("name", "") for entry in payload.get("models", []) if entry.get("name")]
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise OllamaUnavailableError(
+                f"Unter {self._settings.ollama_base_url} antwortet kein Ollama (keine gültige Modellliste)."
+            ) from exc
+        models = payload.get("models", []) if isinstance(payload, dict) else []
+        return [entry["name"] for entry in models if isinstance(entry, dict) and entry.get("name")]
 
     async def is_model_available(self, models: list[str] | None = None) -> bool:
         """Prueft das konfigurierte Modell inklusive impliziter ``:latest``-Tags."""
@@ -570,8 +576,12 @@ class OllamaClient(StructuredLLMClient):
                 f"Ollama antwortete mit HTTP {response.status_code}: {response.text[:300]}"
             )
 
-        body = response.json()
-        content = (body.get("message") or {}).get("content", "")
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise LLMResponseError("Ollama lieferte kein JSON.") from exc
+        message = body.get("message") if isinstance(body, dict) else None
+        content = message.get("content", "") if isinstance(message, dict) else None
         if not isinstance(content, str):
             raise LLMResponseError("Die Antwort von Ollama enthielt keinen Textinhalt.")
         return content

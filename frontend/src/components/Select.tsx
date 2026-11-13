@@ -13,7 +13,7 @@ export interface SelectOption<T extends string = string> {
 }
 
 /**
- * Dropdown im Glas-Design (Vorlage: Select-Komponente).
+ * Dropdown im Glas-Design.
  *
  * Ersetzt das native <select>, das das Betriebssystem zeichnet und das deshalb
  * als eckiger Fremdkoerper im Layout sitzt. Die Liste schwebt als Portal ueber

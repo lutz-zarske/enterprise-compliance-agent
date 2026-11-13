@@ -10,14 +10,15 @@
 
 **Revisionssichere Vorprüfung von Rechnungen und Verträgen** nach § 14 UStG,
 E-Rechnung (EN 16931), EU AI Act und DSGVO. Ein deterministisches Regelwerk
-berechnet den Compliance-Score, jede Analyse, jedes Prüfer-Siegel und jeder
-Modellwechsel landet in einer Ed25519-signierten Hash-Kette, und eine
-ausfallsichere KI-Kaskade (lokal über Ollama oder Cloud über ein Privacy
-Gateway) sorgt dafür, dass keine Prüfung an einer überlasteten KI scheitert.
+berechnet den Compliance-Score. Jede Analyse und jeder Stufenwechsel steht
+unveränderbar in einer SHA-256-Hash-Kette; Prüfer-Siegel, Übersteuerungen und
+Modellwechsel sind darin zusätzlich Ed25519-signiert. Eine ausfallsichere
+KI-Kaskade (lokal über Ollama oder Cloud über ein Privacy Gateway) sorgt dafür,
+dass keine Prüfung an einer überlasteten KI scheitert.
 Läuft ohne GPU: Musterdaten und das Regelwerk-Audit funktionieren sofort, mit
 eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 
-![Prüf-Workspace: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
+![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
 
 | Problem in der Praxis | Lösung im Agent |
 |---|---|
@@ -25,7 +26,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 | Hybride E-Rechnungen: PDF und XML weichen ab | XML-Datensatz ist maßgeblich (BMF 15.10.2024, Rz. 36) – deterministisch geparst, Abgleich mit dem Bildteil, ohne Sprachmodell |
 | KI-Beschaffung kann Hochrisiko-Pflichten auslösen (Anhang III) | Einstufung nach Art. 5/6/50 mit automatischer Anhang-III-Eskalation; begründete Übersteuerung durch die Prüfperson (Art. 14) |
 | Cloud-KI und personenbezogene Daten | Pseudonymisierung im Backend vor jedem Cloud-Aufruf; das Mapping verlässt den Server nie |
-| Prüfungen müssen auch Jahre später nachvollziehbar sein (GoBD) | Hash-verkettetes, signiertes Prüfprotokoll und Prüfdatenpaket (ZIP) mit offline prüfbarem Manifest |
+| Prüfungen müssen auch Jahre später nachvollziehbar sein (GoBD) | Hash-verkettetes Prüfprotokoll mit Ed25519-signierten Prüfer-Einträgen und Prüfdatenpaket (ZIP) mit offline prüfbarem, signiertem Manifest |
 | KI-Anbieter sind überlastet oder offline | Wiederholung mit Backoff, Ausweichmodell, Ausweich-Schlüssel, lokales Modell – zuletzt das Regelwerk, gekennzeichnet in UI und Ledger |
 
 ---
@@ -91,8 +92,8 @@ flowchart LR
     X --> P4
     K -. alle Stufen ausgefallen .-> H[Regelwerk-Audit<br/>gekennzeichnet]
     H --> P4
-    P4 --> L[(Hash-Kette<br/>Ed25519)]
-    P4 --> UI[Prüf-Workspace · Copilot · Protokoll]
+    P4 --> L[(Hash-Kette SHA-256<br/>Prüfer-Ereignisse Ed25519)]
+    P4 --> UI[Prüfung · Copilot · Protokoll]
     UI --> S[Siegel · Übersteuerung<br/>Art. 14]
     S --> L
     L --> ZIP[Prüfdatenpaket<br/>ZIP + signiertes Manifest]
@@ -116,24 +117,24 @@ Details zu Pipeline, Kaskade, Jobs und Ledger: [`docs/ARCHITECTURE.md`](docs/ARC
 Drei fokussierte Ansichten in der Kopfzeile; alle bleiben eingehängt, ein
 Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
 
-| Compliance Copilot | Protokoll & Regelwerk |
+| Copilot | Protokoll |
 |---|---|
 | ![Copilot mit Antwort, Zeilenverweisen und hervorgehobener Belegzeile](docs/screenshots/copilot.png) | ![Prüfprotokoll mit Hash-Kette, Ed25519-Status, Exporten und Regelwerk](docs/screenshots/protokoll.png) |
 | **Laufende Prüfung mit Job-Monitor** | **Einstellungen: Ausweich-Kaskade** |
 | ![Job-Monitor in der Kopfzeile, Phasen, Restzeit und Hinweis auf automatischen Neuversuch](docs/screenshots/job-monitor.png) | ![Zweispaltige Einstellungen mit effektiver Kaskade und Ausweich-Schlüsseln](docs/screenshots/einstellungen-kaskade.png) |
 
-![Prüf-Workspace im hellen Farbschema](docs/screenshots/workspace-light.png)
+![Ansicht Prüfung im hellen Farbschema](docs/screenshots/workspace-light.png)
 
-* **Prüf-Workspace:** KPI-Leiste, Belegliste (Suche, Filter, Batch-Prüfung,
+* **Prüfung:** KPI-Leiste, Belegliste (Suche, Filter, Batch-Prüfung,
   `J`/`K`), Scorecard mit vier Kacheln und Rechtsfolgen-Tooltips, Inspektor mit
   Fundstellen-Kopplung (Kriterium ↔ Belegzeile) im 4-Farben-Schema: Grün
   konform, Gelb Prüfhinweis, Rot Verstoß, Indigo PII.
-* **Compliance Copilot:** Fragen zum Beleg mit Live-Arbeitsschritten und
+* **Copilot:** Fragen zum Beleg mit Live-Arbeitsschritten und
   Laufzeit, Denkstufe (knapp/standard/gründlich), Markdown-Antworten mit
   klickbaren Zeilenverweisen `[Z. 4]`, Hinweise bei Neuversuch oder Wechsel
   auf ein Ausweichmodell. Prominent: die **Korrekturanforderung nach § 14 UStG**
   an den Lieferanten als editierbarer Entwurf, ohne Sprachmodell.
-* **Protokoll & Regelwerk:** vollständige Hash-Kette mit Filtern (alle, dieser
+* **Protokoll:** vollständige Hash-Kette mit Filtern (alle, dieser
   Beleg, Systemereignisse), Kopf-Hash und Schlüssel-Fingerabdruck,
   GoBD-Prüfdatenpaket, Verfahrensdokumentation und das Regelwerk.
 * **Kopfzeile:** Job-Monitor nur während einer Prüfung, Hinweise nur bei
@@ -188,11 +189,11 @@ Einordnung: [`docs/RECHTLICHE_ANALYSE_2026.md`](docs/RECHTLICHE_ANALYSE_2026.md)
 | **EU AI Act** | Risikostufe, automatische Eskalation bei belegter Anhang-III-Kategorie, Pflichtenliste; Übersteuerung durch die Prüfperson mit Begründung, Rechtsnorm und neu berechnetem Score |
 | **DSGVO** | Modellbefund plus Regex-Zweitmeinung, Art.-9/10-Erkennung, Maskierungszwang vor dem Speichern, drei Schwärzungsstufen |
 | **Compliance-Score** | Deterministisch 0–100, vier Kacheln, Deckelung bei Hochrisiko, Freigabeempfehlung, Ein-Satz-Risikoerklärung je Abzug |
-| **KI-Kaskade** | Retries mit Backoff, Ausweichmodell, bis zu sechs Ausweich-Schlüssel (auch mehrere Keys eines Anbieters), Anbieter-Fallbacks, lokales Modell, Regelwerk; jeder Wechsel signiert im Ledger |
+| **KI-Kaskade** | Retries mit Backoff, Ausweichmodell, bis zu sechs Ausweich-Schlüssel (auch mehrere Keys eines Anbieters), Anbieter-Fallbacks, lokales Modell, Regelwerk; jeder Wechsel als `provider_failover` in der Hash-Kette |
 | **Hintergrund-Jobs** | Sofortige Annahme, Warteschlange, vier Phasen, Fortschritt und geglättete Restzeit, Abbruch, Batch-Prüfung, Erkennung hängender Jobs |
 | **Lokale KI** | Ollama und LM Studio erkennen; Ollama per Klick starten (Flash Attention, 8-Bit-KV-Cache) und stoppen – nur direkt am Server |
 | **Compliance Copilot** | Dokumentbezogene Fragen mit Zeilen- und Normverweisen, Live-Arbeitsschritten und Denkstufe; Regelwerk-Antwort, wenn keine KI erreichbar ist; Korrekturanforderung an den Lieferanten |
-| **Prüfprotokoll** | Append-only mit SHA-256-Hash-Kette, DB-Trigger gegen UPDATE/DELETE, Ed25519-Signaturen für Prüfer- und Systemereignisse, Kettenprüfung per API |
+| **Prüfprotokoll** | Append-only mit SHA-256-Hash-Kette für alle Einträge (auch `analysis` und `provider_failover`), DB-Trigger gegen UPDATE/DELETE, zusätzlich Ed25519-Signaturen für Prüfer- und Steuerungsereignisse (`sign_off`, `human_override`, `model_change`, `archive`/`unarchive`, `release_update`), Kettenprüfung per API |
 | **Prüfzertifikat & Prüfdatenpaket** | A4-HTML, Markdown-Memo, JSON; ZIP mit Original, XML, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und signiertem Manifest; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
 | **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 aus dem echten Systemzustand plus Anhang je Beleg |
 | **DLP-Gateway** | `POST /api/v1/redact`: endgültige Schwärzung für andere Anwendungen vor jedem Cloud-LLM-Aufruf |
@@ -216,7 +217,7 @@ zuerst selbst (Standard nach 2 s und 5 s), dann übernimmt die nächste:
 | 5 | Deterministisches Regelwerk (§ 14 UStG, IBAN-Prüfsumme, Regex-PII, konservative AI-Act-Einstufung) | `HEURISTIC_FALLBACK=true` |
 
 * Alle Cloud-Stufen laufen durch **denselben Privacy Vault**; jeder Wechsel
-  steht als `provider_failover` im signierten Ledger.
+  steht als `provider_failover` unveränderbar in der SHA-256-Hash-Kette.
 * **Abgelehnte Keys (401/403) und Schemafehler** lösen bewusst keinen Wechsel
   aus – eine Fehlkonfiguration bleibt sichtbar.
 * Eine lokal eingestellte Prüfung geht nie automatisch in die Cloud.

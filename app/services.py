@@ -204,6 +204,37 @@ def describe_failure(exc: BaseException) -> str:
     return "Unerwarteter Fehler bei der Analyse – Details stehen im Serverprotokoll."
 
 
+#: Kurzbezeichnung der Scorecard-Kacheln fuer die Ledger-Zusammenfassung.
+TILE_SHORT_LABELS: dict[str, str] = {
+    "formal": "§ 14 UStG",
+    "regulatory": "EU AI Act",
+    "privacy": "DSGVO",
+    "math": "Finanzmathematik",
+}
+NO_COMPLIANCE_FINDINGS = "Keine Compliance-Auffaelligkeiten"
+
+
+def analysis_summary(scorecard: Scorecard, compliance: ComplianceAudit) -> str:
+    """Kurzfassung des ``analysis``-Ledger-Eintrags ohne Widerspruch zum Score.
+
+    ``ComplianceAudit.headline`` betrachtet nur EU AI Act und DSGVO.  Bei formalen
+    oder rechnerischen Abzuegen (z. B. Steuerfalle mit Score 45) stuende dort sonst
+    „Keine Compliance-Auffaelligkeiten“ neben „Freigabe gesperrt“ - stattdessen
+    nennt die Zusammenfassung Score und betroffene Kacheln.
+    """
+    parts = [scorecard.release_recommendation]
+    deductions = [
+        f"{TILE_SHORT_LABELS.get(tile.key, tile.title)} −{tile.deduction}"
+        for tile in scorecard.tiles
+        if tile.deduction > 0
+    ]
+    if deductions:
+        parts.append(f"Score {scorecard.score}: " + ", ".join(deductions))
+    if compliance.headline != NO_COMPLIANCE_FINDINGS or not deductions:
+        parts.append(compliance.headline)
+    return " | ".join(parts)
+
+
 def _truncate_for_prompt(text: str, limit: int) -> str:
     """Kuerzt lange Dokumente auf das Kontextbudget des Modells."""
     if len(text) <= limit:
@@ -902,9 +933,8 @@ class DocumentService:
                 sha256_hash=record.sha256,
                 model_name=model,
                 prompt_hash=PROMPT_HASH,
-                result_summary=(
-                    f"{HEURISTIC_LABEL} | " if heuristic_reason else ""
-                ) + f"{scorecard.release_recommendation} | {compliance.headline}",
+                result_summary=(f"{HEURISTIC_LABEL} | " if heuristic_reason else "")
+                + analysis_summary(scorecard, compliance),
                 compliance_score=scorecard.score,
                 risk_tier=ai_act.overall_risk_level.value,
                 details={

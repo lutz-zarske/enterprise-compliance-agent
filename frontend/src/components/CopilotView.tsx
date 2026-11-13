@@ -174,7 +174,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
     return (
       <div className={cx("card flex items-center justify-center", VIEW_HEIGHT)}>
         <EmptyState icon={<MessageSquare size={20} aria-hidden="true" />} title="Noch kein Beleg ausgewählt">
-          <p>Im Prüf-Workspace einen Beleg auswählen oder Musterdaten laden – der Copilot beantwortet dann Fragen mit Zeilen- und Normverweisen.</p>
+          <p>Unter „Prüfung“ einen Beleg auswählen oder Musterdaten laden – der Copilot beantwortet dann Fragen mit Zeilen- und Normverweisen.</p>
         </EmptyState>
       </div>
     );

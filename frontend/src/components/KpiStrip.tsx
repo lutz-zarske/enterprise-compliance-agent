@@ -9,7 +9,7 @@ import { Skeleton, Tooltip } from "./ui";
 type EdgeTone = "pass" | "warn" | "fail" | "neutral";
 
 /**
- * Status als feine Innenkante oben in der Kachel (Muster aus interner Vorlage).
+ * Status als feine Innenkante oben in der Kachel.
  * Im hellen Modus traegt nur die Kontur den Ton; die Lichtkante gilt im Dark Mode.
  */
 const EDGE: Record<EdgeTone, string> = {
@@ -38,7 +38,7 @@ function Kpi({ label, value, info, edge, valueClass, loading }: {
   loading: boolean;
 }) {
   return (
-    <div className={cx("card relative flex h-16 items-center justify-between gap-3 px-4 hover:z-20 focus-within:z-20 hover:border-line-strong dark:hover:border-white/[0.16] 2xl:px-5", EDGE[edge])}>
+    <div className={cx("card relative flex h-16 items-center justify-between gap-3 px-4 2xl:px-5", EDGE[edge])}>
       <p className="label-caps flex min-w-0 items-center gap-1.5">
         <span className="truncate">{label}</span>
         <Tooltip content={info} side="bottom">

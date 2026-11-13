@@ -175,7 +175,23 @@ class JobManager:
         job.expected_seconds = self._expected.get(path, DEFAULT_EXPECTED_SECONDS)
         self._jobs[job.job_id] = job
         job.task = asyncio.create_task(self._run(job, runner, path), name=f"job-{job.job_id}")
+        job.task.add_done_callback(lambda _task: self._close(job, "cancelled", "Abgebrochen"))
         return job
+
+    @staticmethod
+    def _close(job: Job, status: str, message: str) -> None:
+        """Schliesst einen noch offenen Job ab (idempotent).
+
+        Wird ein Task vor seinem ersten Schritt abgebrochen, laeuft ``_run`` nie an -
+        auch dessen ``finally`` nicht.  Ohne diesen Abschluss bliebe der Job "queued",
+        ``open_count`` sperrte den Release-Wechsel und ``wait`` kehrte nie zurueck.
+        """
+        if job.status not in {"queued", "running"}:
+            return
+        job.status = status
+        job.message = message
+        job.finished_at = job.last_update = time.time()
+        job.done_event.set()
 
     async def _run(self, job: Job, runner: Runner, path: str) -> None:
         try:
@@ -233,6 +249,9 @@ class JobManager:
             job.message = "Wird abgebrochen …"
             if job.task is not None and not job.task.done():
                 job.task.cancel()
+            # Ein wartender Job hat noch nichts veraendert: sofort als abgebrochen fuehren.
+            if job.status == "queued":
+                self._close(job, "cancelled", "Abgebrochen")
         return job
 
     async def wait(self, job: Job, timeout: float | None = None) -> Job:

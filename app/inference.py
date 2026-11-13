@@ -18,7 +18,8 @@ Wiederholen vor Wechseln: Bei HTTP 408/429/5xx, Verbindungsfehler oder
 Zeitueberschreitung wiederholt der Client dieselbe Stufe zunaechst mit kurzem
 Backoff (Standard 2 s, dann 5 s).  Erst danach uebernimmt die naechste Stufe;
 jeder Wechsel wird festgehalten und von ``services`` als ``provider_failover``
-im Ed25519-signierten Ledger protokolliert.  Abgelehnte Keys (401/403) und
+in der SHA-256-Hash-Kette des Ledgers protokolliert (maschinelles Ereignis,
+keine Ed25519-Signatur - die gilt Prueferereignissen).  Abgelehnte Keys (401/403) und
 Schemafehler loesen bewusst weder Wiederholung noch Wechsel aus - eine
 Fehlkonfiguration soll sichtbar bleiben.
 """

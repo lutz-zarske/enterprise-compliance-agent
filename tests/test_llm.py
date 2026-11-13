@@ -6,8 +6,10 @@ import json
 from datetime import date
 from decimal import Decimal
 
+import httpx
 import pytest
 
+from app.config import Settings
 from app.llm import (
     DEFAULT_SEED,
     LLMResponseError,
@@ -31,6 +33,17 @@ def test_json_wird_auch_aus_verunreinigten_antworten_gelesen() -> None:
         extract_json_object("")
     with pytest.raises(LLMResponseError):
         extract_json_object("[1, 2, 3]")  # Array statt Objekt
+
+
+async def test_antwort_ohne_json_wird_ruhig_gemeldet(settings: Settings) -> None:
+    """Ein Proxy oder fremder Dienst auf dem Ollama-Port liefert HTML statt JSON."""
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, text="<html>Proxy</html>"))
+    client = OllamaClient(settings, client=httpx.AsyncClient(transport=transport))
+
+    with pytest.raises(LLMResponseError, match="kein JSON"):
+        await client.chat_text(system_prompt="s", messages=[{"role": "user", "content": "Frage"}])
+    with pytest.raises(OllamaUnavailableError):
+        await client.list_models()
 
 
 async def test_extraktion_ruft_ollama_mit_den_geforderten_optionen(

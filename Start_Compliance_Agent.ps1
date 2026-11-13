@@ -2,7 +2,7 @@
 .SYNOPSIS
   Enterprise Compliance Agent mit 1 Klick starten: Backend (FastAPI, Port 8001) und
   Frontend (Next.js, Port 3001) im Hintergrund starten, auf Bereitschaft prüfen und
-  erst danach http://localhost:3001 im Standard-Browser öffnen.
+  erst danach http://127.0.0.1:3001 im Standard-Browser öffnen.
 #>
 param(
     [switch]$NoBrowser,
@@ -125,16 +125,25 @@ $FrontendDir = Join-Path $AppDir "frontend"
 $NpmMarker = Join-Path $RunDir "package-lock.sha256"
 $node = Hash-Geaendert (Join-Path $FrontendDir "package-lock.json") $NpmMarker
 if ($node.Geaendert -or -not (Test-Path (Join-Path $FrontendDir "node_modules"))) {
-    Write-Host "[>] Installiere bzw. aktualisiere Frontend-Abhängigkeiten (npm install)..." -ForegroundColor Yellow
-    Push-Location $FrontendDir
-    try {
-        & $NpmExe install --no-audit --no-fund
-        $npmExit = $LASTEXITCODE
-    } finally {
-        Pop-Location
+    # Ruhige Konsole: Die npm-Ausgabe (inkl. "npm warn ...") landet im Log, nicht im Fenster.
+    $NpmLog = Join-Path $LogDir "npm-setup.log"
+    $NpmErrLog = Join-Path $LogDir "npm-setup.err.log"
+    Write-Host "[>] Installiere bzw. aktualisiere Frontend-Abhängigkeiten (npm install, 1-3 Minuten)..." -ForegroundColor Cyan
+    $npmProc = Start-Process -FilePath $NpmExe `
+        -ArgumentList @("install", "--silent", "--no-audit", "--no-fund") `
+        -WorkingDirectory $FrontendDir -NoNewWindow -PassThru `
+        -RedirectStandardOutput $NpmLog -RedirectStandardError $NpmErrLog
+    $null = $npmProc.Handle   # ohne Handle bleibt ExitCode unter PowerShell 5.1 leer
+    $npmProc.WaitForExit()
+    $npmExit = $npmProc.ExitCode
+    if (Test-Path $NpmErrLog) {
+        [System.IO.File]::AppendAllText($NpmLog, [System.IO.File]::ReadAllText($NpmErrLog))
+        Remove-Item $NpmErrLog -Force -ErrorAction SilentlyContinue
     }
     if ($npmExit -ne 0) {
-        Write-Host "FEHLER: npm install ist fehlgeschlagen (siehe Ausgabe oben)." -ForegroundColor Red
+        Write-Host "FEHLER: npm install ist fehlgeschlagen (Exit-Code $npmExit)." -ForegroundColor Red
+        Write-Host "       Protokoll: $NpmLog" -ForegroundColor Yellow
+        if (Test-Path $NpmLog) { Get-Content $NpmLog -Tail 10 | ForEach-Object { Write-Host "   $_" -ForegroundColor Yellow } }
         exit 1
     }
     Set-Content -Path $NpmMarker -Value $node.Hash -Encoding ascii
@@ -188,8 +197,11 @@ if (Port-Belegt $FrontendPort) {
     $frontendBereit = $true
 } else {
     Write-Host "[>] Starte Next.js Compliance Frontend auf Port $FrontendPort..." -ForegroundColor Cyan
+    # "dev" setzt in package.json bereits -p 3001; nur ein abweichender Port wird angehängt.
+    $devArgs = @("run", "dev")
+    if ($FrontendPort -ne 3001) { $devArgs += @("--", "-p", "$FrontendPort") }
     $proc = Start-Process -FilePath $NpmExe `
-        -ArgumentList @("run", "dev", "--", "-p", "$FrontendPort") `
+        -ArgumentList $devArgs `
         -WorkingDirectory $FrontendDir -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $FrontendLog -RedirectStandardError $FrontendErr
     Set-Content -Path $FrontendPidFile -Value $proc.Id -Encoding ascii
@@ -214,17 +226,9 @@ if (-not $frontendBereit) {
 }
 Write-Host "[OK] Frontend ist bereit (http://127.0.0.1:$FrontendPort)." -ForegroundColor Green
 
-# 4. Ollama-Status prüfen
-try {
-    $null = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 2 -ErrorAction Stop
-    Write-Host "[OK] Lokale Ollama-Engine ist aktiv." -ForegroundColor Green
-} catch {
-    Write-Host "[i] Hinweis: Lokale Ollama-Engine ist nicht aktiv." -ForegroundColor Yellow
-    Write-Host "    (Start per Klick in der Oberfläche: Hinweis 'Lokale KI aus' oder Einstellungen > KI-Modelle." -ForegroundColor DarkGray
-    Write-Host "     Cloud-Modelle, Musterdaten und das Regelwerk-Audit funktionieren sofort.)" -ForegroundColor DarkGray
-}
+# Den Status der lokalen KI zeigt die Oberfläche (Hinweis "Lokale KI aus" mit Start-Knopf).
 
-# 5. Browser öffnen (127.0.0.1 statt localhost: Windows löst localhost zuerst nach ::1 auf)
+# 4. Browser öffnen (127.0.0.1 statt localhost: Windows löst localhost zuerst nach ::1 auf)
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "   Enterprise Compliance Agent ist vollständig online!   " -ForegroundColor Green

@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, ApiError } from "../lib/api";
 import { cx, formatModel } from "../lib/format";
-import { useDismiss, usePopoverExclusive } from "../lib/popover";
+import { useAnchoredStyle, useDismiss, usePopoverExclusive } from "../lib/popover";
 import type { HealthResponse, LedgerVerification, LocalAiStatus, RuntimeSettings } from "../types/api";
 import { AlertTriangle, Bell, ChevronDown, Play, Settings, ShieldAlert } from "./icons";
 import { Spinner } from "./ui";
@@ -16,6 +17,24 @@ interface Notice {
   title: string;
   text: string;
   action?: React.ReactNode;
+}
+
+/**
+ * Hinweise zur lokalen KI lassen sich fuer die Browser-Sitzung ausblenden - etwa bei
+ * bewusstem Cloud-Betrieb mit Ollama nur als Reserve.  Ledger-, Key- und Budget-Befunde
+ * bleiben immer sichtbar.
+ */
+const HIDDEN_KEY = "eca-hinweise-ausgeblendet";
+const MUTABLE = new Set(["ollama", "model"]);
+
+function readHidden(): string[] {
+  try {
+    const raw = window.sessionStorage.getItem(HIDDEN_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -36,10 +55,29 @@ export function Notifications({ health, settings, ledger, online, onOpenSettings
   const [open, setOpen] = useState(false);
   const [local, setLocal] = useState<LocalAiStatus | null>(null);
   const [starting, setStarting] = useState(false);
+  const [hidden, setHidden] = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   usePopoverExclusive(open, close, "notifications");
-  useDismiss(open, close, [ref]);
+  useDismiss(open, close, [ref, menuRef]);
+  const style = useAnchoredStyle(open, ref, { width: 352, maxHeight: 520, align: "right" });
+
+  // Erst nach dem Mount lesen (SSR-sicher, keine Hydrationsabweichung).
+  useEffect(() => setHidden(readHidden()), []);
+
+  const hideNotice = useCallback((key: string) => {
+    setHidden((previous) => {
+      const next = Array.from(new Set([...previous, key]));
+      try {
+        window.sessionStorage.setItem(HIDDEN_KEY, JSON.stringify(next));
+      } catch {
+        // Ohne Sitzungsspeicher gilt das Ausblenden nur bis zum Neuladen.
+      }
+      return next;
+    });
+    setOpen(false);
+  }, []);
 
   const usesLocal = Boolean(health?.inference?.uses_local);
   const ollamaDown = online && usesLocal && health?.ollama.status === "unavailable";
@@ -142,8 +180,9 @@ export function Notifications({ health, settings, ledger, online, onOpenSettings
     });
   }
 
-  if (!notices.length) return null;
-  const lead = notices.find((notice) => notice.tone === "bad") ?? notices[0];
+  const visible = notices.filter((notice) => !(MUTABLE.has(notice.key) && hidden.includes(notice.key)));
+  if (!visible.length) return null;
+  const lead = visible.find((notice) => notice.tone === "bad") ?? visible[0];
   return (
     <div ref={ref} className="relative">
       <button
@@ -158,25 +197,41 @@ export function Notifications({ health, settings, ledger, online, onOpenSettings
       >
         {lead.tone === "bad" ? <ShieldAlert size={12} aria-hidden="true" /> : <Bell size={12} aria-hidden="true" />}
         <span className="hidden sm:inline">{lead.title}</span>
-        {notices.length > 1 && <span className="tabular-nums opacity-80">+{notices.length - 1}</span>}
+        {visible.length > 1 && <span className="tabular-nums opacity-80">+{visible.length - 1}</span>}
         <ChevronDown size={12} aria-hidden="true" className={cx("transition-transform duration-150", open && "rotate-180")} />
       </button>
-      {open && (
-        <div role="dialog" aria-label="Hinweise" className="glass-menu absolute right-0 top-full z-[70] mt-2 w-[22rem] p-2">
-          <ul className="flex flex-col gap-1.5">
-            {notices.map((notice) => (
-              <li key={notice.key} className="rounded-lg border border-line bg-surface-2/60 px-3 py-2.5">
-                <p className={cx("flex items-center gap-1.5 text-[13px] font-semibold", notice.tone === "bad" ? "text-bad" : "text-warn")}>
-                  {notice.tone === "bad" ? <ShieldAlert size={13} aria-hidden="true" /> : <AlertTriangle size={13} aria-hidden="true" />}
-                  {notice.title}
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-muted">{notice.text}</p>
-                {notice.action && <div className="mt-2">{notice.action}</div>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div ref={menuRef} role="dialog" aria-label="Hinweise" style={style} className="glass-menu scroll-area z-[70] p-2">
+            <ul className="flex flex-col gap-1.5">
+              {visible.map((notice) => (
+                <li key={notice.key} className="rounded-lg border border-line bg-surface-2/60 px-3 py-2.5">
+                  <p className={cx("flex items-center gap-1.5 text-[13px] font-semibold", notice.tone === "bad" ? "text-bad" : "text-warn")}>
+                    {notice.tone === "bad" ? <ShieldAlert size={13} aria-hidden="true" /> : <AlertTriangle size={13} aria-hidden="true" />}
+                    {notice.title}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted">{notice.text}</p>
+                  {(notice.action || MUTABLE.has(notice.key)) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {notice.action}
+                      {MUTABLE.has(notice.key) && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm ml-auto text-subtle"
+                          title="Bis zum Schließen des Browser-Tabs ausblenden"
+                          onClick={() => hideNotice(notice.key)}
+                        >
+                          Ausblenden
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

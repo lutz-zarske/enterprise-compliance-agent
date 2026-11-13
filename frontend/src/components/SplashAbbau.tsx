@@ -1,8 +1,7 @@
 "use client";
 
 /**
- * Blendet den Kaltstart-Splash aus (Markup steht im Server-HTML von layout.tsx;
- * Design-Vorlage).
+ * Blendet den Kaltstart-Splash aus (Markup steht im Server-HTML von layout.tsx).
  *
  * Der Splash deckt den ersten Paint ab, bis die Seite ihre Startdaten hat -
  * dann meldet page.tsx ``meldeBereit()``. Spaetestens nach SPLASH_MAX_MS geht er

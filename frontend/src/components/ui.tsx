@@ -483,12 +483,14 @@ let lastTipClosedAt = 0;
  * Tastaturfokus (WCAG 1.4.13), Escape schliesst.  ``align``/``side`` sind nur
  * Vorzugsrichtungen.
  */
-export function Tooltip({ content, children, align = "left", side = "top", className }: {
+export function Tooltip({ content, children, align = "left", side = "top", className, inline = false }: {
   content: React.ReactNode;
   children: React.ReactNode;
   align?: "left" | "right" | "center";
   side?: "top" | "bottom";
   className?: string;
+  /** Im Fliesstext (z. B. Belegzeilen) ``inline`` statt ``inline-flex``, damit der Umbruch erhalten bleibt. */
+  inline?: boolean;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLSpanElement>(null);
@@ -548,7 +550,7 @@ export function Tooltip({ content, children, align = "left", side = "top", class
   return (
     <span
       ref={anchorRef}
-      className={cx("inline-flex", className)}
+      className={cx(inline ? "inline" : "inline-flex", className)}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}

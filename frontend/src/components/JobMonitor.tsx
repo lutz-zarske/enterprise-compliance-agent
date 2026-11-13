@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useDismiss, usePopoverExclusive } from "../lib/popover";
+import { createPortal } from "react-dom";
+import { useAnchoredStyle, useDismiss, usePopoverExclusive } from "../lib/popover";
 import { cx } from "../lib/format";
 import type { JobSnapshot } from "../types/api";
 import { Check, ChevronDown, Square, X } from "./icons";
@@ -102,9 +103,11 @@ export function JobMonitor({ jobs, finished, onCancel }: {
   const [open, setOpen] = useState(false);
   const [, setTick] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   usePopoverExclusive(open, close, "job-monitor");
-  useDismiss(open, close, [ref]);
+  useDismiss(open, close, [ref, menuRef]);
+  const style = useAnchoredStyle(open, ref, { width: 384, maxHeight: 560, align: "right" });
 
   useEffect(() => {
     if (!jobs.length) setOpen(false);
@@ -164,18 +167,20 @@ export function JobMonitor({ jobs, finished, onCancel }: {
         )}
         <ChevronDown size={12} aria-hidden="true" className={cx("transition-transform duration-150", open && "rotate-180")} />
       </button>
-      {open && (
-        <div role="dialog" aria-label="Hintergrundaufgaben" className="glass-menu absolute right-0 top-full z-[70] mt-2 w-[24rem] p-2">
-          <p className="label-caps px-1.5 pb-2 pt-1">
-            Hintergrundaufgaben · <span className="tabular-nums">{jobs.length}</span>
-          </p>
-          <ul className="scroll-area flex max-h-[60vh] flex-col gap-1.5 pr-1">
-            {jobs.map((job) => (
-              <JobRow key={job.job_id} job={job} onCancel={onCancel} />
-            ))}
-          </ul>
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div ref={menuRef} role="dialog" aria-label="Hintergrundaufgaben" style={style} className="glass-menu z-[70] flex flex-col p-2">
+            <p className="label-caps px-1.5 pb-2 pt-1">
+              Hintergrundaufgaben · <span className="tabular-nums">{jobs.length}</span>
+            </p>
+            <ul className="scroll-area flex min-h-0 flex-1 flex-col gap-1.5 pr-1">
+              {jobs.map((job) => (
+                <JobRow key={job.job_id} job={job} onCancel={onCancel} />
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

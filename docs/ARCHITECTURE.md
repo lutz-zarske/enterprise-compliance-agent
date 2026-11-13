@@ -10,7 +10,7 @@ und Schnellstart siehe [`README.md`](../README.md), für die Rechtsgrundlagen
 | Prinzip | Umsetzung |
 |---|---|
 | **Deterministischer Kern** | Der Compliance-Score entsteht in `app/scoring.py` aus versionierten Regeln, nie im Sprachmodell. Das Modell liefert nur Eingaben (Extraktion, Einstufung); jede Pflichtangabe wird per Regex gegengeprüft. |
-| **Kein Ergebnis ohne Herkunft** | Jede Analyse, jedes Siegel, jede Übersteuerung und jeder Modell- oder Stufenwechsel landet in einer SHA-256-Hash-Kette; Prüfer- und Systemereignisse sind Ed25519-signiert. |
+| **Kein Ergebnis ohne Herkunft** | Jede Analyse, jedes Siegel, jede Übersteuerung und jeder Modell- oder Stufenwechsel landet unveränderbar in einer SHA-256-Hash-Kette. Prüfer- und Steuerungsereignisse (`sign_off`, `human_override`, `model_change`, `archive`/`unarchive`, `release_update`) sind zusätzlich Ed25519-signiert; maschinelle Einträge (`analysis`, `provider_failover`) sichert die Verkettung. |
 | **Privacy by Default** | Lokale Inferenz als Standard; jeder Cloud-Aufruf läuft zwingend durch den `PrivacyVault` (Pseudonymisierung im Backend, flüchtiges Mapping). |
 | **Kein Ausfall bricht eine Prüfung ab** | Wiederholung mit Backoff, Ausweichmodell, Ausweich-Schlüssel, Anbieter-Fallbacks, zuletzt ein deterministisches Regelwerk – gekennzeichnet, nie still. |
 | **Keine Framework-Magie** | Reines `httpx` statt SDKs oder Agenten-Frameworks: Der Weg vom Dokument zur Datenbank ist für einen IT-Auditor lesbar. |
@@ -20,7 +20,7 @@ und Schnellstart siehe [`README.md`](../README.md), für die Rechtsgrundlagen
 ```mermaid
 flowchart LR
     subgraph Browser
-        UI[Next.js 15 · React 19<br/>Prüf-Workspace · Copilot · Protokoll]
+        UI[Next.js 15 · React 19<br/>Prüfung · Copilot · Protokoll]
     end
     subgraph Backend[FastAPI-Backend]
         API[main.py<br/>Routen · Auth · Fehlerformat]
@@ -156,9 +156,9 @@ frontend/src/
   lib/useJobs.ts          Warteschlange abfragen, Abschluss genau einmal melden
 ```
 
-* **Drei Ansichten statt einer überfrachteten Seite:** Prüf-Workspace
-  (Belegprüfung, Scorecard, Inspektor), Compliance Copilot und Protokoll &
-  Regelwerk. Alle bleiben eingehängt – ein Ansichtswechsel bricht weder eine
+* **Drei Ansichten statt einer überfrachteten Seite:** Prüfung
+  (Belegliste, Scorecard, Inspektor), Copilot und Protokoll (Hash-Kette,
+  Exporte, Regelwerk). Alle bleiben eingehängt – ein Ansichtswechsel bricht weder eine
   Prüfung noch ein Gespräch ab.
 * **Design-System „ruhig und statisch“:** Tokens in `globals.css` für Dark
   (`#07080c` / `#0f1118` / `#161924`) und Light; Karten reagieren nicht auf den

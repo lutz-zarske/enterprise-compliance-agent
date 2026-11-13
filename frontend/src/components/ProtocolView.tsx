@@ -27,7 +27,7 @@ const RULES: { title: string; text: string }[] = [
   { title: "§ 14 Abs. 4 UStG · EN 16931", text: "Pflichtangaben je Rechnung; bei hybriden E-Rechnungen ist der XML-Datensatz maßgeblich (BMF-Schreiben vom 15.10.2024, Rz. 36)." },
   { title: "EU AI Act – VO (EU) 2024/1689", text: "Anhang-III-Eskalation (Art. 6 Abs. 2), automatisches Logging (Art. 12), menschliche Aufsicht und Übersteuerung (Art. 14 Abs. 4 lit. d); Pflichten ab 02.12.2027 (VO (EU) 2026/1744)." },
   { title: "DSGVO Art. 4 Nr. 5, 9, 25, 32", text: "Pseudonymisierung im Backend vor jedem Cloud-Aufruf (Privacy Vault); Befunde ausschließlich maskiert gespeichert." },
-  { title: "GoBD · § 147 AO · BEG IV", text: "Hash-verkettetes, Ed25519-signiertes Prüfprotokoll; Buchungsbelege 8 Jahre, Verfahrensdokumentation und Handelsbücher 10 Jahre." },
+  { title: "GoBD · § 147 AO · BEG IV", text: "SHA-256-hashverkettetes Prüfprotokoll, Prüfer-Einträge zusätzlich Ed25519-signiert; Buchungsbelege 8 Jahre, Verfahrensdokumentation und Handelsbücher 10 Jahre." },
 ];
 
 function IntegrityStrip({ ledger, fingerprint, onRefresh, refreshing }: {
@@ -121,8 +121,9 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
 }
 
 /**
- * Protokoll & Regelwerk: die vollstaendige Ed25519-signierte Hash-Kette mit
- * Systemereignissen, Exporte (GoBD-Paket, Verfahrensdokumentation) und das Regelwerk.
+ * Ansicht „Protokoll“: die vollstaendige SHA-256-Hash-Kette (Prueferereignisse zusaetzlich
+ * Ed25519-signiert) mit Systemereignissen, Exporte (GoBD-Paket, Verfahrensdokumentation)
+ * und das Regelwerk.
  */
 export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpRuleset, active, onRefreshLedger, onOpenExport, notify }: {
   document: DocumentDetail | null;
@@ -199,7 +200,7 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-fg">Prüfprotokoll · neueste zuerst</h2>
-              <p className="text-xs text-subtle">Jeder Eintrag trägt den Hash seines Vorgängers; Prüfer- und Systemereignisse sind Ed25519-signiert.</p>
+              <p className="text-xs text-subtle">Jeder Eintrag trägt den Hash seines Vorgängers; Prüfer- und Steuerungsereignisse sind zusätzlich Ed25519-signiert.</p>
             </div>
             <PillTabs<Filter>
               size="sm"
@@ -233,7 +234,7 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
           <section className="card p-4" aria-label="Exporte">
             <h2 className="text-sm font-semibold text-fg">Exporte</h2>
             <p className="mt-0.5 truncate text-xs text-subtle" title={document?.filename}>
-              {document ? document.filename : "Im Prüf-Workspace einen Beleg auswählen."}
+              {document ? document.filename : "Unter „Prüfung“ einen Beleg auswählen."}
             </p>
             <div className="mt-3 space-y-2">
               <button

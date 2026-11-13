@@ -205,8 +205,12 @@ function useSave(onSaved: (settings: RuntimeSettings) => void, notify: Notify) {
   return { busy, save };
 }
 
-/** 1-Klick Start/Stopp fuer Ollama (nur direkt am Server; im Container ueber docker compose). */
-function LocalAiControl({ active, onChanged, notify }: { active: boolean; onChanged: () => void; notify: Notify }) {
+/**
+ * 1-Klick Start/Stopp fuer Ollama (nur direkt am Server; im Container ueber docker compose).
+ * ``compact``: nur ein knapper Start-Hinweis, und nur wenn Ollama installiert ist, aber nicht laeuft
+ * (Kaskade mit lokalem Fallback - ohne Umweg ueber „KI-Modelle“).
+ */
+function LocalAiControl({ active, onChanged, notify, compact = false }: { active: boolean; onChanged: () => void; notify: Notify; compact?: boolean }) {
   const [status, setStatus] = useState<LocalAiStatus | null>(null);
   const [busy, setBusy] = useState<"start" | "stop" | null>(null);
   const load = useCallback(() => {
@@ -228,6 +232,21 @@ function LocalAiControl({ active, onChanged, notify }: { active: boolean; onChan
       setBusy(null);
       load();
     }
+  }
+
+  if (compact) {
+    if (!status || status.running || !status.startable || !status.control_allowed) return null;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs">
+        <span className="flex min-w-0 items-center gap-2 text-fg">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-subtle" aria-hidden="true" />
+          Ollama ist installiert, läuft aber nicht – die lokale Stufe würde übersprungen.
+        </span>
+        <button type="button" className="btn btn-sm" onClick={() => void run("start")} disabled={busy !== null}>
+          {busy === "start" ? <Spinner size={11} /> : <Play size={11} aria-hidden="true" />} Lokale KI starten
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -422,7 +441,12 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
   );
 }
 
-function CascadeSection({ settings, onSaved, notify }: { settings: RuntimeSettings; onSaved: (settings: RuntimeSettings) => void; notify: Notify }) {
+function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
+  settings: RuntimeSettings;
+  onSaved: (settings: RuntimeSettings) => void;
+  onAccessChanged: () => void;
+  notify: Notify;
+}) {
   const { busy, save } = useSave(onSaved, notify);
   const [adding, setAdding] = useState(false);
   const [provider, setProvider] = useState<CloudMode>("gemini");
@@ -545,6 +569,7 @@ function CascadeSection({ settings, onSaved, notify }: { settings: RuntimeSettin
         ) : (
           <p className="text-xs text-subtle">Lokal ist das Hauptmodell; fällt es aus, schließt das Regelwerk die Prüfung gekennzeichnet ab.</p>
         )}
+        {(localFallback || !isCloud) && <LocalAiControl compact active onChanged={onAccessChanged} notify={notify} />}
         {fallbacks.filter((item) => item !== "local").map((item) => (
           <div key={item} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-xs">
             <span className="min-w-0 flex-1 text-fg">{PROVIDER_NAMES[item]} · {settings.models[item]} <span className="text-subtle">(Hauptschlüssel)</span></span>
@@ -782,7 +807,7 @@ export function SettingsModal({ open, settings, version, onClose, onSaved, onAcc
           {section === "models" && settings && (
             <ModelsSection settings={settings} active={open} onSaved={onSaved} onAccessChanged={onAccessChanged} notify={notify} />
           )}
-          {section === "cascade" && settings && <CascadeSection settings={settings} onSaved={onSaved} notify={notify} />}
+          {section === "cascade" && settings && <CascadeSection settings={settings} onSaved={onSaved} onAccessChanged={onAccessChanged} notify={notify} />}
           {section === "compliance" && settings && <ComplianceSection settings={settings} onSaved={onSaved} notify={notify} />}
           {section === "appearance" && <AppearanceSection />}
           {section === "system" && <SystemSection open={open} onAccessChanged={onAccessChanged} notify={notify} />}

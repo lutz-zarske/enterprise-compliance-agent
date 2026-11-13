@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useLayoutEffect, useState } from "react";
 
 /**
  * Lage eines schwebenden Menues (Portal, position: fixed) zum Ausloeser:
@@ -15,15 +15,41 @@ export function popoverStyle(
   const below = window.innerHeight - anchor.bottom - margin - 8;
   const above = anchor.top - margin - 8;
   const openUp = below < Math.min(maxHeight, 200) && above > below;
-  const left = align === "right" ? anchor.right - width : anchor.left;
+  const fitted = Math.min(width, window.innerWidth - 16);
+  const left = align === "right" ? anchor.right - fitted : anchor.left;
   return {
     position: "fixed",
-    width,
-    left: Math.max(8, Math.min(left, window.innerWidth - width - 8)),
+    width: fitted,
+    left: Math.max(8, Math.min(left, window.innerWidth - fitted - 8)),
     maxHeight: Math.max(120, Math.min(maxHeight, openUp ? above : below)),
     ...(openUp ? { bottom: window.innerHeight - anchor.top + margin } : { top: anchor.bottom + margin }),
     ["--origin" as string]: openUp ? "bottom" : "top",
   };
+}
+
+/**
+ * Lage eines Portal-Popovers am Ausloeser, nachgefuehrt bei Groessenaenderung.
+ * Popovers der Kopfzeile laufen bewusst ueber ein Portal: Die Kopfzeile traegt
+ * ``backdrop-filter``, und verschachtelte Glas-Menues zeichnet Chromium darin
+ * ohne eigenen Blur - sie wirken durchsichtig.
+ */
+export function useAnchoredStyle(
+  open: boolean,
+  anchorRef: React.RefObject<HTMLElement | null>,
+  { width, maxHeight, align }: { width: number; maxHeight?: number; align?: "left" | "right" },
+): React.CSSProperties {
+  const [style, setStyle] = useState<React.CSSProperties>({ position: "fixed", visibility: "hidden" });
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const anchor = anchorRef.current;
+      if (anchor) setStyle(popoverStyle(anchor.getBoundingClientRect(), { width, maxHeight, align }));
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open, anchorRef, width, maxHeight, align]);
+  return style;
 }
 
 const POPOVER_EVENT = "eca-popover-open";

@@ -24,6 +24,10 @@ data/uploads/*
 data/.settings.key
 # Ed25519-Schluessel der System-Signatur (Pruefdatenpakete) - niemals committen!
 data/.signing.key
+# SQLite-Sicherungen des Release-Assistenten (vollstaendige Datenbank inkl. PII)
+data/backups/
+# Tageszaehler des Cloud-Budgets (Laufzeitdaten)
+data/ai_usage.json
 !data/uploads/.gitkeep
 
 # IDE / OS
@@ -43,3 +47,6 @@ frontend/out/
 
 # Lokale Starter-Laufzeitdateien und Logs
 .run/
+
+# Artefakte lokaler Browser-Automatisierung (Screenshots, Seitenabzuege)
+.playwright-mcp/
