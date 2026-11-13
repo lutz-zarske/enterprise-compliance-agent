@@ -2,18 +2,21 @@
 rem Beendet die von Start_Compliance_Agent.bat gestarteten Hintergrundprozesse.
 setlocal
 
+rem Kopien ausserhalb des Projekts finden es ueber ECA_HOME oder am ueblichen Ort (siehe Start_Compliance_Agent.bat).
+if not defined ECA_HOME set "ECA_HOME=%USERPROFILE%\dev\enterprise-compliance-agent"
+
 set "APP_DIR=%~dp0"
 if exist "%APP_DIR%Stop_Compliance_Agent.ps1" (
     set "SKRIPT=%APP_DIR%Stop_Compliance_Agent.ps1"
     goto :found
 )
-if exist "%USERPROFILE%\dev\enterprise-compliance-agent\Stop_Compliance_Agent.ps1" (
-    set "APP_DIR=%USERPROFILE%\dev\enterprise-compliance-agent"
-    set "SKRIPT=%USERPROFILE%\dev\enterprise-compliance-agent\Stop_Compliance_Agent.ps1"
+if exist "%ECA_HOME%\Stop_Compliance_Agent.ps1" (
+    set "APP_DIR=%ECA_HOME%"
+    set "SKRIPT=%ECA_HOME%\Stop_Compliance_Agent.ps1"
     goto :found
 )
 
-echo FEHLER: Stop_Compliance_Agent.ps1 fehlt im aktuellen Ordner und unter %USERPROFILE%\dev\enterprise-compliance-agent.
+echo FEHLER: Stop_Compliance_Agent.ps1 fehlt im aktuellen Ordner und unter %ECA_HOME%.
 pause
 exit /b 1
 

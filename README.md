@@ -38,6 +38,14 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 | Prüfungen müssen auch Jahre später nachvollziehbar sein (GoBD) | Hash-verkettetes Prüfprotokoll mit Ed25519-signierten Prüfer-Einträgen und Prüfdatenpaket (ZIP) mit offline prüfbarem, signiertem Manifest |
 | KI-Anbieter sind überlastet oder offline | Wiederholung mit Backoff, Ausweichmodell, Ausweich-Schlüssel, lokales Modell – zuletzt das Regelwerk, gekennzeichnet in UI und Ledger |
 
+**Inhalt:** [Schnellstart](#schnellstart) · [Architektur](#architektur) ·
+[Oberfläche](#oberfläche) · [Rechtsnormen](#rechtsnormen-im-überblick) ·
+[Funktionsumfang](#funktionsumfang) · [KI-Kaskade](#ausfallsichere-ki-kaskade) ·
+[Scorecard](#compliance-scorecard-0100) · [Datenschutz](#datenschutz-und-privacy-gateway) ·
+[API](#api-referenz) · [Konfiguration](#konfiguration) · [Tests](#tests) ·
+[Entwicklung](#entwicklung) · [Docker](#docker) · [Grenzen](#bekannte-grenzen) ·
+[Changelog](CHANGELOG.md)
+
 ---
 
 ## Schnellstart
@@ -429,10 +437,13 @@ mit Cloud-Keys) wird in Tests ignoriert.
 | Typprüfung | `cd frontend && npx tsc --noEmit` |
 | Prüfpaket offline prüfen | `python scripts/verify_pruefpaket.py <paket.zip> --fingerprint <fp>` |
 
-* **Windows-Starter:** `Start_Compliance_Agent.ps1` muss **UTF-8 mit BOM und
-  CRLF** bleiben – Windows PowerShell 5.1 liest Dateien ohne BOM als ANSI und
-  zeigt Umlaute falsch an. `.gitattributes` erzwingt CRLF für `*.ps1`, `*.bat`
-  und `*.cmd`; Editoren dürfen das BOM beim Speichern nicht entfernen.
+* **Windows-Starter:** `Start_Compliance_Agent.ps1` und
+  `Stop_Compliance_Agent.ps1` müssen **UTF-8 mit BOM und CRLF** bleiben –
+  Windows PowerShell 5.1 liest Dateien ohne BOM als ANSI und zeigt Umlaute
+  falsch an. `.gitattributes` erzwingt CRLF für `*.ps1`, `*.bat` und `*.cmd`;
+  Editoren dürfen das BOM beim Speichern nicht entfernen. Eine Kopie der
+  `.bat`-Dateien außerhalb des Projekts (etwa auf dem Desktop) findet das
+  Projekt über die Umgebungsvariable `ECA_HOME`.
 * **Regeln für Änderungen** (Recht, Ledger, Kaskade, Oberfläche):
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#verbindliche-regeln-für-änderungen).
 * Die CI (`.github/workflows/ci.yml`) führt `pytest`, `npm run lint`,
@@ -529,4 +540,6 @@ Steuerberatung. Maßgeblich bleibt die Freigabe durch die Prüfperson.
 
 ## Lizenz
 
-[MIT](LICENSE) © 2026 Lutz Zarske
+[MIT](LICENSE) © 2026 Lutz Zarske · Änderungen je Version im
+[Changelog](CHANGELOG.md) · Sicherheitslücken bitte vertraulich melden
+([SECURITY.md](SECURITY.md)).

@@ -34,7 +34,7 @@ from app.retention import RETENTION_NOTE, RETENTION_RULES, invoice_retention
 from app.scoring import RULESET_VERSION
 from app.services import STRUCTURED_PROVIDER, parse_einvoice, parse_extraction, parse_scorecard, parse_sign_off
 
-TODO = "[vom Unternehmen zu ergänzen]"
+ZU_ERGAENZEN = "[vom Unternehmen zu ergänzen]"
 
 _EVENT_LABELS = {
     AuditEventType.ANALYSIS: "Analyse",
@@ -114,11 +114,11 @@ def build_procedural_doc(
                     "table": {
                         "head": ["Funktion", "Person / Stelle"],
                         "rows": [
-                            ["Verantwortlich für das Verfahren (Prozesseigner)", TODO],
-                            ["Prüfpersonen mit Freigabebefugnis", TODO],
-                            ["IT-Betrieb und Datensicherung", TODO],
-                            ["Datenschutzbeauftragte Person", TODO],
-                            ["Freigabe dieser Verfahrensdokumentation (Name, Datum)", TODO],
+                            ["Verantwortlich für das Verfahren (Prozesseigner)", ZU_ERGAENZEN],
+                            ["Prüfpersonen mit Freigabebefugnis", ZU_ERGAENZEN],
+                            ["IT-Betrieb und Datensicherung", ZU_ERGAENZEN],
+                            ["Datenschutzbeauftragte Person", ZU_ERGAENZEN],
+                            ["Freigabe dieser Verfahrensdokumentation (Name, Datum)", ZU_ERGAENZEN],
                         ],
                     },
                 },
@@ -151,7 +151,7 @@ def build_procedural_doc(
                 {
                     "heading": "2.1 Belegfluss",
                     "list": [
-                        "Eingang: Upload einzeln oder im Stapel (PDF oder XML); Weiterleitung aus dem Posteingang: " + TODO,
+                        "Eingang: Upload einzeln oder im Stapel (PDF oder XML); Weiterleitung aus dem Posteingang: " + ZU_ERGAENZEN,
                         "Validierung: Dateityp, Größe, PDF-Signatur und Textlayer bzw. XML ohne DTD und Entitäten; "
                         "unlesbare Dateien werden nicht gespeichert",
                         "Ablage: Original bitgenau mit SHA-256; bei hybriden Rechnungen wird der XML-Datensatz "
@@ -162,7 +162,7 @@ def build_procedural_doc(
                         "Prüfung: Prüfperson sichtet Befunde im Inspektor; Übersteuerung der KI-Einstufung "
                         "nur mit Begründung und Rechtsnorm (Art. 14 Abs. 4 lit. d AI Act)",
                         "Siegel: Freigabe oder Ablehnung durch die Prüfperson als signierter Ledger-Eintrag",
-                        "Export: Prüfzertifikat und Prüfdatenpaket (ZIP); Übergabe an ERP bzw. Archiv: " + TODO,
+                        "Export: Prüfzertifikat und Prüfdatenpaket (ZIP); Übergabe an ERP bzw. Archiv: " + ZU_ERGAENZEN,
                     ],
                 },
                 {
@@ -172,7 +172,7 @@ def build_procedural_doc(
                         "festgehalten. Empfohlen ist, dass Übersteuerung und abschließende Freigabe durch "
                         "verschiedene Personen erfolgen; der Anhang weist für den Beleg aus, ob das der Fall war. "
                         "Der Name im System ist selbst erklärt – die Identität muss über die vorgelagerte "
-                        "Anmeldung (Single Sign-on) belegt werden: " + TODO
+                        "Anmeldung (Single Sign-on) belegt werden: " + ZU_ERGAENZEN
                     ),
                 },
                 {
@@ -180,10 +180,10 @@ def build_procedural_doc(
                     "table": {
                         "head": ["Rolle", "Aufgaben im System", "Zuordnung"],
                         "rows": [
-                            ["Sachbearbeitung", "Upload, Analyse starten, Befunde lesen, Copilot", TODO],
-                            ["Prüfperson", "Übersteuerung der Einstufung, Siegel (Freigabe/Ablehnung)", TODO],
-                            ["Administration", "Inferenz-Modus, API-Schlüssel, PII-Strenge", TODO],
-                            ["Revision / Betriebsprüfung", "Lesezugriff, Zertifikat, Prüfdatenpaket", TODO],
+                            ["Sachbearbeitung", "Upload, Analyse starten, Befunde lesen, Copilot", ZU_ERGAENZEN],
+                            ["Prüfperson", "Übersteuerung der Einstufung, Siegel (Freigabe/Ablehnung)", ZU_ERGAENZEN],
+                            ["Administration", "Inferenz-Modus, API-Schlüssel, PII-Strenge", ZU_ERGAENZEN],
+                            ["Revision / Betriebsprüfung", "Lesezugriff, Zertifikat, Prüfdatenpaket", ZU_ERGAENZEN],
                         ],
                     },
                     "text": (
@@ -205,7 +205,7 @@ def build_procedural_doc(
                             ["Hash-Kette gebrochen oder Signatur ungültig", "Sicherheitsvorfall eröffnen, Datenbank sichern, extern verankerten Kopf-Hash vergleichen", "IT-Sicherheit"],
                         ],
                     },
-                    "text": "Zuständigkeiten sind Vorschläge: " + TODO,
+                    "text": "Zuständigkeiten sind Vorschläge: " + ZU_ERGAENZEN,
                 },
             ],
         },
@@ -236,7 +236,7 @@ def build_procedural_doc(
                         "Inferenz: Ollama (lokal) oder Gemini / Claude / OpenAI über HTTPS, Cloud-Aufrufe nur nach "
                         "Pseudonymisierung im Privacy Gateway",
                         "Ausgaben: Zertifikat (HTML/Markdown/JSON), Prüfdatenpaket (ZIP mit signiertem Manifest)",
-                        "Anbindung an ERP und Archiv: " + TODO,
+                        "Anbindung an ERP und Archiv: " + ZU_ERGAENZEN,
                     ],
                 },
                 {
@@ -253,7 +253,7 @@ def build_procedural_doc(
                         f"{verification.entries} Einträge, davon {verification.signed_entries} signiert; "
                         f"Kopf-Hash {verification.head_hash}",
                         "Kopf-Hash regelmäßig außerhalb des Systems verankern (Ticket, WORM-Speicher, qualifizierter "
-                        "Zeitstempel): " + TODO,
+                        "Zeitstempel): " + ZU_ERGAENZEN,
                     ],
                 },
                 {
@@ -288,7 +288,7 @@ def build_procedural_doc(
                         "Zu sichern sind das Datenverzeichnis mit Datenbank, Originalbelegen und Schlüsseldateien "
                         "(.settings.key, .signing.key). Ohne den Signaturschlüssel lassen sich neue Prüfer-Einträge "
                         "nicht mehr dem System zuordnen; bestehende bleiben über den hinterlegten Fingerabdruck "
-                        "prüfbar. Sicherungsintervall, Aufbewahrungsort und Wiederherstellungstest: " + TODO
+                        "prüfbar. Sicherungsintervall, Aufbewahrungsort und Wiederherstellungstest: " + ZU_ERGAENZEN
                     ),
                 },
                 {
@@ -297,7 +297,7 @@ def build_procedural_doc(
                         "Originale werden nur einmal geschrieben; das Prüfprotokoll ist append-only (Trigger) und "
                         "hash-verkettet. Die Datenbank selbst ist kein WORM-Speicher: Gegen einen Angreifer mit "
                         "Vollzugriff auf die Datenbankdatei schützt erst die externe Verankerung des Kopf-Hashes bzw. "
-                        "die Ablage in einem revisionssicheren Archiv. Archivsystem: " + TODO
+                        "die Ablage in einem revisionssicheren Archiv. Archivsystem: " + ZU_ERGAENZEN
                     ),
                 },
                 {
@@ -308,7 +308,7 @@ def build_procedural_doc(
                         "Änderungen der Einstellungen (Inferenz-Modus, Schlüssel, PII-Strenge) werden im "
                         "Anwendungsprotokoll (JSON-Logs mit Request-ID) festgehalten, nicht im Ledger.",
                         "Software-Updates und Änderungen dieser Dokumentation sind zu historisieren "
-                        "(Versionsstand, Datum, freigebende Person): " + TODO,
+                        "(Versionsstand, Datum, freigebende Person): " + ZU_ERGAENZEN,
                     ],
                 },
                 {
@@ -317,7 +317,7 @@ def build_procedural_doc(
                         "API-Schlüssel (X-API-Key), Rate-Limit je Client-IP",
                         "Provider-Schlüssel Fernet-verschlüsselt gespeichert, nur maskiert ausgeliefert",
                         "Zertifikate mit restriktiver Content-Security-Policy, alle Werte HTML-escaped",
-                        "Netzwerkzonen, Härtung und Patch-Management: " + TODO,
+                        "Netzwerkzonen, Härtung und Patch-Management: " + ZU_ERGAENZEN,
                     ],
                 },
             ],
@@ -476,7 +476,7 @@ def _e(value: Any) -> str:
 
 def _todo(text: str) -> str:
     """Hebt Platzhalter hervor (nach dem Escaping, daher sicher)."""
-    return _e(text).replace(html.escape(TODO), f'<span class="todo">{html.escape(TODO)}</span>')
+    return _e(text).replace(html.escape(ZU_ERGAENZEN), f'<span class="todo">{html.escape(ZU_ERGAENZEN)}</span>')
 
 
 def render_html(doc: dict[str, Any]) -> str:

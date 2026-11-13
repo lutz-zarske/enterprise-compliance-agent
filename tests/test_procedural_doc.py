@@ -10,7 +10,7 @@ from datetime import date
 from fastapi.testclient import TestClient
 
 from app.audit_ledger import ChainVerification
-from app.procedural_doc import TODO, build_procedural_doc, render_html, render_markdown
+from app.procedural_doc import ZU_ERGAENZEN, build_procedural_doc, render_html, render_markdown
 from app.retention import RETENTION_RULES, invoice_retention, retention_end
 from app.signing import SystemSigner
 
@@ -58,7 +58,7 @@ def test_pflichtinhalte_der_anwender_und_systemdokumentation(settings, tmp_path)
 def test_unbekannte_organisationsangaben_sind_markiert(settings, tmp_path) -> None:
     html = render_html(_doc(settings, tmp_path))
     assert html.count('class="todo"') >= 5
-    assert TODO in html
+    assert ZU_ERGAENZEN in html
     assert "Entwurf aus dem Systemzustand" in html
 
 
