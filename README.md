@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 327 pytest](https://img.shields.io/badge/pytest-327_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 329 pytest](https://img.shields.io/badge/pytest-329_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -24,7 +24,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > every result lands in a SHA-256 hash chain with Ed25519-signed reviewer
 > events, and a fail-safe AI cascade (local Ollama or cloud LLMs behind a
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
-> FastAPI · Next.js 15 · 327 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 329 offline tests · runs without GPU or API key.
 > The documentation is in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -43,7 +43,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 [Funktionsumfang](#funktionsumfang) · [KI-Kaskade](#ausfallsichere-ki-kaskade) ·
 [Scorecard](#compliance-scorecard-0100) · [Datenschutz](#datenschutz-und-privacy-gateway) ·
 [API](#api-referenz) · [Konfiguration](#konfiguration) · [Tests](#tests) ·
-[Entwicklung](#entwicklung) · [Docker](#docker) · [Grenzen](#bekannte-grenzen) ·
+[Entwicklung](#entwicklung) · [Docker](#docker) · [Abgrenzung](#abgrenzung-und-architektur-scope) ·
 [Changelog](CHANGELOG.md)
 
 ---
@@ -94,7 +94,11 @@ npm run build && npm run start                     # http://127.0.0.1:3001
 > rund zwei Sekunden kosten kann; das Backend normalisiert `OLLAMA_BASE_URL`
 > deshalb automatisch.
 
-Lokales Modell (optional): `ollama pull qwen2.5:14b-instruct`. Läuft Ollama nicht,
+Lokales Modell (optional – Musterdaten, E-Rechnungs-Parser und Regelwerk laufen
+auch ohne KI): Standard ist `ollama pull qwen2.5:14b-instruct` (ab 16 GB RAM
+bzw. dedizierter GPU). Für normale Laptops ohne dedizierte Grafikkarte empfiehlt
+sich ein leichteres Modell wie `ollama pull qwen2.5:7b-instruct` oder
+`qwen2.5:3b` (unter **Einstellungen › KI-Modelle** wählbar). Läuft Ollama nicht,
 bietet die Oberfläche einen **„Lokale KI starten“**-Knopf an.
 
 ---
@@ -124,7 +128,7 @@ flowchart LR
 |---|---|
 | **Backend** | Python 3.12 · FastAPI · Pydantic v2 · SQLAlchemy 2.0 Core · httpx · pdfplumber/pypdfium2 · defusedxml · cryptography (Fernet, Ed25519) |
 | **Frontend** | Next.js 15 · React 19 · Tailwind CSS 4 · TypeScript (strict) · Schriften lokal über `@fontsource` |
-| **Inferenz** | Ollama `qwen2.5:14b-instruct` · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein Agenten-Framework |
+| **Inferenz** | Ollama (`qwen2.5:14b-instruct`, auf Geräten ohne GPU z. B. `7b`/`3b`) · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein Agenten-Framework |
 | **Persistenz** | SQLite (Default) · PostgreSQL über `DATABASE_URL` |
 | **Qualität** | pytest ohne LLM und ohne Netz (Provider und VIES über `httpx.MockTransport`) · ESLint · `next build` · CI für Backend, Frontend und Docker |
 | **Betrieb** | Ein-Klick-Starter für Windows · Docker Compose · Non-Root-Container mit Healthchecks · JSON-Logs mit `request_id` |
@@ -143,8 +147,6 @@ Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
 | ![Copilot mit Antwort, Zeilenverweisen und hervorgehobener Belegzeile](docs/screenshots/copilot.png) | ![Prüfprotokoll mit Hash-Kette, Ed25519-Status, Exporten und Regelwerk](docs/screenshots/protokoll.png) |
 | **Laufende Prüfung mit Job-Monitor** | **Einstellungen: Ausweich-Kaskade** |
 | ![Job-Monitor in der Kopfzeile, Phasen, Restzeit und Hinweis auf automatischen Neuversuch](docs/screenshots/job-monitor.png) | ![Zweispaltige Einstellungen mit effektiver Kaskade und Ausweich-Schlüsseln](docs/screenshots/einstellungen-kaskade.png) |
-
-![Ansicht Prüfung im hellen Farbschema](docs/screenshots/workspace-light.png)
 
 * **Prüfung:** KPI-Leiste, Belegliste (Suche, Filter, Batch-Prüfung,
   `J`/`K`), Scorecard mit vier Kacheln und Rechtsfolgen-Tooltips, Inspektor mit
@@ -170,7 +172,7 @@ Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
 | `1` – `5` | Inspektor-Reiter § 14 UStG · AI Act · PII · Kerndaten · XML (nur E-Rechnung) |
 | `Strg` + `Enter` (macOS `⌘` + `Enter`) | Siegel-Dialog öffnen; im Dialog versiegeln |
 | `?` | Übersicht der Tastaturkürzel |
-| `Esc` | Dialog, Menü oder Tour schließen |
+| `Esc` | Dialog, Menü oder Tour schließen; laufende Copilot-Anfrage stoppen |
 
 Kürzel greifen nie, solange ein Eingabefeld den Fokus hat oder ein Dialog offen
 ist. Designprinzipien: ruhige, statische Flächen (Karten reagieren nicht auf den
@@ -220,7 +222,7 @@ Einordnung: [`docs/RECHTLICHE_ANALYSE_2026.md`](docs/RECHTLICHE_ANALYSE_2026.md)
 | **Prüfzertifikat & Prüfdatenpaket** | A4-HTML, Markdown-Memo, JSON; ZIP mit Original, XML, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und signiertem Manifest; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
 | **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 aus dem echten Systemzustand plus Anhang je Beleg |
 | **DLP-Gateway** | `POST /api/v1/redact`: endgültige Schwärzung für andere Anwendungen vor jedem Cloud-LLM-Aufruf |
-| **Release-Assistent** | Neue Version per `git fetch --tags` prüfen; Einspielen nur nach Bestätigung des Commit-Hashes, als Fast-Forward, mit Datenbanksicherung und Ledger-Eintrag |
+| **Release-Assistent** | Neue Version per `git fetch --tags` prüfen und per Klick installieren – mit automatischer Datenbanksicherung, Erhalt aller lokalen Daten und Ledger-Eintrag |
 | **Musterdaten** | Vier Referenzbelege (gültig, Steuerfalle, KI-Recruiting nach Anhang III, ZUGFeRD an eine Kommune), sofort nutzbar ohne Modell |
 
 ---
@@ -234,7 +236,7 @@ zuerst selbst (Standard nach 2 s und 5 s), dann übernimmt die nächste:
 | Stufe | Was passiert | Konfiguration |
 |---|---|---|
 | 1 | Hauptmodell des aktiven Anbieters | Einstellungen › KI-Modelle |
-| 2 | Ausweichmodell desselben Anbieters (z. B. `gemini-3.6-flash`) | „Ausweichmodell bei Überlast“ |
+| 2 | Ausweichmodell desselben Anbieters (z. B. `gemini-3.5-flash-lite`) | „Ausweichmodell bei Überlast“ |
 | 3 | Ausweich-Schlüssel der Reihe nach – auch ein zweiter Gemini-Key | Einstellungen › Ausweich-Kaskade, bis zu 6 |
 | 4 | Anbieter-Fallbacks, z. B. lokales Ollama | „Lokal ausweichen“ |
 | 5 | Deterministisches Regelwerk (§ 14 UStG, IBAN-Prüfsumme, Regex-PII, konservative AI-Act-Einstufung) | `HEURISTIC_FALLBACK=true` |
@@ -335,7 +337,7 @@ Vollständig und interaktiv unter `/docs` (Swagger).
 | `GET` | `/documents/{id}/report?format=html\|markdown\|json` | Prüfzertifikat |
 | `GET` | `/api/documents/{id}/export/gobd` · `…/export/procedural-doc` | Prüfdatenpaket (ZIP) · Verfahrensdokumentation |
 | `POST` | `/documents/{id}/copilot` | Frage zum Beleg (`thinking`, `progress_id`) |
-| `GET` | `/api/v1/copilot/progress/{id}` | Live-Arbeitsschritte einer Copilot-Anfrage |
+| `GET` · `POST` | `/api/v1/copilot/progress/{id}` · `/api/v1/copilot/cancel/{id}` | Live-Arbeitsschritte bzw. Abbruch einer laufenden Copilot-Anfrage |
 | `GET` · `POST` | `/api/v1/ai/local` · `/api/v1/ai/start-ollama` · `/api/v1/ai/stop-local` | Lokale KI erkennen, starten, stoppen (nur localhost) |
 | `POST` | `/api/vat/verify` | USt-IdNr. live bei VIES prüfen |
 | `GET` | `/api/audit/trail` · `/api/audit/verify` · `/api/audit/head` · `/api/audit/signing-key` | Ledger lesen, prüfen, verankern; öffentlicher Schlüssel |
@@ -357,7 +359,7 @@ curl -s -X POST "$API/documents/$ID/extract?wait=true" | jq '.scorecard | {score
 # Kaskade: Gemini primär, Ausweichmodell, zweiter Key, zuletzt lokal
 curl -s -X POST $API/api/settings -H "Content-Type: application/json" -d '{
   "inference_mode": "gemini", "api_keys": {"gemini": "<KEY_1>"},
-  "ausweich_modelle": {"gemini": "gemini-3.6-flash"},
+  "ausweich_modelle": {"gemini": "gemini-3.5-flash-lite"},
   "ausweich_schluessel": [{"id": "g2", "provider": "gemini", "api_key": "<KEY_2>"}],
   "fallbacks": ["local"]}' | jq .chain
 
@@ -389,7 +391,7 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 | `OLLAMA_MODEL` · `OLLAMA_NUM_CTX` | `qwen2.5:14b-instruct` · `32768` | Lokales Modell und Kontextfenster |
 | `GEMINI_MODEL` · `ANTHROPIC_MODEL` · `OPENAI_MODEL` | `gemini-3.8-flash` · `claude-sonnet-5` · `gpt-4o` | Startwerte (Stand 11/2026 aktiv; OpenAI schaltet GPT-4o am 14.01.2027 ab); die Live-Modell-Liste schlägt neuere vor |
 | `GEMINI_/ANTHROPIC_/OPENAI_API_KEY` | leer | Startwerte für Cloud-Anbieter |
-| `LLM_RETRY_DELAYS` | `2,5` | Wiederholungen je Stufe (Sekunden) |
+| `LLM_RETRY_DELAYS` · `CLOUD_TIMEOUT_SECONDS` | `2,5` · `45` | Wiederholungen je Stufe und Timeout pro Cloud-Anfrage (Sekunden) |
 | `HEURISTIC_FALLBACK` | `true` | Regelwerk schließt ab, wenn alle KI-Stufen ausfallen |
 | `CLOUD_DAILY_TOKEN_LIMIT` | `-1` | Tagesbudget für Cloud-Tokens (`-1` = ohne Limit) |
 | `ANALYSIS_WORKERS` | `1` | Gleichzeitige Analysen |
@@ -406,12 +408,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 327 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 329 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-327 Tests (Stand v2.5.0) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+329 Tests (Stand v2.5.1) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -457,7 +459,7 @@ mit Cloud-Keys) wird in Tests ignoriert.
 |---|---|---|
 | `api` | 8001 → 8000 | Python 3.12-slim, UID 10001, Healthcheck auf `/health`, Volume `app-data` |
 | `frontend` | 3001 | Next.js Standalone auf node:22-alpine, UID 10001, startet erst bei gesunder API |
-| `ollama` | 11434 | nur mit `--profile full` (Flash Attention, 8-Bit-KV-Cache); danach `docker compose exec ollama ollama pull qwen2.5:14b-instruct` |
+| `ollama` | 11434 | nur mit `--profile full` (Flash Attention, 8-Bit-KV-Cache); danach `docker compose exec ollama ollama pull qwen2.5:14b-instruct` (oder `qwen2.5:7b-instruct` auf Geräten ohne GPU) |
 
 `PUBLIC_API_URL` legt fest, unter welcher Adresse der **Browser** die API
 erreicht (zur Build-Zeit eingebettet, Default `http://127.0.0.1:8001`; für den
@@ -502,41 +504,32 @@ tests/                 pytest-Suite (HTTP-Mocks, keine Netzzugriffe)
 
 ---
 
-## Bekannte Grenzen
+## Abgrenzung und Architektur-Scope
 
-Das System liefert eine **technische Vorprüfung**, keine Rechts- oder
-Steuerberatung. Maßgeblich bleibt die Freigabe durch die Prüfperson.
+Das System liefert eine **technische Vorprüfung** zur Entscheidungsunterstützung
+nach Art. 14 EU AI Act – keine Rechts- oder Steuerberatung. Maßgeblich bleibt
+die Freigabe durch die Prüfperson.
 
-* **Kein OCR.** Scans ohne Textlayer werden mit Handlungshinweis abgelehnt.
-* **Keine vollständige EN-16931-Validierung.** Geprüft werden Profil,
-  Pflichtfelder und Summenregeln, nicht XSD und Schematron; für die formale
-  Annahme zählt der KoSIT-Validator.
-* **Abgleich XML ↔ Bildteil und Fundstellen-Kopplung sind textbasiert.**
-  Ungewöhnliche Layouts können „nicht gefunden“ ergeben (Hinweis ohne Abzug).
-* **Regelwerk-Audit liest per Mustererkennung.** Es ist gekennzeichnet, stuft
-  nach dem AI Act konservativ ein und ersetzt keine KI-gestützte Prüfung;
-  mit erreichbarem Modell über „Neu prüfen“ wiederholen.
-* **Art. 6 Abs. 3 AI Act** wird nicht automatisch geprüft; das System eskaliert
-  konservativ, die Prüfperson übersteuert begründet.
-* **Prozesslokale Zustände.** Job-Warteschlange, Fortschritt und Rate-Limit
-  gelten je Prozess. Für mehrere Worker gehören sie in Redis oder eine
-  Job-Queue (Arq, Celery); die Job-API bliebe gleich.
-* **Prüfer-Identität.** Die Ed25519-Signatur stammt vom System und belegt
-  Integrität, nicht Identität; produktiv gehören SSO (OIDC) und ggf. eine
-  qualifizierte elektronische Signatur dazu.
-* **Schlüsselwechsel.** Wird `data/.signing.key` ersetzt, gelten bisherige
-  Signaturen als „fremder Schlüssel“; eine Rotation mit Historie ist nicht
-  umgesetzt – den Schlüssel sichern.
-* **Pseudonymisierung und DLP sind regelbasiert.** Namen ohne Anrede oder Rolle
-  und Geheimnisse ohne erkennbares Muster bleiben stehen.
-* **Prüfdatenpaket ≠ Datenträgerüberlassung** und kein qualifiziertes Siegel
-  nach eIDAS.
-* **VIES ist eine Momentaufnahme** und ersetzt nicht die qualifizierte
-  Bestätigungsabfrage beim BZSt (§ 18e UStG).
-* **Release-Assistent nur mit Git-Arbeitskopie;** Docker-Installationen
-  aktualisieren über ein neues Image.
-* **Einzeltasten-Kürzel** (`J`, `K`, `1`–`5`, `?`) lassen sich nicht abschalten;
-  sie wirken nie in Eingabefeldern oder Dialogen.
+* **Digitaler Text-Layer & EN-16931-Kernprüfung:** PDF-Dokumente werden über
+  ihren eingebetteten Text- bzw. XML-Layer gelesen (reine Bild-Scans ohne
+  Text-Layer werden mit Hinweis abgewiesen). Bei E-Rechnungen prüft der Parser
+  Profil, Pflichtfelder, Summenregeln und Leitweg-ID; für eine vollständige
+  XSD-/Schematron-Abnahme im Behördenbetrieb ergänzt der KoSIT-Validator.
+* **Regelbasierte Pseudonymisierung & Heuristik-Notbetrieb:** Privacy Vault und
+  DLP-Gateway arbeiten deterministisch über Muster, Kontextanker und
+  Prüfsummen (ohne schwergewichtiges NER-Modell). Das Regelwerk-Audit als
+  letzte Kaskadenstufe stuft konservativ ein und ist in UI sowie Ledger klar
+  gekennzeichnet.
+* **Systemseitige Integritätssignatur & VIES-Momentaufnahme:** Ed25519-Signaturen
+  und das Prüfdatenpaket sichern die technische Unveränderbarkeit (für eine
+  personenbezogene Identitätsbindung im Produktivbetrieb wird OIDC/SSO bzw.
+  ein qualifiziertes Siegel nach eIDAS vorgeschaltet). Die Live-VIES-Abfrage
+  ist eine Momentaufnahme; die qualifizierte Bestätigung nach § 18e UStG
+  erteilt das BZSt.
+* **Single-Node-Standard mit klarer Skalierungsschnittstelle:**
+  Job-Warteschlange, Fortschritt und Rate-Limiter laufen standardmäßig ohne
+  externe Infrastruktur im Prozessspeicher. Für horizontale Multi-Worker-Setups
+  lässt sich der Zustand hinter derselben Job-API in Redis / Celery auslagern.
 
 ## Lizenz
 

@@ -51,9 +51,9 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  if (!open) return null;
-  return (
-    <div className="anim-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--backdrop)] p-4 pt-[6vh] backdrop-blur-md no-print">
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
+    <div className="anim-fade fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--backdrop)] p-4 pt-[6vh] backdrop-blur-md no-print">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}
@@ -74,7 +74,8 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
         </div>
         <div className={padded ? "px-5 py-4" : undefined}>{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

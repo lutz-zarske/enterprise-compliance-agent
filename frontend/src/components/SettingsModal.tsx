@@ -759,7 +759,7 @@ function AboutSection({ open, version, notify }: { open: boolean; version: strin
     <div className="space-y-5">
       <SectionTitle
         title="Updates & Über"
-        text={`Enterprise Compliance Agent${version ? ` v${version}` : ""}. Updates nur nach Bestätigung des Commit-Hashes, als Fast-Forward und mit Datenbanksicherung – kein Auto-Pulling.`}
+        text={`Enterprise Compliance Agent${version ? ` v${version}` : ""}. Neue Releases per Klick installieren – mit automatischer Datenbanksicherung und Erhalt aller lokalen Daten.`}
       />
       {open && <ReleasePanel notify={notify} />}
       <div className="border-t border-line pt-4">

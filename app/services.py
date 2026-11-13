@@ -49,7 +49,7 @@ from app.heuristics import (
     heuristic_copilot_answer,
     heuristic_extraction,
 )
-from app.inference import is_failover_error
+from app.inference import STAGE_LABELS, is_failover_error
 from app.jobs import PHASES
 from app.llm import PROMPT_HASH, ComplianceAuditPayload, LLMError, StructuredLLMClient
 from app.pdf_reader import PdfExtraction, extract_text_async
@@ -1260,7 +1260,8 @@ class DocumentService:
         Kaskade aus, antwortet das Regelwerk aus dem gespeicherten Pruefergebnis.
         """
         steps = COPILOT_STEPS
-        steps.step(progress_id, "Frage verstehen")
+        steps.step(progress_id, "Belegstellen und Prüfergebnis aufbereiten")
+        steps.register_task(progress_id, asyncio.current_task())
         try:
             if not record.raw_text:
                 raise NoTextAvailableError(f"Zum Dokument {record.id} liegt kein Text vor.")
@@ -1277,13 +1278,23 @@ class DocumentService:
 
             def on_event(kind: str, info: dict[str, Any]) -> None:
                 if kind == "retry":
-                    steps.step(progress_id, f"Modell antwortet nicht – automatischer Neuversuch "
-                                            f"({info.get('attempt')}/{info.get('total')})…")
+                    model_name = info.get("model") or "Modell"
+                    attempt, total = info.get("attempt"), info.get("total")
+                    if info.get("reason_code") == "provider_unavailable":
+                        steps.step(
+                            progress_id,
+                            f"{model_name} ausgelastet – automatischer Neuversuch ({attempt}/{total})…",
+                        )
+                    else:
+                        steps.step(
+                            progress_id,
+                            f"{model_name} antwortet nicht rechtzeitig – Neuversuch ({attempt}/{total})…",
+                        )
                 elif kind == "switch":
-                    steps.step(progress_id, f"Wechsle auf Ausweichmodell {info.get('to_model')}…")
+                    to_label = STAGE_LABELS.get(str(info.get("to_stage")), "Ausweich-Stufe")
+                    steps.step(progress_id, f"Wechsle auf {to_label}: {info.get('to_model')}…")
 
             client = self._acquire_client(on_event)
-            steps.step(progress_id, "Beleg und Prüfergebnis laden")
             grounding = build_copilot_grounding(record, self._settings.max_prompt_chars)
             messages = [
                 *[
@@ -1295,11 +1306,15 @@ class DocumentService:
             ]
             vault = _vault_of(client)
             if vault is not None:
-                steps.step(progress_id, "Pseudonymisieren (Privacy Vault)")
-            steps.step(progress_id, "Modell denkt nach")
+                steps.step(progress_id, "Personenbezogene Daten pseudonymisieren (Privacy Vault)")
+            steps.step(progress_id, f"{client.model} prüft Belegstellen und Rechtsnormen")
             system_prompt = COPILOT_SYSTEM_PROMPT + THINKING_INSTRUCTIONS.get(thinking, "")
             try:
                 answer, duration_ms = await client.chat_text(system_prompt=system_prompt, messages=messages)
+            except asyncio.CancelledError:
+                if vault is not None:
+                    vault.clear()
+                raise
             except LLMError as exc:
                 if vault is not None:
                     vault.clear()
@@ -1412,31 +1427,75 @@ class StepTracker:
 
     def __init__(self) -> None:
         self._items: dict[str, dict[str, Any]] = {}
+        self._tasks: dict[str, asyncio.Task[Any]] = {}
+        self._cancelled: set[str] = set()
 
     def _prune(self, now: float) -> None:
         for key in [key for key, item in self._items.items() if now - item["at"] > self.MAX_AGE_SECONDS]:
             self._items.pop(key, None)
+            self._tasks.pop(key, None)
+            self._cancelled.discard(key)
+
+    def register_task(self, progress_id: str | None, task: asyncio.Task[Any] | None) -> None:
+        """Verknuepft die laufende Coroutine mit ``progress_id`` fuer den gezielten Abbruch."""
+        if not progress_id or task is None:
+            return
+        self._prune(time.time())
+        if progress_id in self._cancelled:
+            task.cancel()
+            return
+        self._tasks[progress_id] = task
+
+    def cancel(self, progress_id: str) -> bool:
+        """Markiert die Anfrage als abgebrochen und beendet einen laufenden Task."""
+        now = time.time()
+        self._prune(now)
+        task = self._tasks.pop(progress_id, None)
+        had_item = progress_id in self._items
+        self._cancelled.add(progress_id)
+        item = self._items.setdefault(
+            progress_id, {"steps": [], "at": now, "started": now, "done": True, "cancelled": True}
+        )
+        if not item["steps"] or item["steps"][-1] != "Abgebrochen":
+            item["steps"] = (item["steps"] + ["Abgebrochen"])[-20:]
+        item["at"] = now
+        item["done"] = True
+        item["cancelled"] = True
+        if task is not None and not task.done():
+            task.cancel()
+            return True
+        return had_item
 
     def step(self, progress_id: str | None, text: str) -> None:
         if not progress_id:
             return
         now = time.time()
         self._prune(now)
-        item = self._items.setdefault(progress_id, {"steps": [], "at": now, "started": now, "done": False})
+        item = self._items.setdefault(
+            progress_id, {"steps": [], "at": now, "started": now, "done": False, "cancelled": False}
+        )
         if not item["steps"] or item["steps"][-1] != text:
             item["steps"] = (item["steps"] + [text])[-20:]
         item["at"] = now
 
     def finish(self, progress_id: str | None) -> None:
-        if progress_id and progress_id in self._items:
-            self._items[progress_id]["done"] = True
+        if progress_id:
+            self._tasks.pop(progress_id, None)
+            self._cancelled.discard(progress_id)
+            if progress_id in self._items:
+                self._items[progress_id]["done"] = True
 
     def get(self, progress_id: str) -> dict[str, Any]:
         item = self._items.get(progress_id)
         if item is None:
-            return {"current": None, "steps": [], "done": False, "started_at": None}
-        return {"current": item["steps"][-1] if item["steps"] else None, "steps": list(item["steps"]),
-                "done": bool(item["done"]), "started_at": item["started"]}
+            return {"current": None, "steps": [], "done": False, "cancelled": False, "started_at": None}
+        return {
+            "current": item["steps"][-1] if item["steps"] else None,
+            "steps": list(item["steps"]),
+            "done": bool(item["done"]),
+            "cancelled": bool(item.get("cancelled", False)),
+            "started_at": item["started"],
+        }
 
 
 COPILOT_STEPS = StepTracker()

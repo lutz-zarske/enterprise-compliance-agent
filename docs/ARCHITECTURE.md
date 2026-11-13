@@ -207,9 +207,9 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
   `DLP_TERMS` und `extra_terms` → `[REDACTED_CONFIDENTIAL]`; PII →
   `[REDACTED_<KATEGORIE>]`. Kein Mapping, der Text wird nie gespeichert oder
   geloggt.
-* **Release-Assistent:** kein automatisches Pullen. Eingespielt wird nur nach
-  Bestätigung des Commit-Hashes, als Fast-Forward, ohne lokale Änderungen und
-  ohne offene Prüf-Jobs, standardmäßig nur von localhost; vorher eine
+* **Release-Assistent:** kein automatisches Pullen im Hintergrund. Eingespielt
+  wird per Klick auf den Ziel-Commit, ohne ungesicherte lokale Code-Änderungen
+  und ohne offene Prüf-Jobs, standardmäßig nur von localhost; vorher eine
   SQLite-Sicherung nach `data/backups/`, danach `release_update` im Ledger.
 * **Secrets:** keine `.env`, API-Keys oder `data/*.key` committen. Tests laufen
   ausschließlich mit `httpx.MockTransport` und ignorieren eine lokale `.env`.
@@ -266,7 +266,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (327 Tests, Stand v2.5.0) deckt die Kette vom HTTP-Request bis zur
+`pytest` (329 Tests, Stand v2.5.1) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die
@@ -286,4 +286,4 @@ Fortschritt, Batch und Abbruch der Jobs.
 * **Regelbasierte Pseudonymisierung:** kein NER-Modell; Namen ohne Anrede oder
   Rolle bleiben unerkannt.
 * **Kein OCR, keine XSD/Schematron-Validierung** – siehe
-  [„Bekannte Grenzen“ im README](../README.md#bekannte-grenzen).
+  [„Abgrenzung und Architektur-Scope“ im README](../README.md#abgrenzung-und-architektur-scope).

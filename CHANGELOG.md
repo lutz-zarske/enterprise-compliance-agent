@@ -3,6 +3,13 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.5.1 – 14.11.2026
+
+- Compliance Copilot: Stoppknopf (und `Esc`) bricht laufende Anfragen sofort im Browser und serverseitig ab (`POST /api/v1/copilot/cancel/{id}`), inklusive „Erneut senden“ am abgebrochenen Turn.
+- Konkrete Live-Arbeitsschritte im Copilot: Aufbereitung der Belegstellen, Privacy-Vault-Pseudonymisierung, Modellprüfung sowie ursachengenaue Retry-Meldungen („ausgelastet“ vs. „antwortet nicht rechtzeitig“).
+- Gemini-Verbindungstest (`POST /api/settings/test-connection`) führt nun einen leichten 1-Token-Inferenz-Ping (`:generateContent`) aus, sodass Überlastungen (`HTTP 503`) direkt auffallen; `gemini-3.5-flash-lite` als schnelles Standard-Ausweichmodell und Cloud-Timeout auf `45 s` verkürzt.
+- Release-Assistent & Modale: `Modal`-Dialoge rendern per Portal auf `document.body` (kein Abschneiden durch die `backdrop-filter`-Kopfzeile); Updates lassen sich direkt per Klick ohne manuelle Freigabe-Felder installieren (`git fetch --tags --force`), wobei lokale Daten (`data/agent.db`, `.env`) vollständig erhalten bleiben.
+
 ## v2.5.0 – 13.11.2026
 
 **Ausfallsicherheit und Betrieb**
@@ -82,3 +89,10 @@ Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE
 
 - FastAPI-Backend mit Pydantic-v2-Verträgen und lokaler Inferenz über Ollama,
   Next.js-Frontend.
+
+## Konzeption & Prototyp (vor v1.0) – 07/2026 – 08/2026
+
+- Fachliche Anforderungsanalyse zu § 14 UStG, EN 16931 (ZUGFeRD/XRechnung),
+  EU AI Act, DSGVO und GoBD; Entwurf des deterministischen Scoring-Modells.
+- Erste lokale Extraktions-Prototypen (Ollama, strukturierte Pydantic-Schemata)
+  und Architekturkonzept vor dem initialen Repository-Aufbau.

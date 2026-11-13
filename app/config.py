@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Projektwurzel (…/enterprise-compliance-agent), unabhaengig vom CWD.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.5.1"
 APP_TITLE = "Enterprise Compliance Agent"
 
 _LOOPBACK_HOST = re.compile(r"^(https?://)localhost(?=[:/]|$)", re.IGNORECASE)
@@ -133,7 +133,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None)
     openai_model: str = Field(default="gpt-4o")
     openai_base_url: str = Field(default="https://api.openai.com/v1")
-    cloud_timeout_seconds: float = Field(default=180.0, gt=0)
+    cloud_timeout_seconds: float = Field(default=45.0, ge=5.0, le=600.0)
 
     #: Fernet-Schluessel fuer die Ablage von Provider-Keys in der Datenbank.
     #: Leer -> wird beim ersten Start unter data/.settings.key erzeugt.

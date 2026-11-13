@@ -138,7 +138,10 @@ async function request<T>(path: string, init: RequestInit = {}, base = activeBas
   let response: Response;
   try {
     response = await fetch(`${base}${path}`, { cache: "no-store", ...init, headers: headers(init.headers) });
-  } catch {
+  } catch (err) {
+    if (init.signal?.aborted || (err instanceof Error && err.name === "AbortError")) {
+      throw new ApiError("Anfrage abgebrochen.", 0, "aborted");
+    }
     throw offlineError(base);
   }
   if (!response.ok) throw await toApiError(response);
@@ -231,13 +234,25 @@ export const api = {
   reportJson: (id: string) => request<Record<string, unknown>>(`/documents/${id}/report?format=json`),
   reportMarkdown: (id: string) => requestText(`/documents/${id}/report?format=markdown`),
   reportHtml: (id: string) => requestText(`/documents/${id}/report?format=html`),
-  copilot: (id: string, question: string, history: CopilotTurn[], thinking: ThinkingLevel = "medium", progressId?: string) =>
+  copilot: (
+    id: string,
+    question: string,
+    history: CopilotTurn[],
+    thinking: ThinkingLevel = "medium",
+    progressId?: string,
+    signal?: AbortSignal,
+  ) =>
     request<CopilotResponse>(
       `/documents/${id}/copilot`,
-      json({ question, history, thinking, ...(progressId ? { progress_id: progressId } : {}) }),
+      { ...json({ question, history, thinking, ...(progressId ? { progress_id: progressId } : {}) }), signal },
     ),
   copilotProgress: (progressId: string) =>
     request<CopilotProgress>(`/api/v1/copilot/progress/${encodeURIComponent(progressId)}`),
+  copilotCancel: (progressId: string) =>
+    request<{ cancelled: boolean; progress_id: string }>(
+      `/api/v1/copilot/cancel/${encodeURIComponent(progressId)}`,
+      { method: "POST" },
+    ),
   localAi: () => request<LocalAiStatus>("/api/v1/ai/local"),
   startOllama: () => request<LocalAiResult>("/api/v1/ai/start-ollama", { method: "POST" }),
   stopLocalAi: () => request<LocalAiResult>("/api/v1/ai/stop-local", { method: "POST" }),
@@ -259,7 +274,7 @@ export const api = {
     request<SeedResponse>(`/api/demo/seed${only ? `?only=${encodeURIComponent(only)}` : ""}`, { method: "POST" }),
   models: (provider: string) => request<ModelCatalog>(`/api/settings/models?provider=${encodeURIComponent(provider)}`),
   release: (fetchRemote = true) => request<ReleaseStatus>(`/api/system/release?fetch=${fetchRemote}`),
-  applyRelease: (tag: string, commit: string, admin_name: string) =>
+  applyRelease: (tag: string, commit: string, admin_name = "System") =>
     request<ReleaseApplyResult>("/api/system/release/apply", json({ tag, commit, admin_name })),
   settings: () => request<RuntimeSettings>("/api/settings"),
   updateSettings: (update: SettingsUpdate) => request<RuntimeSettings>("/api/settings", json(update)),

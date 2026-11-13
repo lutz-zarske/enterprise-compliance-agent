@@ -86,7 +86,7 @@ class CloudLLMClient(StructuredLLMClient):
         api_key: str,
         model: str,
         base_url: str,
-        timeout_seconds: float = 180.0,
+        timeout_seconds: float = 45.0,
         client: httpx.AsyncClient | None = None,
         budget: CloudBudget | None = None,
     ) -> None:
@@ -206,7 +206,14 @@ class GeminiClient(CloudLLMClient):
 
     async def test_connection(self) -> str:
         await self._send(
-            "GET", f"{self._base_url}/models/{self._model}", headers={"x-goog-api-key": self._api_key}
+            "POST",
+            f"{self._base_url}/models/{self._model}:generateContent",
+            headers={"x-goog-api-key": self._api_key},
+            json={
+                "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
+                "generationConfig": {"maxOutputTokens": 1, "temperature": 0.0},
+            },
+            timeout=12.0,
         )
         return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
@@ -248,7 +255,7 @@ class AnthropicClient(CloudLLMClient):
         return text
 
     async def test_connection(self) -> str:
-        await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers())
+        await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers(), timeout=12.0)
         return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:
@@ -287,7 +294,7 @@ class OpenAIClient(CloudLLMClient):
         return content
 
     async def test_connection(self) -> str:
-        await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers())
+        await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers(), timeout=12.0)
         return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:

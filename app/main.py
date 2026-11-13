@@ -1209,6 +1209,18 @@ def _register_routes(application: FastAPI) -> None:
     async def copilot_progress(progress_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{6,64}$")) -> dict[str, object]:
         return COPILOT_STEPS.get(progress_id)
 
+    @application.post(
+        "/api/v1/copilot/cancel/{progress_id}",
+        tags=["Compliance Copilot"],
+        summary="Laufende Copilot-Anfrage serverseitig abbrechen",
+        dependencies=[Depends(require_api_key)],
+    )
+    async def cancel_copilot_progress(
+        progress_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{6,64}$"),
+    ) -> dict[str, object]:
+        """Bricht eine laufende Copilot-Anfrage serverseitig ab."""
+        return {"cancelled": COPILOT_STEPS.cancel(progress_id), "progress_id": progress_id}
+
     # --- Lokale KI ---------------------------------------------------------------
     @application.get(
         "/api/v1/ai/local",
@@ -1475,11 +1487,16 @@ def _register_routes(application: FastAPI) -> None:
                 "database_backup": backup.name if backup else None,
             },
         )
+        auto_restarting = manager.schedule_restart_if_managed()
         return JSONResponse({
             "ok": True, "from_commit": previous, "to_tag": release["tag"], "to_commit": release["commit"],
-            "database_backup": backup.name if backup else None, "restart_required": True,
-            "message": "Code aktualisiert. Bitte Stop_Compliance_Agent.bat und danach Start_Compliance_Agent.bat "
-                       "ausführen - der Starter aktualisiert Abhängigkeiten und baut das Frontend neu.",
+            "database_backup": backup.name if backup else None, "restart_required": not auto_restarting,
+            "message": (
+                "Update installiert – Dienste werden im Hintergrund automatisch neu gestartet und die Oberfläche lädt gleich neu."
+                if auto_restarting
+                else "Code aktualisiert. Bitte Stop_Compliance_Agent.bat und danach Start_Compliance_Agent.bat "
+                     "ausführen - der Starter aktualisiert Abhängigkeiten und baut das Frontend neu."
+            ),
         })
 
     # --- Data-Loss-Prevention ----------------------------------------------

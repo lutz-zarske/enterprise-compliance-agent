@@ -539,6 +539,7 @@ export interface CopilotProgress {
   current: string | null;
   steps: string[];
   done: boolean;
+  cancelled?: boolean;
   started_at: number | null;
 }
 

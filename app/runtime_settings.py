@@ -84,14 +84,14 @@ MAX_BACKUP_KEYS = 6
 #: Ausweichmodell waere es wirkungslos.)
 SUGGESTED_MODELS: dict[str, list[str]] = {
     "local": ["qwen2.5:14b-instruct", "qwen2.5:7b-instruct", "llama3.1:8b-instruct-q8_0"],
-    "gemini": ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
+    "gemini": ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"],
     "anthropic": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-5-5"],
     "openai": ["gpt-4o", "gpt-4o-mini"],
 }
 
 #: Vorschlag fuer das Ausweichmodell desselben Anbieters (leichter, seltener ueberlastet).
 SUGGESTED_FALLBACK_MODELS: dict[str, str] = {
-    "gemini": "gemini-3.6-flash",
+    "gemini": "gemini-3.5-flash-lite",
     "anthropic": "claude-haiku-5-5",
     "openai": "gpt-4o-mini",
 }
@@ -292,7 +292,10 @@ class RuntimeSettingsStore:
                 elif key == "ausweich_modelle":
                     loaded = json.loads(value)
                     for provider in self._state["ausweich_modelle"]:
-                        self._state["ausweich_modelle"][provider] = str(loaded.get(provider) or "")
+                        model = str(loaded.get(provider) or "")
+                        if provider == "gemini" and model == "gemini-3.7-flash":
+                            model = "gemini-3.5-flash-lite"
+                        self._state["ausweich_modelle"][provider] = model
                 elif key == "ausweich_schluessel":
                     raw = json.loads(self._fernet.decrypt(value.encode()).decode()) if value else []
                     self._state[key] = tuple(

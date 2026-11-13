@@ -6,7 +6,7 @@ import { buildCorrectionRequest, correctionDefects } from "../lib/correction";
 import { cx, formatElapsed, formatModel } from "../lib/format";
 import { Markdown } from "../lib/markdown";
 import type { CopilotTurn, DocumentDetail, DocumentSummary, ThinkingLevel } from "../types/api";
-import { AlertTriangle, Download, FileText, Mail, MessageSquare, Send } from "./icons";
+import { AlertTriangle, Download, FileText, Mail, MessageSquare, Send, Square } from "./icons";
 import { Select } from "./Select";
 import { AutoTextarea, CopyButton, EmptyState, Segmented, Spinner } from "./ui";
 
@@ -37,6 +37,7 @@ const THINKING: { value: ThinkingLevel; label: string }[] = [
 interface Message extends CopilotTurn {
   meta?: string;
   tone?: "error" | "notice" | "heuristic";
+  aborted?: boolean;
 }
 
 /** Beide Spalten fuellen das Fenster exakt (Kopfzeile 57 px + Innenabstand 2 x 16 px), nie unter 560 px. */
@@ -100,6 +101,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
   const [bannerReady, setBannerReady] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<{ controller: AbortController; progressId: string } | null>(null);
 
   const messages = document ? threads[document.id] ?? [] : [];
   const defects = correctionDefects(document);
@@ -134,24 +136,62 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
     return () => window.clearInterval(timer);
   }, [busy]);
 
+  const stop = useCallback(() => {
+    const current = abortRef.current;
+    if (!current) return;
+    abortRef.current = null;
+    current.controller.abort();
+    void api.copilotCancel(current.progressId).catch(() => undefined);
+  }, []);
+
+  useEffect(() => () => {
+    abortRef.current?.controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!busy) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && draft === null) {
+        event.preventDefault();
+        stop();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, draft, stop]);
+
   const ask = useCallback(async (question: string) => {
-    if (!document || question.trim().length < 2 || busy) return;
+    const trimmed = question.trim();
+    if (!document || trimmed.length < 2 || busy) return;
     const id = document.id;
     const history: CopilotTurn[] = (threads[id] ?? [])
-      .filter((message) => message.tone !== "error" && message.tone !== "notice")
+      .filter((message) => !message.aborted && message.tone !== "error" && message.tone !== "notice")
       .map(({ role, content }) => ({ role, content }));
-    setThreads((all) => ({ ...all, [id]: [...(all[id] ?? []), { role: "user", content: question.trim() }] }));
+    setThreads((all) => {
+      const current = all[id] ?? [];
+      const prevLast = current[current.length - 1];
+      const base =
+        prevLast?.role === "user" && prevLast.aborted && prevLast.content === trimmed
+          ? current.slice(0, -1)
+          : current;
+      return { ...all, [id]: [...base, { role: "user", content: trimmed }] };
+    });
     setInput("");
     setBusy(true);
-    setStep("Frage verstehen");
+    setStep("Belegstellen und Prüfergebnis aufbereiten");
     setStartedAt(Date.now());
     setNow(Date.now());
     const progressId = newProgressId();
+    const controller = new AbortController();
+    abortRef.current = { controller, progressId };
     const poll = window.setInterval(() => {
-      api.copilotProgress(progressId).then((progress) => progress.current && setStep(progress.current)).catch(() => undefined);
+      if (controller.signal.aborted) return;
+      api.copilotProgress(progressId).then((progress) => {
+        if (!controller.signal.aborted && progress.current) setStep(progress.current);
+      }).catch(() => undefined);
     }, 700);
     try {
-      const response = await api.copilot(id, question.trim(), history, thinking, progressId);
+      const response = await api.copilot(id, trimmed, history, thinking, progressId, controller.signal);
       const meta = response.reference
         ? "Musterantwort · ohne KI-Modell"
         : response.heuristic
@@ -163,6 +203,18 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
       }));
     } catch (err) {
       const error = err instanceof ApiError ? err : null;
+      if (controller.signal.aborted || error?.code === "aborted") {
+        setThreads((all) => {
+          const current = all[id] ?? [];
+          return {
+            ...all,
+            [id]: current.map((msg, idx) =>
+              idx === current.length - 1 && msg.role === "user" ? { ...msg, aborted: true } : msg,
+            ),
+          };
+        });
+        return;
+      }
       const content = error
         ? `${error.message}${error.hint ? ` – ${error.hint}` : ""}`
         : "Die Frage konnte nicht beantwortet werden. Bitte erneut senden.";
@@ -171,6 +223,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
         [id]: [...(all[id] ?? []), { role: "assistant", content, tone: error?.code === "network" ? "notice" : "error" }],
       }));
     } finally {
+      if (abortRef.current?.controller === controller) abortRef.current = null;
       window.clearInterval(poll);
       setBusy(false);
       setStep(null);
@@ -259,8 +312,29 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
           )}
           {messages.map((message, index) =>
             message.role === "user" ? (
-              <div key={index} className="flex justify-end">
-                <p className="max-w-[85%] rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm leading-relaxed text-fg">{message.content}</p>
+              <div key={index} className="flex flex-col items-end">
+                <p
+                  className={cx(
+                    "max-w-[85%] rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm leading-relaxed text-fg transition-opacity",
+                    message.aborted && "opacity-75",
+                  )}
+                >
+                  {message.content}
+                </p>
+                {message.aborted && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-subtle">
+                    <span>Abgebrochen</span>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      onClick={() => void ask(message.content)}
+                      disabled={busy}
+                      className="font-medium text-accent hover:underline disabled:opacity-50"
+                    >
+                      Erneut senden
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div key={index} className="max-w-[92%]">
@@ -281,7 +355,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
           {busy && (
             <div className="flex items-center gap-2.5 text-xs text-subtle" role="status" aria-live="polite">
               <Spinner size={12} />
-              <span className="text-muted">{step ?? "Modell denkt nach"}</span>
+              <span className="text-muted">{step ?? "Belegstellen und Rechtsnormen prüfen"}</span>
               {startedAt && <span className="tabular-nums">· {formatElapsed(now - startedAt)}</span>}
             </div>
           )}
@@ -331,9 +405,21 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
                 }
               }}
             />
-            <button className="btn btn-primary h-[38px] w-[38px] shrink-0 rounded-full p-0" type="submit" disabled={busy || input.trim().length < 2} aria-label="Senden">
-              <Send size={15} aria-hidden="true" />
-            </button>
+            {busy ? (
+              <button
+                className="btn btn-primary h-[38px] w-[38px] shrink-0 rounded-full p-0"
+                type="button"
+                onClick={stop}
+                aria-label="Antwort stoppen"
+                title="Antwort stoppen (Esc)"
+              >
+                <Square size={13} fill="currentColor" aria-hidden="true" />
+              </button>
+            ) : (
+              <button className="btn btn-primary h-[38px] w-[38px] shrink-0 rounded-full p-0" type="submit" disabled={input.trim().length < 2} aria-label="Senden">
+                <Send size={15} aria-hidden="true" />
+              </button>
+            )}
           </div>
           <p className="mt-1.5 text-xs text-subtle">
             Enter sendet, Umschalt + Enter für eine neue Zeile. Keine Rechts- oder Steuerberatung; Cloud-Modelle erhalten den Text nur pseudonymisiert.

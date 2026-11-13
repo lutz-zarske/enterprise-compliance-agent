@@ -16,6 +16,7 @@ Grundsaetze - kein unkontrolliertes Auto-Pulling:
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 import sqlite3
@@ -104,9 +105,11 @@ class ReleaseManager:
             return {**base, "message": "Keine Git-Arbeitskopie (z. B. Docker-Image) - Update über ein neues Image."}
         message = None
         if fetch:
-            fetched = self._git("fetch", "--tags", "--quiet", "origin", check=False)
+            fetched = self._git("fetch", "--tags", "--force", "--quiet", "origin", check=False)
             if fetched.returncode != 0:
-                message = f"Server nicht erreichbar: {fetched.stderr.strip()[:200]}"
+                err = fetched.stderr.strip()[:200]
+                if err:
+                    message = f"Update-Server nicht erreichbar: {err}"
         latest = self.latest()
         return {
             **base,
@@ -144,18 +147,54 @@ class ReleaseManager:
             raise ReleaseError("hash_mismatch", "Der bestätigte Commit-Hash passt nicht zum Release-Tag.")
         if latest["signature"] == "invalid":
             raise ReleaseError("signature_invalid", "Die Signatur des Release-Tags ist ungültig.")
-        if not latest["fast_forward"]:
-            raise ReleaseError("not_fast_forward", "Lokaler Stand ist abgezweigt - kein Fast-Forward möglich.")
         if self._git("status", "--porcelain", "--untracked-files=no").stdout.strip():
             raise ReleaseError("dirty_worktree", "Lokale Änderungen vorhanden - Update abgebrochen.")
         return latest
 
     def fast_forward(self, tag: str) -> str:
-        """Spielt ``tag`` ein (nur Fast-Forward); liefert den vorherigen Commit."""
+        """Spielt ``tag`` ein (Fast-Forward oder sauberer Wechsel ohne ungesicherte Änderungen); liefert den vorherigen Commit."""
         self.busy = True
         try:
             previous = self._git("rev-parse", "HEAD").stdout.strip()
-            self._git("merge", "--ff-only", "--quiet", tag)
+            if self._git("merge-base", "--is-ancestor", "HEAD", tag, check=False).returncode == 0:
+                self._git("merge", "--ff-only", "--quiet", tag)
+            else:
+                self._git("reset", "--hard", "--quiet", tag)
+            self.current_version = tag.removeprefix("v")
             return previous
         finally:
             self.busy = False
+
+    def schedule_restart_if_managed(self) -> bool:
+        """Startet unter Windows den Agent automatisch neu, wenn er ueber Start_Compliance_Agent.bat laeuft."""
+        start_ps1 = self.repo_dir / "Start_Compliance_Agent.ps1"
+        stop_ps1 = self.repo_dir / "Stop_Compliance_Agent.ps1"
+        pid_file = self.repo_dir / ".run" / "backend.pid"
+        if os.name != "nt" or not (start_ps1.exists() and stop_ps1.exists() and pid_file.exists()):
+            return False
+        # Spawnt ueber WMI (Win32_Process.Create), damit taskkill /T auf backend.pid
+        # den Neustart-Prozess nicht selbst abbricht.
+        inner = (
+            "Start-Sleep -Milliseconds 1500; "
+            f"& '{str(stop_ps1).replace(chr(39), chr(39) * 2)}'; "
+            "Start-Sleep -Milliseconds 800; "
+            f"& '{str(start_ps1).replace(chr(39), chr(39) * 2)}' -NoBrowser"
+        )
+        encoded = base64.b64encode(inner.encode("utf-16-le")).decode("ascii")
+        target_cmd = f"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {encoded}"
+        wmi_launcher = (
+            "$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "
+            f"-Arguments @{{ CommandLine = '{target_cmd}'; CurrentDirectory = '{str(self.repo_dir).replace(chr(39), chr(39) * 2)}' }}; "
+            "if ($r.ReturnValue -ne 0) { exit 1 }"
+        )
+        try:
+            res = subprocess.run(  # noqa: S603
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", wmi_launcher],
+                cwd=str(self.repo_dir),
+                capture_output=True,
+                timeout=8,
+                check=False,
+            )
+            return res.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            return False

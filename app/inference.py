@@ -64,7 +64,7 @@ _CLOUD_CLASSES: dict[InferenceMode, type[CloudLLMClient]] = {
 STAGE_LABELS = {
     "primary": "Hauptmodell",
     "ausweichmodell": "Ausweichmodell",
-    "ausweich_schluessel": "Ausweich-Schluessel",
+    "ausweich_schluessel": "Ausweich-Schlüssel",
     "fallback": "Anbieter-Fallback",
 }
 

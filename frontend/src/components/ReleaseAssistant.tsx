@@ -1,22 +1,21 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, fetchHealth } from "../lib/api";
 import { cx } from "../lib/format";
 import type { ReleaseApplyResult, ReleaseStatus } from "../types/api";
-import { AlertTriangle, ArrowUpCircle, CheckCircle, RefreshCw, ShieldAlert, ShieldCheck } from "./icons";
+import { ArrowUpCircle, CheckCircle, RefreshCw, ShieldAlert, ShieldCheck } from "./icons";
 import { HashBadge, Modal, Spinner } from "./ui";
 
 const SIGNATURE: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
   valid: { label: "Tag-Signatur gültig", tone: "border-ok-line bg-ok-soft text-ok", icon: <ShieldCheck size={12} aria-hidden="true" /> },
   invalid: { label: "Tag-Signatur ungültig", tone: "border-bad-line bg-bad-soft text-bad", icon: <ShieldAlert size={12} aria-hidden="true" /> },
-  unsigned: { label: "Tag unsigniert – Commit-Hash prüfen", tone: "border-warn-line bg-warn-soft text-warn", icon: <AlertTriangle size={12} aria-hidden="true" /> },
 };
 
 /**
- * Release pruefen und kontrolliert einspielen. Kein Auto-Pulling: Das Update
- * verlangt Namen und die ausdrueckliche Bestaetigung des angezeigten Commit-Hashes;
- * das Backend prueft Fast-Forward, laufende Analysen und sichert ``data/agent.db``.
+ * Release pruefen und per Klick einspielen. Das Backend prueft laufende Analysen,
+ * legt automatisch eine Sicherungskopie von ``data/agent.db`` an und protokolliert
+ * den Versionswechsel im Ledger; lokale Daten und Einstellungen bleiben erhalten.
  */
 export function ReleasePanel({ initial, onApplied, notify }: {
   initial?: ReleaseStatus | null;
@@ -25,8 +24,6 @@ export function ReleasePanel({ initial, onApplied, notify }: {
 }) {
   const [status, setStatus] = useState<ReleaseStatus | null>(initial ?? null);
   const [checking, setChecking] = useState(false);
-  const [admin, setAdmin] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<ReleaseApplyResult | null>(null);
 
@@ -50,20 +47,30 @@ export function ReleasePanel({ initial, onApplied, notify }: {
     if (!latest) return;
     setBusy(true);
     try {
-      const result = await api.applyRelease(latest.tag, latest.commit, admin.trim());
+      const result = await api.applyRelease(latest.tag, latest.commit, "System");
       setDone(result);
-      notify("ok", `Release ${result.to_tag} eingespielt`, "Datenbank gesichert, Wechsel im Ledger verankert. Bitte neu starten.");
+      notify("ok", `Release ${result.to_tag} installiert`, result.message);
       onApplied?.(result);
+      if (!result.restart_required) {
+        window.setTimeout(() => {
+          const poll = window.setInterval(() => {
+            fetchHealth().then(() => {
+              window.clearInterval(poll);
+              window.location.reload();
+            }).catch(() => undefined);
+          }, 1500);
+        }, 2500);
+      }
     } catch (err) {
       const error = err instanceof ApiError ? err : null;
-      notify("bad", "Update abgelehnt", error ? `${error.message}` : String(err));
+      notify("bad", "Update fehlgeschlagen", error ? `${error.message}` : String(err));
     } finally {
       setBusy(false);
     }
   }
 
   const latest = status?.latest;
-  const blocked = Boolean(status?.dirty || (latest && (!latest.fast_forward || latest.signature === "invalid")));
+  const blocked = Boolean(status?.dirty || (latest && latest.signature === "invalid"));
   const signature = latest ? SIGNATURE[latest.signature] : null;
 
   return (
@@ -98,26 +105,13 @@ export function ReleasePanel({ initial, onApplied, notify }: {
               </ul>
             </details>
           )}
-          {status?.dirty && <p className="text-xs text-bad">Lokale Änderungen im Arbeitsverzeichnis – Update gesperrt.</p>}
-          {!latest.fast_forward && <p className="text-xs text-bad">Lokaler Stand ist abgezweigt – kein Fast-Forward möglich.</p>}
-          <label className="block">
-            <span className="label-caps">Freigabe durch</span>
-            <input
-              className="input mt-1"
-              name="release-admin"
-              autoComplete="off"
-              value={admin}
-              onChange={(event) => setAdmin(event.target.value)}
-              placeholder="Name oder Kürzel der Administration eingeben…"
-            />
-          </label>
-          <label className="flex items-start gap-2 text-xs text-muted">
-            <input type="checkbox" className="mt-0.5 accent-[var(--accent)]" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-            Commit-Hash {latest.commit.slice(0, 10)}… mit der Freigabe abgeglichen. Vor dem Wechsel wird data/agent.db gesichert; laufende Analysen sperren das Update.
-          </label>
+          {status?.dirty && <p className="text-xs text-bad">Lokale Code-Änderungen im Arbeitsverzeichnis – bitte vor dem Update sichern oder zurücksetzen.</p>}
+          <p className="text-xs leading-relaxed text-muted">
+            Lokale Daten, Einstellungen, API-Keys und geprüfte Belege (<span className="font-mono">data/agent.db</span>, <span className="font-mono">.env</span>) bleiben vollständig erhalten. Vor dem Update legt das System automatisch eine Sicherungskopie unter <span className="font-mono">data/backups/</span> an.
+          </p>
           <div className="flex justify-end">
-            <button className="btn btn-primary" onClick={() => void apply()} disabled={busy || blocked || !confirmed || admin.trim().length < 2}>
-              {busy && <Spinner size={13} />} Update einspielen
+            <button className="btn btn-primary" onClick={() => void apply()} disabled={busy || blocked}>
+              {busy && <Spinner size={13} />} Update installieren
             </button>
           </div>
         </div>
@@ -125,7 +119,7 @@ export function ReleasePanel({ initial, onApplied, notify }: {
 
       {done && (
         <div className="rounded-lg border border-ok-line bg-ok-soft p-3 text-xs text-ok">
-          <p className="font-semibold">{done.to_tag} eingespielt{done.database_backup ? ` · Sicherung ${done.database_backup}` : ""}</p>
+          <p className="font-semibold">{done.to_tag} installiert{done.database_backup ? ` · Sicherung ${done.database_backup}` : ""}</p>
           <p className="mt-1 text-fg">{done.message}</p>
         </div>
       )}
@@ -156,14 +150,14 @@ export function GitSyncButton({ online, notify }: {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Neue Version verfügbar – Änderungen und Signatur prüfen"
+        title="Neue Version verfügbar – Änderungen prüfen und installieren"
         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-ok-line bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok transition-colors duration-150 hover:border-ok"
       >
         <ArrowUpCircle size={13} aria-hidden="true" />
         <span className="tabular-nums">Release {status.latest.tag} verfügbar</span>
-        <span className="hidden text-subtle xl:inline">(Changelog prüfen)</span>
+        <span className="hidden text-subtle xl:inline">(Update verfügbar)</span>
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Release-Assistent" subtitle="Signierte Release-Tags · Fast-Forward · Datenbanksicherung · Ledger-Eintrag">
+      <Modal open={open} onClose={() => setOpen(false)} title="Update verfügbar" subtitle="Automatische Datenbanksicherung · Lokale Daten & Einstellungen bleiben erhalten">
         <ReleasePanel initial={status} notify={notify} />
       </Modal>
     </>

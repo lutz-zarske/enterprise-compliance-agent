@@ -465,3 +465,69 @@ def test_ueberlast_meldung_nennt_die_tatsaechliche_ursache() -> None:
     assert chain.endswith("Auch die übrigen 2 Stufen der Ausweich-Kaskade antworteten nicht.")
     two = fallback_explanation(ProviderUnavailableError(overload_message("Gemini", 429)), stages=2)
     assert two.endswith("Auch die zweite Stufe der Ausweich-Kaskade antwortete nicht.")
+
+
+def test_copilot_cancel_beendet_laufende_anfrage_und_meldet_status(
+    full_client: TestClient, monkeypatch: Any
+) -> None:
+    """Stoppknopf: POST /api/v1/copilot/cancel/{id} bricht laufende Anfragen serverseitig ab."""
+    import threading
+    from app.services import COPILOT_STEPS, DocumentService
+
+    started = threading.Event()
+    original = DocumentService.copilot
+
+    async def slow_copilot(self: Any, *args: Any, **kwargs: Any) -> dict[str, object]:
+        COPILOT_STEPS.register_task(kwargs.get("progress_id"), asyncio.current_task())
+        started.set()
+        try:
+            await asyncio.sleep(5.0)
+        finally:
+            COPILOT_STEPS.finish(kwargs.get("progress_id"))
+        return await original(self, *args, **kwargs)
+
+    monkeypatch.setattr(DocumentService, "copilot", slow_copilot)
+    seeded = full_client.post("/api/demo/seed", params={"only": "Rechnung_Gueltig_14UStG.pdf"}).json()
+    doc_id = seeded["items"][0]["id"]
+    progress_id = "cancel-test-123"
+
+    outcomes: list[Any] = []
+
+    def run_chat() -> None:
+        try:
+            outcomes.append(
+                full_client.post(
+                    f"/documents/{doc_id}/copilot",
+                    json={"question": "Wer ist der Empfänger?", "progress_id": progress_id},
+                ).status_code
+            )
+        except Exception as exc:  # noqa: BLE001
+            outcomes.append(type(exc).__name__)
+
+    worker = threading.Thread(target=run_chat)
+    worker.start()
+    assert started.wait(timeout=3.0)
+
+    cancelled = full_client.post(f"/api/v1/copilot/cancel/{progress_id}")
+    assert cancelled.status_code == 200
+    assert cancelled.json() == {"cancelled": True, "progress_id": progress_id}
+    worker.join(timeout=3.0)
+    assert not worker.is_alive()
+
+    status = full_client.get(f"/api/v1/copilot/progress/{progress_id}").json()
+    assert status["done"] is True
+    assert status["cancelled"] is True
+    assert status["current"] == "Abgebrochen"
+
+
+def test_gemini_verbindungstest_erkennt_503_ueberlast(
+    make_full_client: Callable[..., TestClient], fake_gemini: FakeGemini
+) -> None:
+    """Ein 200 auf GET /models reicht nicht: bei 503 auf :generateContent meldet der Test Fehler."""
+    fake_gemini.status_by_model["gemini-3.8-flash"] = [503]
+    client = _gemini_client(make_full_client, fake_gemini)
+    result = client.post("/api/settings/test-connection", json={"provider": "gemini"}).json()
+    assert result["ok"] is False
+    assert result["code"] == "provider_unavailable"
+    assert "503" in result["message"]
+    assert fake_gemini.calls[0]["body"]["generationConfig"]["maxOutputTokens"] == 1
