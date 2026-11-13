@@ -109,7 +109,7 @@ def detect(ollama_base_url: str) -> dict[str, object]:
     ollama = next((item for item in found if item["key"] == "ollama"), None)
     remote = not _is_local_url(ollama_base_url)
     if in_container():
-        text = "Im Container laeuft Ollama als eigener Dienst (docker compose) – Start und Stopp dort."
+        text = "Im Container läuft Ollama als eigener Dienst (docker compose) – Start und Stopp dort."
     elif remote:
         text = f"Ollama ist als entfernter Dienst konfiguriert ({urlsplit(ollama_base_url).netloc})."
     elif ollama and ollama["running"]:
@@ -141,7 +141,7 @@ def start_ollama(wait: float = START_WAIT_SECONDS) -> dict[str, object]:
     """Ollama lautlos im Hintergrund starten und auf den Port warten."""
     service = SERVICES[0]
     if in_container():
-        return {"ok": False, "message": "Im Container wird Ollama ueber docker compose gestartet."}
+        return {"ok": False, "message": "Im Container wird Ollama über docker compose gestartet."}
     if _port_open(service.port):
         return {"ok": True, "already_running": True, "message": "Ollama lief bereits."}
     program = _program(service)
@@ -204,7 +204,7 @@ def stop_ollama(wait: float = STOP_WAIT_SECONDS) -> dict[str, object]:
     """Ollama beenden und den Grafikspeicher freigeben."""
     service = SERVICES[0]
     if in_container():
-        return {"ok": False, "message": "Im Container wird Ollama ueber docker compose gestoppt."}
+        return {"ok": False, "message": "Im Container wird Ollama über docker compose gestoppt."}
     if not _port_open(service.port):
         return {"ok": True, "message": "Ollama lief nicht."}
     for image in service.stop_images:

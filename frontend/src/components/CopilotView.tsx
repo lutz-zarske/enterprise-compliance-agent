@@ -155,7 +155,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
       const meta = response.reference
         ? "Musterantwort · ohne KI-Modell"
         : response.heuristic
-          ? "Regelwerk · KI temporär überlastet"
+          ? "Regelwerk · KI nicht verfügbar"
           : `${formatModel(response.model)} · ${(response.duration_ms / 1000).toFixed(1).replace(".", ",")} s${response.failover?.length ? " · Ausweichmodell" : ""}`;
       setThreads((all) => ({
         ...all,

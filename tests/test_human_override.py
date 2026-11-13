@@ -167,7 +167,7 @@ def test_neu_berechnete_kette_faellt_an_der_signatur_auf(tmp_path, settings) -> 
 
     result = anyio.run(ledger.verify_chain)
     assert result.valid is False
-    assert "Pruefer-Signatur" in (result.reason or "")
+    assert "Prüfer-Signatur" in (result.reason or "")
 
 
 def test_fremder_schluessel_wird_erkannt(tmp_path, settings) -> None:

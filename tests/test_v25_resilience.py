@@ -413,17 +413,17 @@ def test_ledger_zusammenfassung_widerspricht_dem_score_nicht() -> None:
     def tile(key: str, deduction: int) -> SimpleNamespace:
         return SimpleNamespace(key=key, title=key, deduction=deduction)
 
-    clean = SimpleNamespace(headline="Keine Compliance-Auffaelligkeiten")
+    clean = SimpleNamespace(headline="Keine Compliance-Auffälligkeiten")
     steuerfalle = SimpleNamespace(
         score=45, release_recommendation="Freigabe gesperrt — Nachforderung nötig",
         tiles=[tile("formal", 30), tile("regulatory", 0), tile("privacy", 0), tile("math", 25)],
     )
     summary = analysis_summary(steuerfalle, clean)  # type: ignore[arg-type]
     assert summary == "Freigabe gesperrt — Nachforderung nötig | Score 45: § 14 UStG −30, Finanzmathematik −25"
-    assert "Keine Compliance-Auffaelligkeiten" not in summary
+    assert "Keine Compliance-Auffälligkeiten" not in summary
 
     gueltig = SimpleNamespace(score=100, release_recommendation="Zur Auszahlung freigegeben", tiles=[tile("formal", 0)])
-    assert analysis_summary(gueltig, clean) == "Zur Auszahlung freigegeben | Keine Compliance-Auffaelligkeiten"  # type: ignore[arg-type]
+    assert analysis_summary(gueltig, clean) == "Zur Auszahlung freigegeben | Keine Compliance-Auffälligkeiten"  # type: ignore[arg-type]
 
     hochrisiko = SimpleNamespace(headline="EU AI Act: Hochrisiko")
     assert analysis_summary(steuerfalle, hochrisiko).endswith("| EU AI Act: Hochrisiko")  # type: ignore[arg-type]
@@ -445,3 +445,23 @@ def test_lokale_ki_steuerung_nur_am_server(make_full_client: Callable[..., TestC
     monkeypatch.setattr(local_ai, "start_ollama", lambda: {"ok": True, "message": "gestartet"})
     open_client = make_full_client(local_ai_control_local_only=False)
     assert open_client.post("/api/v1/ai/start-ollama").json() == {"ok": True, "message": "gestartet"}
+
+
+def test_ueberlast_meldung_nennt_die_tatsaechliche_ursache() -> None:
+    from app.providers import ProviderUnavailableError, overload_message
+    from app.services import fallback_explanation
+
+    assert "Anfragelimit oder Kontingent" in overload_message("Gemini", 429)
+    assert overload_message("Gemini", 503) == "Gemini ist vorübergehend überlastet (HTTP 503)."
+    assert "Störung (HTTP 500)" in overload_message("Claude", 500)
+    assert "Zeitüberschreitung" in overload_message("OpenAI", 408)
+
+    # Nur ein Key, keine Ausweich-Stufe: Ursache plus konkreter nächster Schritt.
+    single = fallback_explanation(ProviderUnavailableError(overload_message("Gemini", 503)), stages=1)
+    assert single.startswith("Gemini ist vorübergehend überlastet (HTTP 503).")
+    assert "Einstellungen › Ausweich-Kaskade" in single
+    # Mit Kaskade: kein Ratschlag, eine Kaskade anzulegen, sondern der Hinweis auf alle Stufen.
+    chain = fallback_explanation(ProviderUnavailableError(overload_message("Claude", 529)), stages=3)
+    assert chain.endswith("Auch die übrigen 2 Stufen der Ausweich-Kaskade antworteten nicht.")
+    two = fallback_explanation(ProviderUnavailableError(overload_message("Gemini", 429)), stages=2)
+    assert two.endswith("Auch die zweite Stufe der Ausweich-Kaskade antwortete nicht.")

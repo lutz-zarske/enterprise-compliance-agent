@@ -97,19 +97,19 @@ class SystemSigner:
 def verify_signature(signature: dict[str, Any], data: bytes, *, expected_fingerprint: str | None = None) -> tuple[bool, str]:
     """Prueft eine Signatur aus ``SystemSigner.sign_bytes`` ueber ``data``."""
     if signature.get("algorithm") != ALGORITHM:
-        return False, "Signaturverfahren fehlt oder wird nicht unterstuetzt."
+        return False, "Signaturverfahren fehlt oder wird nicht unterstützt."
     try:
         public_raw = base64.b64decode(signature["public_key"])
         value = base64.b64decode(signature["value"])
     except (KeyError, ValueError, TypeError):
-        return False, "Signaturfelder sind unvollstaendig."
+        return False, "Signaturfelder sind unvollständig."
     if expected_fingerprint and fingerprint(public_raw) != expected_fingerprint:
         return False, "Mit einem fremden Schluessel signiert (Fingerabdruck weicht vom System-Schluessel ab)."
     try:
         Ed25519PublicKey.from_public_bytes(public_raw).verify(value, data)
     except (InvalidSignature, ValueError):
-        return False, "Signatur ungueltig - der Inhalt wurde veraendert."
-    return True, "Signatur gueltig."
+        return False, "Signatur ungültig - der Inhalt wurde verändert."
+    return True, "Signatur gültig."
 
 
 def verify_signed_payload(payload: dict[str, Any], *, expected_fingerprint: str | None = None) -> tuple[bool, str]:
@@ -118,8 +118,8 @@ def verify_signed_payload(payload: dict[str, Any], *, expected_fingerprint: str 
     ok, message = verify_signature(
         payload.get("signature") or {}, canonical_bytes(unsigned), expected_fingerprint=expected_fingerprint
     )
-    if not ok and message.startswith("Signatur ungueltig"):
-        return False, "Signatur ungueltig - das Manifest wurde veraendert."
+    if not ok and message.startswith("Signatur ungültig"):
+        return False, "Signatur ungültig - das Manifest wurde verändert."
     if not ok and message.startswith("Mit einem fremden"):
-        return False, "Fingerabdruck des Schluessels weicht vom erwarteten System-Schluessel ab."
+        return False, "Fingerabdruck des Schlüssels weicht vom erwarteten System-Schluessel ab."
     return ok, message

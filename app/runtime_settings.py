@@ -357,7 +357,7 @@ class RuntimeSettingsStore:
     def _merge_backup_keys(self, entries: list[dict[str, Any]]) -> tuple[BackupKey, ...]:
         """Ganze Liste uebernehmen; Eintraege ohne ``api_key`` behalten den Schluessel gleicher ID."""
         if len(entries) > MAX_BACKUP_KEYS:
-            raise SettingsError(f"Hoechstens {MAX_BACKUP_KEYS} Ausweich-Schluessel.")
+            raise SettingsError(f"Höchstens {MAX_BACKUP_KEYS} Ausweich-Schluessel.")
         known = {key.id: key for key in self._state["ausweich_schluessel"]}
         merged: list[BackupKey] = []
         for entry in entries:
@@ -367,9 +367,9 @@ class RuntimeSettingsStore:
             try:
                 provider = InferenceMode(entry.get("provider"))
             except ValueError as exc:
-                raise SettingsError("Unbekannter Anbieter fuer einen Ausweich-Schluessel.") from exc
+                raise SettingsError("Unbekannter Anbieter für einen Ausweich-Schluessel.") from exc
             if provider not in CLOUD_PROVIDERS:
-                raise SettingsError("Ausweich-Schluessel gibt es nur fuer Cloud-Anbieter (Gemini, Claude, OpenAI).")
+                raise SettingsError("Ausweich-Schluessel gibt es nur für Cloud-Anbieter (Gemini, Claude, OpenAI).")
             secret = (entry.get("api_key") or "").strip()
             previous = known.get(backup_id)
             if not secret and previous is not None and previous.provider is provider:

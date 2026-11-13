@@ -231,7 +231,7 @@ def test_manipuliertes_paket_wird_erkannt(client: TestClient) -> None:
         manifest["audit"]["compliance_score"] = 55
         return json.dumps(manifest).encode()
 
-    assert "Signatur ungueltig" in verify_package(rebuild(forge))["signature"]
+    assert "Signatur ungültig" in verify_package(rebuild(forge))["signature"]
 
     # 3. Fremder Schluessel -> Herkunft nicht belegt
     assert verify_package(original, expected_fingerprint="0000:0000")["valid"] is False

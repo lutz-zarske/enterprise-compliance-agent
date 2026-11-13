@@ -30,6 +30,17 @@ MAX_OUTPUT_TOKENS = 4096
 OVERLOAD_STATUS = frozenset({408, 429, 500, 502, 503, 504, 529})
 
 
+def overload_message(label: str, status: int) -> str:
+    """Benennt die tatsaechliche Ursache je Status - Limit, Ueberlast oder Stoerung."""
+    if status == 429:
+        return f"{label} nimmt vorerst keine Anfragen an (HTTP 429: Anfragelimit oder Kontingent des API-Keys erreicht)."
+    if status == 408:
+        return f"{label} hat die Anfrage wegen Zeitüberschreitung abgebrochen (HTTP 408)."
+    if status in (503, 529):
+        return f"{label} ist vorübergehend überlastet (HTTP {status})."
+    return f"{label} meldet eine Störung (HTTP {status})."
+
+
 class ProviderNotConfiguredError(LLMError):
     """Cloud-Modus gewaehlt, aber kein API-Key hinterlegt."""
 
@@ -41,21 +52,24 @@ class ProviderAuthError(LLMError):
     """Der Provider lehnt den API-Key ab - bewusst ohne Wiederholung und ohne Wechsel."""
 
     code = "provider_auth_failed"
-    hint = "API-Key pruefen; ggf. Berechtigung fuer das gewaehlte Modell freischalten."
+    hint = "API-Key prüfen; ggf. Berechtigung für das gewählte Modell freischalten."
 
 
 class ProviderUnavailableError(LLMError):
     """Provider nicht erreichbar, ueberlastet oder Kontingent erschoepft."""
 
     code = "provider_unavailable"
-    hint = "Die Ausweich-Kaskade (Einstellungen) uebernimmt automatisch; sonst spaeter erneut pruefen."
+    hint = (
+        "Ausweichmodell oder zweiten API-Key unter Einstellungen › Ausweich-Kaskade hinterlegen; "
+        "sonst in einigen Minuten erneut prüfen."
+    )
     failover = True
     retry = True
 
 
 class ProviderTimeoutError(LLMError):
     code = "provider_timeout"
-    hint = "CLOUD_TIMEOUT_SECONDS erhoehen oder ein schnelleres Modell waehlen."
+    hint = "CLOUD_TIMEOUT_SECONDS erhöhen oder ein schnelleres Modell wählen."
     failover = True
     retry = True
 
@@ -77,7 +91,7 @@ class CloudLLMClient(StructuredLLMClient):
         budget: CloudBudget | None = None,
     ) -> None:
         if not api_key:
-            raise ProviderNotConfiguredError(f"Fuer {self.label} ist kein API-Key hinterlegt.")
+            raise ProviderNotConfiguredError(f"Für {self.label} ist kein API-Key hinterlegt.")
         self._api_key = api_key
         self._model = model
         self._base_url = base_url.rstrip("/")
@@ -116,7 +130,7 @@ class CloudLLMClient(StructuredLLMClient):
         try:
             response = await self._client.request(method, url, **kwargs)
         except httpx.TimeoutException as exc:
-            raise ProviderTimeoutError(f"{self.label} antwortet nicht rechtzeitig (Zeitueberschreitung).") from exc
+            raise ProviderTimeoutError(f"{self.label} antwortet nicht rechtzeitig (Zeitüberschreitung).") from exc
         except httpx.HTTPError as exc:
             logger.debug("%s nicht erreichbar: %r", self.label, exc)
             raise ProviderUnavailableError(f"{self.label} ist nicht erreichbar (Verbindungsfehler).") from exc
@@ -126,9 +140,7 @@ class CloudLLMClient(StructuredLLMClient):
         if response.status_code == 404:
             raise LLMResponseError(f"{self.label}: Modell '{self._model}' nicht gefunden (HTTP 404).")
         if response.status_code in OVERLOAD_STATUS or response.status_code >= 500:
-            raise ProviderUnavailableError(
-                f"{self.label} ist ausgelastet (HTTP {response.status_code}, Ueberlast oder Kontingent)."
-            )
+            raise ProviderUnavailableError(overload_message(self.label, response.status_code))
         if response.status_code >= 400:
             # Fehlertext des Providers kann Prompt-Auszuege enthalten -> gekuerzt.
             raise LLMResponseError(
@@ -196,7 +208,7 @@ class GeminiClient(CloudLLMClient):
         await self._send(
             "GET", f"{self._base_url}/models/{self._model}", headers={"x-goog-api-key": self._api_key}
         )
-        return f"{self.label} erreichbar, Modell {self._model} verfuegbar."
+        return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:
         return await self._send(
@@ -218,7 +230,7 @@ class AnthropicClient(CloudLLMClient):
         system, rest = _split_system(messages)
         if json_mode:
             system += (
-                "\n\nAntworte ausschliesslich mit einem einzigen JSON-Objekt, ohne Markdown."
+                "\n\nAntworte ausschließlich mit einem einzigen JSON-Objekt, ohne Markdown."
             )
         body: dict[str, Any] = {
             "model": self._model,
@@ -237,7 +249,7 @@ class AnthropicClient(CloudLLMClient):
 
     async def test_connection(self) -> str:
         await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers())
-        return f"{self.label} erreichbar, Modell {self._model} verfuegbar."
+        return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:
         return await self._send("GET", f"{self._base_url}/models", params={"limit": 100}, headers=self._headers())
@@ -276,7 +288,7 @@ class OpenAIClient(CloudLLMClient):
 
     async def test_connection(self) -> str:
         await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers())
-        return f"{self.label} erreichbar, Modell {self._model} verfuegbar."
+        return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:
         return await self._send("GET", f"{self._base_url}/models", headers=self._headers())

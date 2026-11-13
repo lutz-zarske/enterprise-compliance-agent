@@ -147,13 +147,13 @@ FAULTY_INVOICE_LINES = [
     "RECHNUNG Nr. 2025-77",
     "Rechnungsdatum: 02.05.2025",
     "",
-    "Pos. 1   Bueromoebel-Set Executive, 3 Stueck   4.500,00 EUR",
+    "Pos. 1   Büromöbel-Set Executive, 3 Stück   4.500,00 EUR",
     "",
     "Nettobetrag: 4.500,00 EUR",
     "MwSt. 16 %: 720,00 EUR",
     "Gesamtbetrag: 5.220,00 EUR",
     "",
-    "Bitte sofort ueberweisen auf: DE12 3456 7890 1234 5678 90",
+    "Bitte sofort überweisen auf: DE12 3456 7890 1234 5678 90",
 ]
 
 # Fiktiver Vertrag; Kontaktadresse unter der reservierten Domain .example (RFC 2606),
@@ -161,8 +161,8 @@ FAULTY_INVOICE_LINES = [
 RECRUITING_LINES = [
     "VERTRAG UEBER KI-GESTUETZTES RECRUITING & BEWERBERMANAGEMENT",
     "Zwischen TalentScreen AI GmbH und Enterprise Corp SE.",
-    "Das System TalentAI bewertet Bewerber automatisiert gemaess Anhang III Nr. 4 EU AI Act.",
-    "Rechnungsbetrag: 45000 EUR faellig zum 31.12.2024.",
+    "Das System TalentAI bewertet Bewerber automatisiert gemäß Anhang III Nr. 4 EU AI Act.",
+    "Rechnungsbetrag: 45000 EUR fällig zum 31.12.2024.",
     "Bankverbindung: DE89370400440532013000.",
     "Kontakt: datenschutz@talentscreen.example.",
 ]

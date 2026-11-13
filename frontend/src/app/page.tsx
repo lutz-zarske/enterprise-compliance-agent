@@ -209,7 +209,7 @@ export default function DashboardPage() {
         notify(
           job.result.heuristic ? "warn" : job.result.release_blocked ? "warn" : "ok",
           job.result.heuristic ? `Regelbasiertes Referenz-Audit: ${job.title}` : `Prüfung abgeschlossen: ${job.title}`,
-          `Score ${job.result.score ?? "–"}/100 · ${job.result.release_recommendation ?? ""}${job.result.heuristic ? " · KI temporär überlastet, Ergebnis gekennzeichnet" : ` · ${formatModel(job.result.model)}`}`,
+          `Score ${job.result.score ?? "–"}/100 · ${job.result.release_recommendation ?? ""}${job.result.heuristic ? " · KI nicht verfügbar, Ergebnis gekennzeichnet" : ` · ${formatModel(job.result.model)}`}`,
         );
       } else if (job.status === "failed") {
         notify("bad", `Prüfung fehlgeschlagen: ${job.title}`, `${job.error?.message ?? "Unbekannter Fehler"}${job.error?.hint ? ` – ${job.error.hint}` : ""}`);
@@ -489,7 +489,7 @@ export default function DashboardPage() {
                             </Tooltip>
                           )}
                           {isHeuristic && (
-                            <Tooltip content={`Regelbasiertes Referenz-Audit – KI temporär überlastet. ${detail.compliance?.fallback_reason ?? ""} Felder per Mustererkennung, Einstufung konservativ; im Ledger gekennzeichnet. Mit erreichbarem Modell über „Neu prüfen“ wiederholen.`}>
+                            <Tooltip content={`Regelbasiertes Referenz-Audit – KI nicht verfügbar. ${detail.compliance?.fallback_reason ?? ""} Felder per Mustererkennung, Einstufung konservativ; im Ledger gekennzeichnet. Mit erreichbarem Modell über „Neu prüfen“ wiederholen.`}>
                               <span tabIndex={0} className="chip cursor-help border-warn-line bg-warn-soft text-warn">Regelwerk-Audit · KI überlastet</span>
                             </Tooltip>
                           )}

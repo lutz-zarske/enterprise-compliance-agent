@@ -233,25 +233,25 @@ class AuditLedger:
                 if expected_seq is not None and entry.seq != expected_seq:
                     return ChainVerification(
                         False, count, previous, entry.seq,
-                        f"Luecke in der Sequenz: erwartet {expected_seq}, gefunden {entry.seq} "
-                        "(Eintrag geloescht).",
+                        f"Lücke in der Sequenz: erwartet {expected_seq}, gefunden {entry.seq} "
+                        "(Eintrag gelöscht).",
                     )
                 if entry.previous_hash != previous:
                     return ChainVerification(
                         False, count, previous, entry.seq,
-                        "previous_hash passt nicht zum Vorgaenger (Eintrag entfernt oder eingefuegt).",
+                        "previous_hash passt nicht zum Vorgänger (Eintrag entfernt oder eingefügt).",
                     )
                 recomputed = compute_entry_hash(entry.hashed_content())
                 if recomputed != entry.entry_hash:
                     return ChainVerification(
                         False, count, previous, entry.seq,
-                        "Inhalt veraendert: neu berechneter Hash weicht vom gespeicherten ab.",
+                        "Inhalt verändert: neu berechneter Hash weicht vom gespeicherten ab.",
                     )
                 if entry.signature is not None:
                     ok, message = self.verify_entry_signature(entry)
                     if not ok:
                         return ChainVerification(
-                            False, count, previous, entry.seq, f"Pruefer-Signatur: {message}", signed_entries=signed
+                            False, count, previous, entry.seq, f"Prüfer-Signatur: {message}", signed_entries=signed
                         )
                     signed += 1
                 previous = entry.entry_hash

@@ -123,7 +123,7 @@ Bonität, kritische Infrastruktur …) ergeben „Hochrisiko“, das die Prüfpe
 bestätigen oder nach Art. 14 Abs. 4 lit. d übersteuern kann. Scorecard,
 Maskierung und Ledger laufen unverändert; das Ergebnis trägt
 `provider = "heuristic"` und den Hinweis „Regelbasiertes Referenz-Audit – KI
-temporär überlastet“. Der Copilot fällt auf eine Antwort aus dem gespeicherten
+nicht verfügbar“. Der Copilot fällt auf eine Antwort aus dem gespeicherten
 Prüfergebnis zurück. Mit `HEURISTIC_FALLBACK=false` bleibt stattdessen der
 Fehler sichtbar.
 
@@ -266,7 +266,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (326 Tests, Stand v2.5.0) deckt die Kette vom HTTP-Request bis zur
+`pytest` (327 Tests, Stand v2.5.0) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die

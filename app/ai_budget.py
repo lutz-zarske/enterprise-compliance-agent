@@ -33,7 +33,7 @@ class BudgetExceededError(LLMError):
     """Tagesbudget fuer Cloud-Tokens aufgebraucht."""
 
     code = "cloud_budget_exceeded"
-    hint = "CLOUD_DAILY_TOKEN_LIMIT anheben oder lokal pruefen - lokale Modelle sind nicht begrenzt."
+    hint = "CLOUD_DAILY_TOKEN_LIMIT anheben oder lokal prüfen - lokale Modelle sind nicht begrenzt."
     failover = True
     retry = False
 
@@ -99,7 +99,7 @@ class CloudBudget:
         used = self.status()["tokens"]
         if used >= self.limit:
             raise BudgetExceededError(
-                f"Tagesbudget fuer Cloud-KI erreicht ({used:,} von {self.limit:,} Tokens).".replace(",", ".")
+                f"Tagesbudget für Cloud-KI erreicht ({used:,} von {self.limit:,} Tokens).".replace(",", ".")
             )
 
     def book(self, provider: str, model: str, tokens: int) -> None:

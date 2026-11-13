@@ -129,7 +129,7 @@ class ReleaseUpdateRunningError(ServiceError):
 
     code = "release_update_running"
     status_code = 409
-    hint = "Das Update dauert nur Sekunden - danach erneut pruefen."
+    hint = "Das Update dauert nur Sekunden - danach erneut prüfen."
 
 
 class DocumentNotFoundError(ServiceError):
@@ -145,7 +145,7 @@ class DocumentNotAnalyzedError(ServiceError):
 
     code = "document_not_analyzed"
     status_code = 409
-    hint = "Zuerst POST /documents/{id}/extract ausfuehren."
+    hint = "Zuerst POST /documents/{id}/extract ausführen."
 
 
 class InvalidEInvoiceUploadError(UploadValidationError):
@@ -161,7 +161,7 @@ class OverrideWithoutChangeError(ServiceError):
 
     code = "override_without_change"
     status_code = 422
-    hint = "Eine Uebersteuerung muss die Risikostufe aendern; zur reinen Freigabe das Siegel verwenden."
+    hint = "Eine Uebersteuerung muss die Risikostufe ändern; zur reinen Freigabe das Siegel verwenden."
 
 
 class OriginalMissingError(ServiceError):
@@ -169,7 +169,7 @@ class OriginalMissingError(ServiceError):
 
     code = "original_missing"
     status_code = 410
-    hint = "Ablageverzeichnis (UPLOAD_DIR) und Datensicherung pruefen; das Dokument erneut hochladen."
+    hint = "Ablageverzeichnis (UPLOAD_DIR) und Datensicherung prüfen; das Dokument erneut hochladen."
 
 
 class NoTextAvailableError(ServiceError):
@@ -211,7 +211,22 @@ TILE_SHORT_LABELS: dict[str, str] = {
     "privacy": "DSGVO",
     "math": "Finanzmathematik",
 }
-NO_COMPLIANCE_FINDINGS = "Keine Compliance-Auffaelligkeiten"
+NO_COMPLIANCE_FINDINGS = "Keine Compliance-Auffälligkeiten"
+
+
+def fallback_explanation(exc: BaseException, stages: int) -> str:
+    """Ursache plus naechster Schritt fuer das Regelwerk-Audit.
+
+    Ohne Ausweich-Stufe hilft der Hinweis des Fehlers (z. B. Ausweichmodell oder
+    zweiten Key hinterlegen); mit Kaskade ist wichtig, dass alle Stufen scheiterten.
+    """
+    message = describe_failure(exc)
+    if stages == 2:
+        return f"{message} Auch die zweite Stufe der Ausweich-Kaskade antwortete nicht."
+    if stages > 2:
+        return f"{message} Auch die übrigen {stages - 1} Stufen der Ausweich-Kaskade antworteten nicht."
+    hint = getattr(exc, "hint", None)
+    return f"{message} {hint}" if hint else message
 
 
 def analysis_summary(scorecard: Scorecard, compliance: ComplianceAudit) -> str:
@@ -219,7 +234,7 @@ def analysis_summary(scorecard: Scorecard, compliance: ComplianceAudit) -> str:
 
     ``ComplianceAudit.headline`` betrachtet nur EU AI Act und DSGVO.  Bei formalen
     oder rechnerischen Abzuegen (z. B. Steuerfalle mit Score 45) stuende dort sonst
-    „Keine Compliance-Auffaelligkeiten“ neben „Freigabe gesperrt“ - stattdessen
+    „Keine Compliance-Auffälligkeiten“ neben „Freigabe gesperrt“ - stattdessen
     nennt die Zusammenfassung Score und betroffene Kacheln.
     """
     parts = [scorecard.release_recommendation]
@@ -261,7 +276,7 @@ def augment_extraction_issues(extraction: ExtractionResult) -> ExtractionResult:
             issues.append(message)
 
     if extraction.iban and not iban_checksum_valid(extraction.iban):
-        add("Die angegebene IBAN besteht die MOD-97-Pruefsummenkontrolle nicht.")
+        add("Die angegebene IBAN besteht die MOD-97-Prüfsummenkontrolle nicht.")
 
     if extraction.doc_type is DocType.INVOICE:
         if not extraction.document_number:
@@ -273,14 +288,14 @@ def augment_extraction_issues(extraction: ExtractionResult) -> ExtractionResult:
         elif extraction.total_amount <= 0:
             add("Der ausgewiesene Gesamtbetrag ist nicht positiv.")
         if extraction.total_amount is not None and not extraction.currency:
-            add("Zum Gesamtbetrag ist keine Waehrung angegeben.")
+            add("Zum Gesamtbetrag ist keine Währung angegeben.")
 
     if (
         extraction.document_date
         and extraction.due_date
         and extraction.due_date < extraction.document_date
     ):
-        add("Das Faelligkeitsdatum liegt vor dem Ausstellungsdatum.")
+        add("Das Fälligkeitsdatum liegt vor dem Ausstellungsdatum.")
 
     return extraction.model_copy(update={"issues": issues})
 
@@ -539,19 +554,19 @@ class DocumentService:
 
         if suffix not in ALLOWED_SUFFIXES:
             raise UploadValidationError(
-                f"Nicht unterstuetzte Dateiendung '{suffix or '(keine)'}'. Erlaubt sind .pdf und .xml."
+                f"Nicht unterstützte Dateiendung '{suffix or '(keine)'}'. Erlaubt sind .pdf und .xml."
             )
         allowed_types = XML_CONTENT_TYPES if suffix == ".xml" else ALLOWED_CONTENT_TYPES
         if content_type and content_type.split(";")[0].strip() not in allowed_types:
             expected = "application/xml" if suffix == ".xml" else "application/pdf"
             raise UploadValidationError(
-                f"Nicht unterstuetzter Content-Type '{content_type}'. Erwartet wird {expected}."
+                f"Nicht unterstützter Content-Type '{content_type}'. Erwartet wird {expected}."
             )
         if not data:
             raise UploadValidationError("Die hochgeladene Datei ist leer.")
         if len(data) > self._settings.max_upload_bytes:
             raise UploadTooLargeError(
-                f"Die Datei ist {len(data) / 1_048_576:.1f} MB gross; erlaubt sind "
+                f"Die Datei ist {len(data) / 1_048_576:.1f} MB groß; erlaubt sind "
                 f"{self._settings.max_upload_bytes / 1_048_576:.1f} MB."
             )
 
@@ -688,6 +703,7 @@ class DocumentService:
                 return await self._heuristic_analysis(
                     record, reason=exc, rule_findings=rule_findings or scan_text(text), stage=stage,
                     enforce_ustg=enforce_ustg, escalate=escalate, einvoice=einvoice, failover=switches,
+                    stages=int(getattr(client, "stage_count", 1) or 1),
                 )
             await self._repository.mark_failed(record.id, describe_failure(exc))
             progress.clear(record.id)
@@ -725,16 +741,17 @@ class DocumentService:
         escalate: bool,
         einvoice: EInvoiceData | None,
         failover: list[dict[str, str]],
+        stages: int = 1,
     ) -> ExtractionOutcome:
         """Stufe 5: deterministisches Regelwerk, wenn keine KI-Stufe antwortet."""
-        logger.warning("Dokument %s: alle KI-Stufen ausgefallen (%s) - Regelwerk uebernimmt.",
+        logger.warning("Dokument %s: alle KI-Stufen ausgefallen (%s) - Regelwerk übernimmt.",
                        record.id, getattr(reason, "code", type(reason).__name__))
         text = record.raw_text or ""
         stage("ustg_check")
         extraction = augment_extraction_issues(heuristic_extraction(text))
         stage("ai_act")
         audit_payload = heuristic_audit(text)
-        fallback_reason = describe_failure(reason)
+        fallback_reason = fallback_explanation(reason, stages)
         return await self._finalize_analysis(
             record,
             extraction=extraction,
@@ -1056,7 +1073,7 @@ class DocumentService:
         """Versiegelt das Pruefergebnis durch eine natuerliche Person."""
         if record.status != DocumentStatus.EXTRACTED.value or not record.scorecard:
             raise DocumentNotAnalyzedError(
-                f"Dokument {record.id} ist noch nicht analysiert - kein Siegel moeglich."
+                f"Dokument {record.id} ist noch nicht analysiert - kein Siegel möglich."
             )
         score = (record.scorecard or {}).get("score")
         entry: LedgerEntry | None = None
@@ -1096,7 +1113,7 @@ class DocumentService:
         extraction = parse_extraction(record)
         previous_card = parse_scorecard(record)
         if record.status != DocumentStatus.EXTRACTED.value or compliance is None or extraction is None:
-            raise DocumentNotAnalyzedError(f"Dokument {record.id} ist noch nicht analysiert - kein Override moeglich.")
+            raise DocumentNotAnalyzedError(f"Dokument {record.id} ist noch nicht analysiert - kein Override möglich.")
         previous_level = compliance.ai_act.overall_risk_level
         if request.risk_level is previous_level:
             raise OverrideWithoutChangeError(
@@ -1167,7 +1184,7 @@ class DocumentService:
             ledger_entry_hash=entry.entry_hash if entry else "",
         )
         logger.info(
-            "Dokument %s: Einstufung durch Pruefperson uebersteuert (%s -> %s, Score %s -> %s)",
+            "Dokument %s: Einstufung durch Prüfperson uebersteuert (%s -> %s, Score %s -> %s)",
             record.id, previous_level.value, request.risk_level.value, previous_score, scorecard.score,
             extra={"document_id": record.id},
         )
@@ -1288,7 +1305,7 @@ class DocumentService:
                     vault.clear()
                 if not (is_failover_error(exc) and self.heuristic_fallback):
                     raise
-                steps.step(progress_id, "Regelwerk antwortet (KI temporär überlastet)")
+                steps.step(progress_id, "Regelwerk antwortet (KI nicht verfügbar)")
                 return {
                     "answer": heuristic_copilot_answer(record, question, describe_failure(exc)),
                     "model": HEURISTIC_MODEL, "provider": HEURISTIC_PROVIDER, "duration_ms": 0,
@@ -1361,29 +1378,29 @@ class DocumentService:
 # ---------------------------------------------------------------------------
 
 COPILOT_SYSTEM_PROMPT = """\
-Du bist der Compliance Copilot eines Wirtschaftspruefungs-Teams. Du beantwortest
+Du bist der Compliance Copilot eines Wirtschaftsprüfungs-Teams. Du beantwortest
 Fragen zu genau einem vorliegenden Dokument.
 
 Verbindliche Regeln:
-1. Stuetze jede Aussage ausschliesslich auf den DOKUMENTTEXT und das
+1. Stütze jede Aussage ausschließlich auf den DOKUMENTTEXT und das
    PRUEFERGEBNIS unten. Erfinde keine Fakten. Fehlt eine Information, sage das.
 2. Verweise auf Textstellen mit der Zeilennummer in eckigen Klammern, z. B. [Z. 4].
-3. Nenne Rechtsnormen praezise (z. B. "§ 14 Abs. 4 Satz 1 Nr. 2 UStG",
+3. Nenne Rechtsnormen präzise (z. B. "§ 14 Abs. 4 Satz 1 Nr. 2 UStG",
    "Art. 6 Abs. 2 i. V. m. Anhang III Nr. 4 VO (EU) 2024/1689", "Art. 9 DSGVO").
-4. Antworte sachlich, knapp und auf Deutsch. Nutze kurze Aufzaehlungen und
-   schlichtes Markdown (Absaetze, Aufzaehlungen, **fett**), keine Tabellen.
+4. Antworte sachlich, knapp und auf Deutsch. Nutze kurze Aufzählungen und
+   schlichtes Markdown (Absätze, Aufzählungen, **fett**), keine Tabellen.
 5. Du gibst keine verbindliche Rechts- oder Steuerberatung; weise bei
-   Grenzfaellen auf die Pruefung durch eine Fachperson hin.
+   Grenzfällen auf die Prüfung durch eine Fachperson hin.
 """
 
 #: Denkstufen des Copilot: steuern Gruendlichkeit und Laenge ueber die Anweisung
 #: (anbieterunabhaengig - nicht jeder Anbieter kennt ein eigenes Reasoning-Budget).
 THINKING_INSTRUCTIONS: dict[str, str] = {
-    "low": "\nDENKSTUFE NIEDRIG: Antworte in hoechstens fuenf kurzen Punkten, nur das Wesentliche.",
+    "low": "\nDENKSTUFE NIEDRIG: Antworte in höchstens fünf kurzen Punkten, nur das Wesentliche.",
     "medium": "",
     "high": (
-        "\nDENKSTUFE HOCH: Pruefe gruendlich. Gehe jede einschlaegige Norm einzeln durch, belege jede "
-        "Aussage mit [Z. n] und benenne Unsicherheiten oder fehlende Angaben ausdruecklich."
+        "\nDENKSTUFE HOCH: Prüfe gründlich. Gehe jede einschlägige Norm einzeln durch, belege jede "
+        "Aussage mit [Z. n] und benenne Unsicherheiten oder fehlende Angaben ausdrücklich."
     ),
 }
 
@@ -1469,7 +1486,7 @@ def build_copilot_grounding(record: DocumentRecord, max_chars: int) -> str:
         "=== DOKUMENTTEXT ===\n" + "\n".join(numbered)
         + "\n=== PRUEFERGEBNIS (deterministische Regeln + KI-Audit) ===\n"
         + json.dumps(summary, ensure_ascii=False, default=str, indent=1)
-        + "\nOffene Pruefpunkte:\n" + ("\n".join(open_points) or "- keine")
+        + "\nOffene Prüfpunkte:\n" + ("\n".join(open_points) or "- keine")
     )
 
 

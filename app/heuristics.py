@@ -7,7 +7,7 @@ IBAN-Pruefsumme, Regex-PII-Scanner, Eskalationsregeln, Scorecard, Ledger).
 
 Ehrliche Grenzen: Die Felder werden per Mustererkennung gelesen, nicht
 verstanden.  Das Ergebnis ist deshalb in Oberflaeche, Zertifikat und Ledger
-ausdruecklich als "Regelbasiertes Referenz-Audit - KI temporaer ueberlastet"
+ausdruecklich als "Regelbasiertes Referenz-Audit - KI nicht verfuegbar"
 gekennzeichnet; die Einstufung nach dem EU AI Act ist konservativ (lieber ein
 Hochrisiko-Hinweis zu viel als einer zu wenig) und durch eine Pruefperson zu
 bestaetigen oder zu uebersteuern (Art. 14).
@@ -25,7 +25,7 @@ from app.scoring import RULESET_VERSION, analyze_text
 #: Kennung im Ledger, in der Datenbank und in der Oberflaeche.
 HEURISTIC_PROVIDER = "heuristic"
 HEURISTIC_MODEL = f"regelwerk-{RULESET_VERSION}"
-HEURISTIC_LABEL = "Regelbasiertes Referenz-Audit – KI temporär überlastet"
+HEURISTIC_LABEL = "Regelbasiertes Referenz-Audit – KI nicht verfügbar"
 
 _DOC_NUMBER = re.compile(
     r"(?:rechnungs?|beleg|vertrags?|angebots?|auftrags?)[\s-]*(?:nr\.?|nummer|no\.?)\s*[:#]?\s*"
@@ -118,11 +118,11 @@ def heuristic_extraction(text: str) -> ExtractionResult:
         "tax_amount": facts.tax_amount,
         "summary": (
             f"{HEURISTIC_LABEL}: Die Felder wurden per Mustererkennung aus dem Belegtext gelesen"
-            f"{f' (Nr. {number})' if number else ''}. Ergebnis bitte durch eine Pruefperson bestaetigen."
+            f"{f' (Nr. {number})' if number else ''}. Ergebnis bitte durch eine Prüfperson bestätigen."
         ),
         "issues": [
-            "Regelbasiertes Referenz-Audit: Kein Sprachmodell verfuegbar - Pflichtangaben per Mustererkennung "
-            "geprueft; Einordnung durch eine Pruefperson bestaetigen."
+            "Regelbasiertes Referenz-Audit: Kein Sprachmodell verfügbar - Pflichtangaben per Mustererkennung "
+            "geprüft; Einordnung durch eine Prüfperson bestätigen."
         ],
     }
     return ExtractionResult.model_validate(data)
@@ -139,8 +139,8 @@ def heuristic_audit(text: str) -> ComplianceAuditPayload:
             "systems": [],
             "reasoning": (
                 f"{HEURISTIC_LABEL}. Im Belegtext wurden keine Hinweise auf ein KI-System (Art. 3 Nr. 1 "
-                "VO (EU) 2024/1689) gefunden. Die Einstufung beruht auf Schlagwoertern und ist durch eine "
-                "Pruefperson zu bestaetigen."
+                "VO (EU) 2024/1689) gefunden. Die Einstufung beruht auf Schlagwörtern und ist durch eine "
+                "Prüfperson zu bestätigen."
             ),
             "obligations": [],
         }
@@ -151,26 +151,26 @@ def heuristic_audit(text: str) -> ComplianceAuditPayload:
             reasoning = (
                 f"{HEURISTIC_LABEL}. Der Beleg nennt ein KI-System{f' [Z. {line}]' if line else ''} und Begriffe "
                 "aus Anhang III; konservativ als Hochrisiko eingestuft (Art. 6 Abs. 2). Bitte durch eine "
-                "Pruefperson bestaetigen oder uebersteuern (Art. 14 Abs. 4 lit. d)."
+                "Prüfperson bestätigen oder uebersteuern (Art. 14 Abs. 4 lit. d)."
             )
             obligations = [
-                "Risikomanagementsystem nach Art. 9 pruefen.",
+                "Risikomanagementsystem nach Art. 9 prüfen.",
                 "Menschliche Aufsicht nach Art. 14 sicherstellen.",
-                "Konformitaetsbewertung nach Art. 43 nachweisen lassen.",
+                "Konformitätsbewertung nach Art. 43 nachweisen lassen.",
             ]
         else:
             level = "limited" if _TRANSPARENCY.search(text) else "minimal"
             reasoning = (
                 f"{HEURISTIC_LABEL}. Der Beleg nennt ein KI-System{f' [Z. {line}]' if line else ''}, aber keine "
-                "Anhang-III-Begriffe. Einstufung durch eine Pruefperson bestaetigen."
+                "Anhang-III-Begriffe. Einstufung durch eine Prüfperson bestätigen."
             )
-            obligations = ["Transparenzpflichten nach Art. 50 pruefen."] if level == "limited" else []
+            obligations = ["Transparenzpflichten nach Art. 50 prüfen."] if level == "limited" else []
         ai_act = {
             "describes_ai_system": True,
             "overall_risk_level": level,
             "systems": [{
                 "name": "Im Beleg genanntes KI-System",
-                "purpose": "Per Schlagwort erkannt - Zweckbestimmung manuell pruefen.",
+                "purpose": "Per Schlagwort erkannt - Zweckbestimmung manuell prüfen.",
                 "risk_level": level,
                 "annex_iii_categories": [category.value for category in categories],
                 "evidence": (text.splitlines()[line - 1].strip()[:400] if line else ai_match.group(0)),
@@ -185,7 +185,7 @@ def heuristic_audit(text: str) -> ComplianceAuditPayload:
             "contains_personal_data": False,
             "findings": [],
             "risk_level": "none",
-            "reasoning": f"{HEURISTIC_LABEL}. Regelbasierter PII-Scan ueber den vollstaendigen Belegtext.",
+            "reasoning": f"{HEURISTIC_LABEL}. Regelbasierter PII-Scan über den vollständigen Belegtext.",
             "recommendations": [],
         },
     })

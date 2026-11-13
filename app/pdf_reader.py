@@ -60,7 +60,7 @@ class InvalidPdfError(PdfReadError):
     """Die Datei ist kein lesbares PDF."""
 
     code = "invalid_pdf"
-    hint = "Bitte eine unbeschaedigte PDF-Datei hochladen."
+    hint = "Bitte eine unbeschädigte PDF-Datei hochladen."
 
 
 class EncryptedPdfError(PdfReadError):
@@ -75,7 +75,7 @@ class NoTextLayerError(PdfReadError):
 
     code = "no_text_layer"
     hint = (
-        "Das Dokument enthaelt keinen Textlayer und ist vermutlich ein Scan. "
+        "Das Dokument enthält keinen Textlayer und ist vermutlich ein Scan. "
         "Bitte vorab per OCR (z. B. OCRmyPDF) in ein durchsuchbares PDF wandeln."
     )
 
@@ -153,7 +153,7 @@ def extract_text(data: bytes, *, max_pages: int = MAX_PAGES) -> PdfExtraction:
         with pdfplumber.open(io.BytesIO(data)) as pdf:
             total_pages = len(pdf.pages)
             if total_pages == 0:
-                raise InvalidPdfError("Das PDF enthaelt keine Seiten.")
+                raise InvalidPdfError("Das PDF enthält keine Seiten.")
             if total_pages > max_pages:
                 truncated = True
 
@@ -171,7 +171,7 @@ def extract_text(data: bytes, *, max_pages: int = MAX_PAGES) -> PdfExtraction:
                     pages_with_text += 1
                 pages.append(f"--- Seite {index} ---\n{page_text.strip()}")
     except PDFPasswordIncorrect as exc:
-        raise EncryptedPdfError("Das PDF ist passwortgeschuetzt.") from exc
+        raise EncryptedPdfError("Das PDF ist passwortgeschützt.") from exc
     except PDFSyntaxError as exc:
         raise InvalidPdfError(f"Das PDF ist strukturell fehlerhaft: {exc}") from exc
     except PdfReadError:
@@ -179,7 +179,7 @@ def extract_text(data: bytes, *, max_pages: int = MAX_PAGES) -> PdfExtraction:
     except Exception as exc:  # noqa: BLE001 - pdfminer wirft sehr heterogene Fehler
         message = str(exc).lower()
         if "password" in message or "encrypt" in message:
-            raise EncryptedPdfError("Das PDF ist passwortgeschuetzt.") from exc
+            raise EncryptedPdfError("Das PDF ist passwortgeschützt.") from exc
         raise InvalidPdfError(f"Das PDF konnte nicht gelesen werden: {exc}") from exc
 
     text = normalize_text("\n\n".join(pages))

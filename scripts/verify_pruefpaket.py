@@ -29,7 +29,7 @@ from app.gobd_export import verify_package  # noqa: E402
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("package", type=Path, help="Pfad zum ZIP-Archiv")
-    parser.add_argument("--fingerprint", help="Erwarteter Fingerabdruck des System-Schluessels")
+    parser.add_argument("--fingerprint", help="Erwarteter Fingerabdruck des System-Schlüssels")
     args = parser.parse_args()
 
     result = verify_package(args.package.read_bytes(), expected_fingerprint=args.fingerprint)
@@ -39,8 +39,8 @@ def main() -> int:
         print(f"[FEHLER] nicht im Manifest: {name}")
     print(f"Signatur: {result['signature']} (Schluessel {result['fingerprint']})")
     if not args.fingerprint:
-        print("Hinweis: Ohne --fingerprint ist nur die Unveraendertheit belegt, nicht die Herkunft.")
-    print("ERGEBNIS: gueltig" if result["valid"] else "ERGEBNIS: UNGUELTIG")
+        print("Hinweis: Ohne --fingerprint ist nur die Unverändertheit belegt, nicht die Herkunft.")
+    print("ERGEBNIS: gültig" if result["valid"] else "ERGEBNIS: UNGUELTIG")
     return 0 if result["valid"] else 1
 
 

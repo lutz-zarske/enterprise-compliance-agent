@@ -57,7 +57,7 @@ class ViesInputError(ServiceError):
 
     code = "vies_invalid_input"
     status_code = 422
-    hint = "Laendercode (z. B. 'DE') und Nummer ohne Praefix angeben, z. B. '312345678'."
+    hint = "Ländercode (z. B. 'DE') und Nummer ohne Präfix angeben, z. B. '312345678'."
 
 
 class ViesUnavailableError(ServiceError):
@@ -65,7 +65,7 @@ class ViesUnavailableError(ServiceError):
 
     code = "vies_unavailable"
     status_code = 503
-    hint = "VIES ist ein Verbund nationaler Datenbanken; in einigen Minuten erneut pruefen."
+    hint = "VIES ist ein Verbund nationaler Datenbanken; in einigen Minuten erneut prüfen."
 
 
 def normalize_vat(country_code: str, vat_number: str) -> tuple[str, str]:
@@ -77,12 +77,12 @@ def normalize_vat(country_code: str, vat_number: str) -> tuple[str, str]:
     country = country_code.strip().upper()
     country = _ISO_TO_VIES.get(country, country)
     if country not in VIES_COUNTRIES:
-        raise ViesInputError(f"Laendercode '{country}' nimmt nicht an VIES teil.")
+        raise ViesInputError(f"Ländercode '{country}' nimmt nicht an VIES teil.")
     number = _SEPARATORS.sub("", vat_number).upper()
     if number.startswith(country) or (country == "EL" and number.startswith("GR")):
         number = number[2:]
     if not _NUMBER.fullmatch(number):
-        raise ViesInputError("Die USt-IdNr. enthaelt unzulaessige Zeichen oder hat eine falsche Laenge.")
+        raise ViesInputError("Die USt-IdNr. enthält unzulässige Zeichen oder hat eine falsche Länge.")
     if country == "DE" and not _DE_NUMBER.fullmatch(number):
         raise ViesInputError("Eine deutsche USt-IdNr. besteht aus 'DE' und genau neun Ziffern.")
     return country, number

@@ -35,7 +35,7 @@ class RateLimitExceededError(Exception):
 
     def __init__(self, group: str, retry_after: int) -> None:
         super().__init__(
-            f"Zu viele Anfragen fuer '{group}'. Bitte in {retry_after} s erneut versuchen."
+            f"Zu viele Anfragen für '{group}'. Bitte in {retry_after} s erneut versuchen."
         )
         self.group = group
         self.retry_after = retry_after

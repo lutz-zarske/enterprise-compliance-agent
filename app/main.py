@@ -2,7 +2,7 @@
 
 Die Endpunkte bleiben bewusst duenn: Validierung, Autorisierung und
 Fehlerabbildung liegen hier, die gesamte Fachlogik in ``app.services``.
-Jeder Fehler verlaesst die Anwendung im einheitlichen Format
+Jeder Fehler verlässt die Anwendung im einheitlichen Format
 ``{"error": {"code", "message", "hint"}}`` - maschinenlesbar und mit
 konkretem Handlungshinweis.  Analysen laufen als Hintergrund-Jobs
 (``app.jobs``); kein Request wartet minutenlang auf ein Sprachmodell.
@@ -121,43 +121,43 @@ _api_key_scheme = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
 _CHUNK_SIZE = 1024 * 1024
 
 DESCRIPTION = """\
-Institutionelles Backend zur automatisierten Pruefung von Geschaeftsdokumenten.
+Institutionelles Backend zur automatisierten Prüfung von Geschäftsdokumenten.
 
 **Funktionsumfang**
 
-* **Extraktion** von Rechnungen und Vertraegen inkl. aller Pflichtangaben nach
+* **Extraktion** von Rechnungen und Verträgen inkl. aller Pflichtangaben nach
   § 14 Abs. 4 UStG (Steuernummer/USt-IdNr., Leistungszeitpunkt, Netto, Steuersatz).
 * **Deterministische Compliance-Scorecard (0-100)** mit vier Kacheln: formelle
-  Gueltigkeit (§ 14 UStG, EN 16931), EU AI Act, DSGVO, Finanzmathematik (MOD-97, MwSt.).
+  Gültigkeit (§ 14 UStG, EN 16931), EU AI Act, DSGVO, Finanzmathematik (MOD-97, MwSt.).
 * **EU-AI-Act-Klassifizierung** nach VO (EU) 2024/1689 mit Anhang-III-Eskalation.
 * **DSGVO-Audit** mit Art.-9/10-Erkennung und drei Maskierungsstufen.
-* **Hash-verkettetes Pruefprotokoll** (EU AI Act Art. 12, GoBD) und
-  **Human-Oversight-Siegel** (Art. 14) mit druckfertigem Pruefzertifikat.
-* **E-Rechnung (EN 16931)**: ZUGFeRD/Factur-X-Anhaenge und reine XRechnung (CII/UBL)
-  werden deterministisch gelesen; bei hybriden Rechnungen ist der XML-Teil massgeblich.
-* **Pruefdatenpaket (ZIP)** mit Originalbeleg, XML, Ledger-Auszug, Zertifikat und
+* **Hash-verkettetes Prüfprotokoll** (EU AI Act Art. 12, GoBD) und
+  **Human-Oversight-Siegel** (Art. 14) mit druckfertigem Prüfzertifikat.
+* **E-Rechnung (EN 16931)**: ZUGFeRD/Factur-X-Anhänge und reine XRechnung (CII/UBL)
+  werden deterministisch gelesen; bei hybriden Rechnungen ist der XML-Teil maßgeblich.
+* **Prüfdatenpaket (ZIP)** mit Originalbeleg, XML, Ledger-Auszug, Zertifikat und
   Ed25519-signiertem Manifest.
 * **Multi-Provider-Inferenz mit Ausweich-Kaskade**: lokal (Ollama) oder Gemini / Claude / GPT;
   Wiederholung mit Backoff, Ausweichmodell, Ausweich-Schluessel, lokales Modell und zuletzt das
-  deterministische Regelwerk. Cloud-Aufrufe ausschliesslich ueber das Privacy Gateway.
+  deterministische Regelwerk. Cloud-Aufrufe ausschließlich über das Privacy Gateway.
 * **Hintergrund-Jobs**: Analysen laufen asynchron mit Phase, Fortschritt, Restzeit und Abbruch
-  (`/api/v1/jobs`); `POST /documents/{id}/extract?wait=true` wartet fuer Skripte auf das Ergebnis.
+  (`/api/v1/jobs`); `POST /documents/{id}/extract?wait=true` wartet für Skripte auf das Ergebnis.
 
-**Authentifizierung**: Ist `API_KEY` gesetzt, verlangen alle Endpunkte ausser
-`/health` den Header `X-API-Key`. Ohne gesetzten Wert ist die Pruefung deaktiviert -
-dann kann jeder im Netz auch die Einstellungen aendern; produktiv immer setzen.
+**Authentifizierung**: Ist `API_KEY` gesetzt, verlangen alle Endpunkte außer
+`/health` den Header `X-API-Key`. Ohne gesetzten Wert ist die Prüfung deaktiviert -
+dann kann jeder im Netz auch die Einstellungen ändern; produktiv immer setzen.
 """
 
 TAGS_METADATA = [
     {"name": "System", "description": "Betriebszustand von Datenbank, Ollama und Modell."},
-    {"name": "Dokumente", "description": "Upload, Extraktion, Compliance-Audit und Uebersicht."},
+    {"name": "Dokumente", "description": "Upload, Extraktion, Compliance-Audit und Übersicht."},
     {"name": "Jobs", "description": "Asynchrone Analysen: Warteschlange, Fortschritt, Restzeit, Abbruch."},
     {"name": "Lokale KI", "description": "Ollama erkennen, starten und stoppen (nur direkt am Server)."},
-    {"name": "Audit-Ledger", "description": "Hash-verkettetes Pruefprotokoll (EU AI Act Art. 12, GoBD)."},
-    {"name": "Human Oversight", "description": "Pruefbericht und Siegel durch eine Pruefperson (Art. 14)."},
+    {"name": "Audit-Ledger", "description": "Hash-verkettetes Prüfprotokoll (EU AI Act Art. 12, GoBD)."},
+    {"name": "Human Oversight", "description": "Prüfbericht und Siegel durch eine Prüfperson (Art. 14)."},
     {"name": "Compliance Copilot", "description": "Dokumentbezogene Fragen an das aktive Modell."},
-    {"name": "Einstellungen", "description": "Inferenz-Provider, API-Keys (verschluesselt), PII-Strenge."},
-    {"name": "USt-IdNr.", "description": "Live-Pruefung ueber VIES der Europaeischen Kommission (ohne API-Key)."},
+    {"name": "Einstellungen", "description": "Inferenz-Provider, API-Keys (verschlüsselt), PII-Strenge."},
+    {"name": "USt-IdNr.", "description": "Live-Prüfung über VIES der Europäischen Kommission (ohne API-Key)."},
     {"name": "Dashboard", "description": "Kennzahlen und Demo-Daten."},
 ]
 
@@ -293,7 +293,7 @@ class LocalOnlyError(ServiceError):
 
     code = "local_only"
     status_code = 403
-    hint = "Direkt am Server (http://127.0.0.1) ausfuehren."
+    hint = "Direkt am Server (http://127.0.0.1) ausführen."
 
 
 class JobNotFoundError(ServiceError):
@@ -305,7 +305,7 @@ class JobNotFoundError(ServiceError):
 class JobCancelledError(ServiceError):
     code = "job_cancelled"
     status_code = 409
-    hint = "Die Analyse wurde abgebrochen; der Beleg behaelt sein vorheriges Ergebnis."
+    hint = "Die Analyse wurde abgebrochen; der Beleg behält sein vorheriges Ergebnis."
 
 
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -333,7 +333,7 @@ def _analysis_summary(outcome: ExtractionOutcome) -> dict[str, object]:
 
 
 def submit_analysis(jobs: JobManager, service: DocumentService, record: DocumentRecord) -> Job:
-    """Reiht die Pruefung eines Belegs ein (laeuft fuer ihn schon eine, kommt diese zurueck)."""
+    """Reiht die Prüfung eines Belegs ein (läuft für ihn schon eine, kommt diese zurück)."""
 
     async def runner(context: JobContext) -> dict[str, object]:
         current = await service.require_document(record.id)
@@ -348,7 +348,7 @@ async def require_api_key(
     request: Request,
     api_key: str | None = Depends(_api_key_scheme),
 ) -> None:
-    """Prueft den API-Key, sofern in der Konfiguration einer hinterlegt ist."""
+    """Prüft den API-Key, sofern in der Konfiguration einer hinterlegt ist."""
     settings: Settings = request.app.state.settings
     if not settings.auth_enabled:
         return
@@ -379,9 +379,9 @@ def _register_middleware(application: FastAPI) -> None:
     ) -> Response:
         """Vergibt eine Request-ID, misst die Dauer und schreibt eine Accesslog-Zeile.
 
-        Eine vom Client gelieferte ``X-Request-ID`` wird nur uebernommen, wenn
+        Eine vom Client gelieferte ``X-Request-ID`` wird nur übernommen, wenn
         sie dem erlaubten Zeichensatz entspricht (Schutz vor Log-Injection).
-        Geloggt werden Methode, Pfad (enthaelt nur UUIDs), Status und Dauer -
+        Geloggt werden Methode, Pfad (enthält nur UUIDs), Status und Dauer -
         niemals Query-Strings, Header oder Bodies.
         """
         request_id = normalize_request_id(request.headers.get("X-Request-ID")) or str(uuid.uuid4())
@@ -417,7 +417,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
         response = _error_response(
             status.HTTP_401_UNAUTHORIZED,
             "unauthorized",
-            f"Fehlender oder ungueltiger API-Key im Header '{API_KEY_HEADER}'.",
+            f"Fehlender oder ungültiger API-Key im Header '{API_KEY_HEADER}'.",
             "Den in der .env hinterlegten Wert von API_KEY als Header senden.",
         )
         response.headers["WWW-Authenticate"] = API_KEY_HEADER
@@ -429,7 +429,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
             status.HTTP_429_TOO_MANY_REQUESTS,
             exc.code,
             str(exc),
-            "Das Kontingent schuetzt die Inferenz-Schnittstelle vor Ueberlastung.",
+            "Das Kontingent schützt die Inferenz-Schnittstelle vor Überlastung.",
         )
         response.headers["Retry-After"] = str(exc.retry_after)
         return response
@@ -440,7 +440,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
 
     @application.exception_handler(SettingsError)
     async def _handle_settings_error(_request: Request, exc: SettingsError) -> JSONResponse:
-        return _error_response(422, "invalid_settings", str(exc), "Eingaben im Einstellungsdialog pruefen.")
+        return _error_response(422, "invalid_settings", str(exc), "Eingaben im Einstellungsdialog prüfen.")
 
     @application.exception_handler(PdfReadError)
     async def _handle_pdf_error(_request: Request, exc: PdfReadError) -> JSONResponse:
@@ -472,7 +472,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
         return _error_response(
             422,  # Unprocessable Content
             "validation_error",
-            f"Ungueltige Anfrage: {first.get('msg', 'Validierung fehlgeschlagen')} ({location}).",
+            f"Ungültige Anfrage: {first.get('msg', 'Validierung fehlgeschlagen')} ({location}).",
             "Parameterformate mit der OpenAPI-Spezifikation unter /docs abgleichen.",
         )
 
@@ -502,13 +502,13 @@ def _register_exception_handlers(application: FastAPI) -> None:
 
 
 async def _read_upload(upload: UploadFile, max_bytes: int) -> bytes:
-    """Liest den Upload gepuffert und bricht bei Ueberschreitung frueh ab."""
+    """Liest den Upload gepuffert und bricht bei Überschreitung früh ab."""
     buffer = bytearray()
     while chunk := await upload.read(_CHUNK_SIZE):
         buffer.extend(chunk)
         if len(buffer) > max_bytes:
             raise UploadTooLargeError(
-                f"Die Datei ueberschreitet das Limit von {max_bytes / 1_048_576:.1f} MB."
+                f"Die Datei überschreitet das Limit von {max_bytes / 1_048_576:.1f} MB."
             )
     return bytes(buffer)
 
@@ -560,7 +560,7 @@ async def _procedural_doc(
 
 def _register_routes(application: FastAPI) -> None:
     error_responses: dict[int | str, dict[str, object]] = {
-        401: {"model": ErrorResponse, "description": "API-Key fehlt oder ist ungueltig"},
+        401: {"model": ErrorResponse, "description": "API-Key fehlt oder ist ungültig"},
         404: {"model": ErrorResponse, "description": "Dokument nicht gefunden"},
     }
 
@@ -576,11 +576,11 @@ def _register_routes(application: FastAPI) -> None:
         settings: Settings = Depends(get_app_settings),
         llm: OllamaClient = Depends(get_llm),
     ) -> HealthResponse:
-        """Prueft alle externen Abhaengigkeiten und meldet sie einzeln.
+        """Prüft alle externen Abhängigkeiten und meldet sie einzeln.
 
         Der Endpunkt antwortet immer mit HTTP 200; der Gesamtstatus im Body ist
-        ``degraded``, sobald eine Komponente ausfaellt. Monitoring-Systeme
-        koennen dadurch zwischen "Anwendung tot" und "Abhaengigkeit gestoert"
+        ``degraded``, sobald eine Komponente ausfällt. Monitoring-Systeme
+        können dadurch zwischen "Anwendung tot" und "Abhängigkeit gestört"
         unterscheiden.
         """
         repository = request.app.state.repository
@@ -669,10 +669,10 @@ def _register_routes(application: FastAPI) -> None:
         ],
         responses={
             **error_responses,
-            413: {"model": ErrorResponse, "description": "Datei zu gross"},
+            413: {"model": ErrorResponse, "description": "Datei zu groß"},
             429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"},
             415: {"model": ErrorResponse, "description": "Weder PDF noch XML"},
-            422: {"model": ErrorResponse, "description": "PDF ohne Textlayer/beschaedigt oder XML keine EN-16931-Rechnung"},
+            422: {"model": ErrorResponse, "description": "PDF ohne Textlayer/beschädigt oder XML keine EN-16931-Rechnung"},
         },
     )
     async def upload_document(
@@ -680,13 +680,13 @@ def _register_routes(application: FastAPI) -> None:
         service: DocumentService = Depends(get_service),
         settings: Settings = Depends(get_app_settings),
     ) -> UploadResponse:
-        """Nimmt ein PDF oder eine XML-E-Rechnung entgegen, prueft sie und legt sie samt Text ab.
+        """Nimmt ein PDF oder eine XML-E-Rechnung entgegen, prüft sie und legt sie samt Text ab.
 
-        PDF: Dateiendung, Content-Type, Groesse, PDF-Signatur und Textlayer; ein
+        PDF: Dateiendung, Content-Type, Größe, PDF-Signatur und Textlayer; ein
         eingebetteter ZUGFeRD-/Factur-X-/XRechnung-Datensatz wird gelesen und mit
         dem Bildteil abgeglichen. XML: EN-16931-Rechnung in CII- oder UBL-Syntax,
-        geparst ohne DTD und Entitaeten. Erst danach wird gespeichert. Die Analyse
-        startet separat ueber ``POST /documents/{id}/extract``.
+        geparst ohne DTD und Entitäten. Erst danach wird gespeichert. Die Analyse
+        startet separat über ``POST /documents/{id}/extract``.
         """
         data = await _read_upload(file, settings.max_upload_bytes)
         record, duplicate_of = await service.ingest(
@@ -712,7 +712,7 @@ def _register_routes(application: FastAPI) -> None:
         status_code=status.HTTP_202_ACCEPTED,
         response_model=None,
         tags=["Dokumente"],
-        summary="Pruefung starten (Hintergrund-Job; mit ?wait=true blockierend fuer Skripte)",
+        summary="Prüfung starten (Hintergrund-Job; mit ?wait=true blockierend für Skripte)",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("extract", "rate_limit_extract_per_minute")),
@@ -720,8 +720,8 @@ def _register_routes(application: FastAPI) -> None:
         responses={
             **error_responses,
             200: {"model": ExtractionResponse, "description": "Ergebnis (nur mit wait=true)"},
-            202: {"description": "Job angenommen - Zustand ueber GET /api/v1/jobs/{job_id}"},
-            409: {"model": ErrorResponse, "description": "Release-Wechsel laeuft oder Analyse abgebrochen"},
+            202: {"description": "Job angenommen - Zustand über GET /api/v1/jobs/{job_id}"},
+            409: {"model": ErrorResponse, "description": "Release-Wechsel läuft oder Analyse abgebrochen"},
             422: {"model": ErrorResponse, "description": "Kein Text zum Dokument vorhanden"},
             429: {"model": ErrorResponse, "description": "Rate-Limit erreicht"},
             502: {"model": ErrorResponse, "description": "Modellantwort unbrauchbar"},
@@ -734,17 +734,17 @@ def _register_routes(application: FastAPI) -> None:
         wait: bool = Query(False, description="true = auf das Ergebnis warten (Skripte, CI); Standard: sofort 202."),
         service: DocumentService = Depends(get_service),
     ) -> JSONResponse:
-        """Nimmt die Pruefung sofort als Hintergrund-Job an (HTTP 202 mit ``job_id``).
+        """Nimmt die Prüfung sofort als Hintergrund-Job an (HTTP 202 mit ``job_id``).
 
         Ablauf in vier Phasen: Text-Layer & XML-Vorrang -> PII-Scanner & Privacy Vault ->
-        Paragraf-14-Extraktion & Pruefung -> EU AI Act, Scorecard & Ledger.  Danach laufen
-        deterministische Kontrollen (IBAN-Pruefsumme, Regex-PII-Scan als Zweitmeinung,
-        Maskierung, Anhang-III-Eskalation).  Faellt die ganze KI-Kaskade aus, schliesst das
-        Regelwerk die Pruefung gekennzeichnet ab.  Ein erneuter Aufruf ueberschreibt das
-        vorherige Ergebnis; laeuft fuer den Beleg bereits ein Job, kommt dieser zurueck.
+        Paragraf-14-Extraktion & Prüfung -> EU AI Act, Scorecard & Ledger.  Danach laufen
+        deterministische Kontrollen (IBAN-Prüfsumme, Regex-PII-Scan als Zweitmeinung,
+        Maskierung, Anhang-III-Eskalation).  Fällt die ganze KI-Kaskade aus, schließt das
+        Regelwerk die Prüfung gekennzeichnet ab.  Ein erneuter Aufruf überschreibt das
+        vorherige Ergebnis; läuft für den Beleg bereits ein Job, kommt dieser zurück.
         """
         if request.app.state.release.busy:
-            raise ReleaseUpdateRunningError("Ein Release-Wechsel laeuft gerade - keine neue Analyse.")
+            raise ReleaseUpdateRunningError("Ein Release-Wechsel läuft gerade - keine neue Analyse.")
         record = await service.require_document(document_id)
         jobs: JobManager = request.app.state.jobs
         job = submit_analysis(jobs, service, record)
@@ -778,7 +778,7 @@ def _register_routes(application: FastAPI) -> None:
         "/api/v1/jobs",
         status_code=status.HTTP_202_ACCEPTED,
         tags=["Jobs"],
-        summary="Einen oder mehrere Belege zur Pruefung einreihen (Batch)",
+        summary="Einen oder mehrere Belege zur Prüfung einreihen (Batch)",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("extract", "rate_limit_extract_per_minute")),
@@ -789,7 +789,7 @@ def _register_routes(application: FastAPI) -> None:
     ) -> dict[str, object]:
         """Jeder Beleg wird einzeln eingereiht; unbekannte IDs erscheinen unter ``rejected``."""
         if request.app.state.release.busy:
-            raise ReleaseUpdateRunningError("Ein Release-Wechsel laeuft gerade - keine neue Analyse.")
+            raise ReleaseUpdateRunningError("Ein Release-Wechsel läuft gerade - keine neue Analyse.")
         jobs: JobManager = request.app.state.jobs
         accepted: list[dict[str, object]] = []
         rejected: list[dict[str, str]] = []
@@ -805,7 +805,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/v1/jobs",
         tags=["Jobs"],
-        summary="Warteschlange: laufende, wartende und kuerzlich beendete Jobs",
+        summary="Warteschlange: laufende, wartende und kürzlich beendete Jobs",
         dependencies=[Depends(require_api_key)],
     )
     async def list_jobs(
@@ -831,7 +831,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.post(
         "/api/v1/jobs/{job_id}/cancel",
         tags=["Jobs"],
-        summary="Job abbrechen (der Beleg behaelt sein vorheriges Ergebnis)",
+        summary="Job abbrechen (der Beleg behält sein vorheriges Ergebnis)",
         dependencies=[Depends(require_api_key)],
     )
     async def cancel_job(request: Request, job_id: str = Path(..., max_length=64)) -> dict[str, object]:
@@ -846,13 +846,13 @@ def _register_routes(application: FastAPI) -> None:
         "/documents",
         response_model=DocumentListResponse,
         tags=["Dokumente"],
-        summary="Tabellarische Uebersicht aller Dokumente",
+        summary="Tabellarische Übersicht aller Dokumente",
         dependencies=[Depends(require_api_key)],
         responses=error_responses,
     )
     async def list_documents(
         limit: int = Query(50, ge=1, le=200, description="Maximale Anzahl Zeilen."),
-        offset: int = Query(0, ge=0, description="Versatz fuer die Blaetterung."),
+        offset: int = Query(0, ge=0, description="Versatz für die Blätterung."),
         document_status: DocumentStatus | None = Query(
             None, alias="status", description="Optionaler Statusfilter."
         ),
@@ -877,7 +877,7 @@ def _register_routes(application: FastAPI) -> None:
         document_id: str = Path(..., description="UUID des Dokuments."),
         service: DocumentService = Depends(get_service),
     ) -> DocumentDetail:
-        """Metadaten, Extraktion, Audit, Scorecard, Siegel und geschwaerzte Textansicht."""
+        """Metadaten, Extraktion, Audit, Scorecard, Siegel und geschwärzte Textansicht."""
         record = await service.require_document(document_id)
         return to_detail(record, pii_level=service.pii_level)
 
@@ -944,7 +944,7 @@ def _register_routes(application: FastAPI) -> None:
         "/documents/{document_id}/pin",
         response_model=DocumentDetail,
         tags=["Dokumente"],
-        summary="Dokument oben anpinnen bzw. loesen",
+        summary="Dokument oben anpinnen bzw. lösen",
         dependencies=[Depends(require_api_key)],
         responses=error_responses,
     )
@@ -959,7 +959,7 @@ def _register_routes(application: FastAPI) -> None:
         "/documents/{document_id}/archive",
         response_model=DocumentDetail,
         tags=["Dokumente"],
-        summary="Beleg archivieren bzw. aus dem Archiv holen (nur ausblenden, nie loeschen)",
+        summary="Beleg archivieren bzw. aus dem Archiv holen (nur ausblenden, nie löschen)",
         dependencies=[Depends(require_api_key)],
         responses=error_responses,
     )
@@ -974,7 +974,7 @@ def _register_routes(application: FastAPI) -> None:
         "/documents/{document_id}/sign-off",
         response_model=DocumentDetail,
         tags=["Human Oversight"],
-        summary="Pruefergebnis durch eine Pruefperson versiegeln (EU AI Act Art. 14)",
+        summary="Prüfergebnis durch eine Prüfperson versiegeln (EU AI Act Art. 14)",
         dependencies=[Depends(require_api_key)],
         responses={**error_responses, 409: {"model": ErrorResponse, "description": "Noch nicht analysiert"}},
     )
@@ -983,8 +983,8 @@ def _register_routes(application: FastAPI) -> None:
     ) -> DocumentDetail:
         """Schreibt einen ``sign_off``-Eintrag in den Hash-Ledger und versiegelt das Dokument.
 
-        Eine erneute Analyse hebt das Siegel auf (der Pruefgegenstand hat sich
-        geaendert); die Historie bleibt im Ledger vollstaendig erhalten.
+        Eine erneute Analyse hebt das Siegel auf (der Prüfgegenstand hat sich
+        geändert); die Historie bleibt im Ledger vollständig erhalten.
         """
         record = await service.require_document(document_id)
         updated = await service.sign_off(record, body)
@@ -1003,10 +1003,10 @@ def _register_routes(application: FastAPI) -> None:
         doc_format: Literal["html", "markdown"] = Query("html", alias="format"),
         service: DocumentService = Depends(get_service),
     ) -> Response:
-        """Vier Saeulen nach GoBD Rz. 153 aus dem aktuellen Systemzustand, plus Anhang zum Beleg.
+        """Vier Säulen nach GoBD Rz. 153 aus dem aktuellen Systemzustand, plus Anhang zum Beleg.
 
         Organisatorische Angaben, die das System nicht kennt, sind als
-        ``[vom Unternehmen zu ergaenzen]`` markiert. Aufbewahrung: 10 Jahre
+        ``[vom Unternehmen zu ergänzen]`` markiert. Aufbewahrung: 10 Jahre
         (§ 147 Abs. 1 Nr. 1 AO).
         """
         record = await service.require_document(document_id)
@@ -1027,12 +1027,12 @@ def _register_routes(application: FastAPI) -> None:
         "/api/documents/{document_id}/override",
         response_model=DocumentDetail,
         tags=["Human Oversight"],
-        summary="KI-Einstufung durch eine Pruefperson uebersteuern (Art. 14 Abs. 4 lit. d AI Act)",
+        summary="KI-Einstufung durch eine Prüfperson uebersteuern (Art. 14 Abs. 4 lit. d AI Act)",
         dependencies=[Depends(require_api_key)],
         responses={
             **error_responses,
             409: {"model": ErrorResponse, "description": "Noch nicht analysiert"},
-            422: {"model": ErrorResponse, "description": "Keine Aenderung oder Begruendung zu kurz"},
+            422: {"model": ErrorResponse, "description": "Keine Änderung oder Begründung zu kurz"},
         },
     )
     async def override_document(
@@ -1041,8 +1041,8 @@ def _register_routes(application: FastAPI) -> None:
         """Setzt die EU-AI-Act-Risikostufe neu und rechnet den Score deterministisch neu.
 
         Schreibt einen Ed25519-signierten ``human_override``-Eintrag in den Ledger
-        (Person, Begruendung, Rechtsnorm, Score vorher/nachher). Ein bestehendes
-        Siegel wird aufgehoben, weil sich der Pruefgegenstand geaendert hat.
+        (Person, Begründung, Rechtsnorm, Score vorher/nachher). Ein bestehendes
+        Siegel wird aufgehoben, weil sich der Prüfgegenstand geändert hat.
         """
         record = await service.require_document(document_id)
         updated = await service.override(record, body)
@@ -1052,24 +1052,24 @@ def _register_routes(application: FastAPI) -> None:
         "/api/vat/verify",
         response_model=VatVerification,
         tags=["USt-IdNr."],
-        summary="USt-IdNr. live bei VIES (Europaeische Kommission) pruefen",
+        summary="USt-IdNr. live bei VIES (Europäische Kommission) prüfen",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("vies", "rate_limit_vies_per_minute")),
         ],
         responses={
             401: error_responses[401],
-            422: {"model": ErrorResponse, "description": "Laendercode oder Nummer nicht abfragbar"},
+            422: {"model": ErrorResponse, "description": "Ländercode oder Nummer nicht abfragbar"},
             503: {"model": ErrorResponse, "description": "VIES oder Mitgliedstaat nicht erreichbar"},
         },
     )
     async def verify_vat(body: VatVerifyRequest, request: Request) -> VatVerification:
-        """Fragt VIES mit kurzem Timeout ab und gibt Gueltigkeit, Name und Behoerdenzeitstempel zurueck.
+        """Fragt VIES mit kurzem Timeout ab und gibt Gültigkeit, Name und Behördenzeitstempel zurück.
 
-        Uebertragen werden nur Laendercode und Nummer. Das Ergebnis ist eine
-        Momentaufnahme: nicht gespeichert, ohne Einfluss auf den Score. Fuer
+        Übertragen werden nur Ländercode und Nummer. Das Ergebnis ist eine
+        Momentaufnahme: nicht gespeichert, ohne Einfluss auf den Score. Für
         deutsche Nummern liefert VIES keinen Namen; die qualifizierte
-        Bestaetigung nach § 18e UStG erteilt das BZSt.
+        Bestätigung nach § 18e UStG erteilt das BZSt.
         """
         vies: ViesClient = request.app.state.vies
         return await vies.verify(body.country_code, body.vat_number)
@@ -1129,11 +1129,11 @@ def _register_routes(application: FastAPI) -> None:
         document_id: str = Path(...),
         service: DocumentService = Depends(get_service),
     ) -> Response:
-        """GoBD-orientiertes Einzelbeleg-Paket (Rz. 58 ff.: Nachvollziehbarkeit, Unveraenderbarkeit).
+        """GoBD-orientiertes Einzelbeleg-Paket (Rz. 58 ff.: Nachvollziehbarkeit, Unveränderbarkeit).
 
-        Das Manifest traegt SHA-256 je Datei und eine Ed25519-Signatur dieser
+        Das Manifest trägt SHA-256 je Datei und eine Ed25519-Signatur dieser
         Installation; den Fingerabdruck liefert ``GET /api/audit/signing-key``.
-        Kein Datentraeger nach dem Beschreibungsstandard (index.xml) und kein
+        Kein Datenträger nach dem Beschreibungsstandard (index.xml) und kein
         qualifiziertes Siegel nach eIDAS.
         """
         record = await service.require_document(document_id)
@@ -1161,7 +1161,7 @@ def _register_routes(application: FastAPI) -> None:
             )
         )
         stem = record.original_filename.rsplit(".", 1)[0]
-        logger.info("Pruefdatenpaket fuer %s erzeugt (%s Bytes).", record.id, len(data))
+        logger.info("Prüfdatenpaket für %s erzeugt (%s Bytes).", record.id, len(data))
         return Response(
             data,
             media_type="application/zip",
@@ -1185,7 +1185,7 @@ def _register_routes(application: FastAPI) -> None:
     async def copilot(
         body: CopilotRequest, document_id: str = Path(...), service: DocumentService = Depends(get_service)
     ) -> CopilotResponse:
-        """Antwort des aktiven Modells, geerdet auf nummeriertem Dokumenttext und Pruefergebnis.
+        """Antwort des aktiven Modells, geerdet auf nummeriertem Dokumenttext und Prüfergebnis.
 
         Mit ``progress_id`` liefert ``GET /api/v1/copilot/progress/{id}`` die Arbeitsschritte live
         (inklusive Neuversuch und Wechsel auf ein Ausweichmodell).
@@ -1213,7 +1213,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/v1/ai/local",
         tags=["Lokale KI"],
-        summary="Lokale KI erkennen (Ollama, LM Studio): installiert, laeuft, steuerbar?",
+        summary="Lokale KI erkennen (Ollama, LM Studio): installiert, läuft, steuerbar?",
         dependencies=[Depends(require_api_key)],
     )
     async def local_ai_status(request: Request) -> dict[str, object]:
@@ -1235,7 +1235,7 @@ def _register_routes(application: FastAPI) -> None:
     async def local_ai_start(request: Request) -> dict[str, object]:
         settings_: Settings = request.app.state.settings
         if settings_.local_ai_control_local_only and not _is_local_request(request):
-            raise LocalOnlyError("Lokale KI laesst sich nur direkt am Server starten.")
+            raise LocalOnlyError("Lokale KI lässt sich nur direkt am Server starten.")
         result = await anyio.to_thread.run_sync(local_ai.start_ollama)
         logger.info("Lokale KI starten: %s", result.get("message"))
         return result
@@ -1253,9 +1253,9 @@ def _register_routes(application: FastAPI) -> None:
     async def local_ai_stop(request: Request) -> dict[str, object]:
         settings_: Settings = request.app.state.settings
         if settings_.local_ai_control_local_only and not _is_local_request(request):
-            raise LocalOnlyError("Lokale KI laesst sich nur direkt am Server stoppen.")
+            raise LocalOnlyError("Lokale KI lässt sich nur direkt am Server stoppen.")
         if request.app.state.jobs.open_count:
-            raise ServiceError("Waehrend einer laufenden Analyse wird die lokale KI nicht gestoppt.")
+            raise ServiceError("Während einer laufenden Analyse wird die lokale KI nicht gestoppt.")
         result = await anyio.to_thread.run_sync(local_ai.stop_ollama)
         logger.info("Lokale KI stoppen: %s", result.get("message"))
         return result
@@ -1273,7 +1273,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.post(
         "/api/demo/seed",
         tags=["Dashboard"],
-        summary="Vier Musterbelege (oder einen davon) ohne Sprachmodell anlegen und pruefen",
+        summary="Vier Musterbelege (oder einen davon) ohne Sprachmodell anlegen und prüfen",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("upload", "rate_limit_upload_per_minute")),
@@ -1302,7 +1302,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.post(
         "/api/settings",
         tags=["Einstellungen"],
-        summary="Inferenz-Modus, Modelle, API-Keys und PII-Strenge aendern",
+        summary="Inferenz-Modus, Modelle, API-Keys und PII-Strenge ändern",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
@@ -1311,15 +1311,15 @@ def _register_routes(application: FastAPI) -> None:
     async def update_runtime_settings(
         request: Request, body: SettingsUpdate, runtime: RuntimeSettingsStore = Depends(get_runtime)
     ) -> dict[str, object]:
-        """API-Keys werden Fernet-verschluesselt gespeichert und nur maskiert zurueckgegeben.
+        """API-Keys werden Fernet-verschlüsselt gespeichert und nur maskiert zurückgegeben.
 
-        Aendert sich der Provider, ein Modell der Kette oder die Ausweich-Reihenfolge, entsteht ein
+        Ändert sich der Provider, ein Modell der Kette oder die Ausweich-Reihenfolge, entsteht ein
         signierter ``model_change``-Eintrag im Ledger (GoBD-Reproduzierbarkeit: kein stiller Modellwechsel).
         """
         before = runtime.snapshot().fingerprint()
         after = (await runtime.update(body.model_dump(exclude_none=True))).fingerprint()
         logger.info(
-            "Einstellungen geaendert: %s",
+            "Einstellungen geändert: %s",
             ", ".join(sorted(body.model_dump(exclude_none=True).keys())),
         )
         if after != before:
@@ -1343,7 +1343,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/settings/models",
         tags=["Einstellungen"],
-        summary="Verfuegbare Modelle eines Providers, neueste zuerst, mit Upgrade-Vorschlag",
+        summary="Verfügbare Modelle eines Providers, neueste zuerst, mit Upgrade-Vorschlag",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
@@ -1355,10 +1355,10 @@ def _register_routes(application: FastAPI) -> None:
         runtime: RuntimeSettingsStore = Depends(get_runtime),
         llm: OllamaClient = Depends(get_llm),
     ) -> dict[str, object]:
-        """Liest die Modell-Liste ueber die API des Providers (ohne Dokumentinhalt).
+        """Liest die Modell-Liste über die API des Providers (ohne Dokumentinhalt).
 
-        Ohne Key oder bei einem Fehler kommt die eingebaute Vorschlagsliste zurueck (``source=suggested``).
-        Ein Upgrade wird nur vorgeschlagen, nie automatisch uebernommen.
+        Ohne Key oder bei einem Fehler kommt die eingebaute Vorschlagsliste zurück (``source=suggested``).
+        Ein Upgrade wird nur vorgeschlagen, nie automatisch übernommen.
         """
         snap = runtime.snapshot()
         current = snap.models[provider]
@@ -1381,7 +1381,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.post(
         "/api/settings/test-connection",
         tags=["Einstellungen"],
-        summary="Verbindung zum gewaehlten Provider pruefen (ohne Dokumentinhalt)",
+        summary="Verbindung zum gewählten Provider prüfen (ohne Dokumentinhalt)",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
@@ -1417,7 +1417,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/system/release",
         tags=["System"],
-        summary="Neue Version pruefen (git fetch --tags, SemVer, Tag-Signatur, Aenderungen)",
+        summary="Neue Version prüfen (git fetch --tags, SemVer, Tag-Signatur, Änderungen)",
         dependencies=[Depends(require_api_key)],
     )
     async def release_status(
@@ -1432,7 +1432,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.post(
         "/api/system/release/apply",
         tags=["System"],
-        summary="Release einspielen: nach Bestaetigung des Commit-Hashes, nur Fast-Forward, mit DB-Sicherung",
+        summary="Release einspielen: nach Bestätigung des Commit-Hashes, nur Fast-Forward, mit DB-Sicherung",
         dependencies=[Depends(require_api_key)],
         responses={403: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
     )
@@ -1479,7 +1479,7 @@ def _register_routes(application: FastAPI) -> None:
             "ok": True, "from_commit": previous, "to_tag": release["tag"], "to_commit": release["commit"],
             "database_backup": backup.name if backup else None, "restart_required": True,
             "message": "Code aktualisiert. Bitte Stop_Compliance_Agent.bat und danach Start_Compliance_Agent.bat "
-                       "ausfuehren - der Starter aktualisiert Abhaengigkeiten und baut das Frontend neu.",
+                       "ausführen - der Starter aktualisiert Abhängigkeiten und baut das Frontend neu.",
         })
 
     # --- Data-Loss-Prevention ----------------------------------------------
@@ -1487,17 +1487,17 @@ def _register_routes(application: FastAPI) -> None:
         "/api/v1/redact",
         response_model=RedactResponse,
         tags=["Data Loss Prevention"],
-        summary="Text vor dem Versand an ein Cloud-LLM endgueltig schwaerzen (DLP-Gateway)",
+        summary="Text vor dem Versand an ein Cloud-LLM endgültig schwärzen (DLP-Gateway)",
         dependencies=[
             Depends(require_api_key),
             Depends(rate_limit("redact", "rate_limit_redact_per_minute")),
         ],
     )
     async def redact_text_endpoint(request: Request, body: RedactRequest) -> RedactResponse:
-        """Schwaerzt Zugangsdaten, vertrauliche Dateinamen, geschuetzte Parameter, Sperrbegriffe
+        """Schwärzt Zugangsdaten, vertrauliche Dateinamen, geschützte Parameter, Sperrbegriffe
         (``DLP_TERMS`` plus ``extra_terms``) und personenbezogene Daten zu ``[REDACTED_...]``.
 
-        Endgueltig und ohne Mapping; der Text wird weder gespeichert noch geloggt.
+        Endgültig und ohne Mapping; der Text wird weder gespeichert noch geloggt.
         """
         result = await anyio.to_thread.run_sync(
             partial(
@@ -1511,7 +1511,7 @@ def _register_routes(application: FastAPI) -> None:
                 redact_amounts=body.redact_amounts,
             )
         )
-        logger.info("DLP-Gateway: %s Schwaerzungen", result.total, extra={"counts": result.counts})
+        logger.info("DLP-Gateway: %s Schwärzungen", result.total, extra={"counts": result.counts})
         return RedactResponse(
             redacted_text=result.text, counts=result.counts, total=result.total, ruleset_version=DLP_RULESET
         )
@@ -1520,7 +1520,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/audit/trail",
         tags=["Audit-Ledger"],
-        summary="Eintraege des unveraenderbaren Pruefprotokolls",
+        summary="Einträge des unveränderbaren Prüfprotokolls",
         dependencies=[Depends(require_api_key)],
     )
     async def audit_trail(
@@ -1528,10 +1528,10 @@ def _register_routes(application: FastAPI) -> None:
         document_id: str | None = Query(None, description="Optional auf ein Dokument filtern."),
         limit: int = Query(100, ge=1, le=1000),
     ) -> dict[str, object]:
-        """Neueste Eintraege zuerst; jeder Eintrag traegt ``previous_hash`` und ``entry_hash``.
+        """Neueste Einträge zuerst; jeder Eintrag trägt ``previous_hash`` und ``entry_hash``.
 
-        ``signature_status`` (``valid`` | ``invalid`` | ``unsigned``) weist fuer
-        Pruefer-Eintraege die Ed25519-Signatur gegen den System-Schluessel aus.
+        ``signature_status`` (``valid`` | ``invalid`` | ``unsigned``) weist für
+        Prüfer-Einträge die Ed25519-Signatur gegen den System-Schluessel aus.
         """
         ledger: AuditLedger = request.app.state.ledger
         entries = await ledger.list(document_id=document_id, limit=limit)
@@ -1544,11 +1544,11 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/audit/verify",
         tags=["Audit-Ledger"],
-        summary="Hash-Kette vollstaendig nachrechnen",
+        summary="Hash-Kette vollständig nachrechnen",
         dependencies=[Depends(require_api_key)],
     )
     async def audit_verify(request: Request) -> dict[str, object]:
-        """Prueft Sequenz, Verkettung und Inhalts-Hash jedes Eintrags."""
+        """Prüft Sequenz, Verkettung und Inhalts-Hash jedes Eintrags."""
         ledger: AuditLedger = request.app.state.ledger
         return (await ledger.verify_chain()).to_dict()
 
@@ -1559,7 +1559,7 @@ def _register_routes(application: FastAPI) -> None:
         dependencies=[Depends(require_api_key)],
     )
     async def audit_head(request: Request) -> dict[str, object]:
-        """Den Kopf-Hash regelmaessig extern ablegen - dann ist auch Abschneiden nachweisbar."""
+        """Den Kopf-Hash regelmäßig extern ablegen - dann ist auch Abschneiden nachweisbar."""
         ledger: AuditLedger = request.app.state.ledger
         head_hash, seq = await ledger.head()
         return {"head_hash": head_hash, "seq": seq, "timestamp": utcnow().isoformat()}
@@ -1567,12 +1567,12 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/audit/signing-key",
         tags=["Audit-Ledger"],
-        summary="Oeffentlicher Schluessel der System-Signatur (Ed25519)",
+        summary="Öffentlicher Schluessel der System-Signatur (Ed25519)",
         dependencies=[Depends(require_api_key)],
     )
     async def signing_key(request: Request) -> dict[str, str]:
         """Den Fingerabdruck in der Verfahrensdokumentation hinterlegen - nur dann belegt
-        die Signatur eines Pruefdatenpakets die Herkunft aus dieser Installation."""
+        die Signatur eines Prüfdatenpakets die Herkunft aus dieser Installation."""
         signer: SystemSigner = request.app.state.signer
         return await anyio.to_thread.run_sync(signer.public_info)
 

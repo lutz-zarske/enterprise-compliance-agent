@@ -95,8 +95,8 @@ class OllamaUnavailableError(LLMError):
 
     code = "ollama_unavailable"
     hint = (
-        "Lokale KI starten (Einstellungen › KI-Modelle) oder im Terminal 'ollama serve' ausfuehren; "
-        "Erreichbarkeit mit scripts/smoke_test_ollama.py pruefen."
+        "Lokale KI starten (Einstellungen › KI-Modelle) oder im Terminal 'ollama serve' ausführen; "
+        "Erreichbarkeit mit scripts/smoke_test_ollama.py prüfen."
     )
     failover = True
     retry = True
@@ -117,7 +117,7 @@ class OllamaTimeoutError(LLMError):
     """
 
     code = "llm_timeout"
-    hint = "OLLAMA_TIMEOUT_SECONDS erhoehen oder ein kleineres Modell verwenden."
+    hint = "OLLAMA_TIMEOUT_SECONDS erhöhen oder ein kleineres Modell verwenden."
     failover = True
 
 
@@ -139,25 +139,25 @@ _PII_CATEGORIES = ", ".join(f'"{member.value}"' for member in PIICategory)
 _GDPR_RISK = ", ".join(f'"{member.value}"' for member in RiskLevel)
 
 EXTRACTION_SYSTEM_PROMPT = f"""\
-Du bist ein praeziser Extraktionsagent fuer deutschsprachige Geschaeftsdokumente
-(Rechnungen, Vertraege, Angebote, Mahnungen).
+Du bist ein präziser Extraktionsagent für deutschsprachige Geschäftsdokumente
+(Rechnungen, Verträge, Angebote, Mahnungen).
 
 Verbindliche Regeln:
-1. Antworte ausschliesslich mit genau einem JSON-Objekt. Kein Fliesstext, keine
-   Erklaerungen, keine Markdown-Codebloecke.
-2. Extrahiere nur, was tatsaechlich im Dokument steht. Rate niemals. Fehlt eine
+1. Antworte ausschließlich mit genau einem JSON-Objekt. Kein Fliesstext, keine
+   Erklärungen, keine Markdown-Codeblöcke.
+2. Extrahiere nur, was tatsächlich im Dokument steht. Rate niemals. Fehlt eine
    Angabe, setze null (bzw. eine leere Liste).
 3. Datumsangaben im Format YYYY-MM-DD.
-4. Betraege als Dezimalzahl mit Punkt als Dezimaltrennzeichen, ohne
-   Tausenderpunkte und ohne Waehrungssymbol (Beispiel: 1234.56).
+4. Beträge als Dezimalzahl mit Punkt als Dezimaltrennzeichen, ohne
+   Tausenderpunkte und ohne Währungssymbol (Beispiel: 1234.56).
 5. "total_amount" ist der Bruttoendbetrag inklusive Umsatzsteuer.
 6. "currency" als ISO-4217-Code (EUR, USD, CHF, ...).
-7. "iban" ohne Leerzeichen, in Grossbuchstaben.
-8. "summary" ist eine sachliche deutsche Zusammenfassung in zwei bis vier Saetzen.
-9. "issues" listet konkrete Auffaelligkeiten auf Deutsch, zum Beispiel fehlende
+7. "iban" ohne Leerzeichen, in Großbuchstaben.
+8. "summary" ist eine sachliche deutsche Zusammenfassung in zwei bis vier Sätzen.
+9. "issues" listet konkrete Auffälligkeiten auf Deutsch, zum Beispiel fehlende
    Pflichtangaben nach Paragraf 14 UStG (Steuernummer, Rechnungsnummer,
-   Leistungsdatum), widerspruechliche Betraege oder ungewoehnliche
-   Vertragsklauseln. Keine Auffaelligkeit bedeutet eine leere Liste.
+   Leistungsdatum), widersprüchliche Beträge oder ungewöhnliche
+   Vertragsklauseln. Keine Auffälligkeit bedeutet eine leere Liste.
 10. "net_amount" ist das Nettoentgelt, "tax_rate" der Umsatzsteuersatz in Prozent
    (z. B. 19), "tax_amount" der Umsatzsteuerbetrag.
 11. "sender_tax_number" ist die Steuernummer (z. B. 21/815/08150),
@@ -167,7 +167,7 @@ Verbindliche Regeln:
 13. "items_description" beschreibt Menge und Art der Lieferung bzw. Art und
    Umfang der Leistung in einem Satz.
 
-Antwortschema (exakt diese Schluessel, keine zusaetzlichen):
+Antwortschema (exakt diese Schluessel, keine zusätzlichen):
 {{
   "doc_type": einer von [{_DOC_TYPES}],
   "sender": string oder null,
@@ -194,57 +194,57 @@ Antwortschema (exakt diese Schluessel, keine zusaetzlichen):
 }}"""
 
 COMPLIANCE_SYSTEM_PROMPT = f"""\
-Du bist ein Compliance-Pruefer fuer die KI-Verordnung der EU (VO (EU) 2024/1689,
+Du bist ein Compliance-Prüfer für die KI-Verordnung der EU (VO (EU) 2024/1689,
 "EU AI Act") und die Datenschutz-Grundverordnung (DSGVO).
 
 Verbindliche Regeln:
-1. Antworte ausschliesslich mit genau einem JSON-Objekt. Kein Fliesstext, keine
-   Erklaerungen, keine Markdown-Codebloecke.
+1. Antworte ausschließlich mit genau einem JSON-Objekt. Kein Fliesstext, keine
+   Erklärungen, keine Markdown-Codeblöcke.
 2. Alle Freitexte auf Deutsch.
-3. Bewerte ausschliesslich das vorgelegte Dokument. Erfinde keine Sachverhalte.
+3. Bewerte ausschließlich das vorgelegte Dokument. Erfinde keine Sachverhalte.
 
 TEIL A - EU AI ACT
-Pruefe, ob im Dokument ein Softwaresystem beschaffen, entwickelt, lizenziert oder
+Prüfe, ob im Dokument ein Softwaresystem beschaffen, entwickelt, lizenziert oder
 beschrieben wird, das ein KI-System im Sinne von Artikel 3 Nr. 1 ist (Systeme mit
 maschinellem Lernen, Scoring, automatisierter Entscheidungsfindung, Ranking oder
 Vorhersage).
-- Eine gewoehnliche Rechnung ueber Bueromaterial, Miete oder Beratung beschreibt
+- Eine gewöhnliche Rechnung über Büromaterial, Miete oder Beratung beschreibt
   KEIN KI-System: dann "describes_ai_system": false und
   "overall_risk_level": "not_applicable".
 - Beschreibt das Dokument ein KI-System, ordne es einer Risikostufe zu:
   * "unacceptable": verbotene Praktik nach Artikel 5 (z. B. Social Scoring,
     Emotionserkennung am Arbeitsplatz, biometrische Echtzeit-Fernidentifizierung).
-  * "high": Anwendungsfall faellt unter Anhang III. Besonders relevant:
+  * "high": Anwendungsfall fällt unter Anhang III. Besonders relevant:
     - "employment_and_worker_management": Bewerberauswahl, CV-Screening,
-      Recruiting, Leistungsbewertung, Befoerderung, Kuendigung.
-    - "critical_infrastructure": Steuerung von Strom-, Wasser-, Gas-, Waerme-,
+      Recruiting, Leistungsbewertung, Beförderung, Kündigung.
+    - "critical_infrastructure": Steuerung von Strom-, Wasser-, Gas-, Wärme-,
       Verkehrs- oder Digitalinfrastruktur.
-    - "essential_services_and_creditworthiness": Bonitaets- und
-      Kreditwuerdigkeitspruefung, Scoring, Versicherungs-Risikobewertung,
+    - "essential_services_and_creditworthiness": Bonitäts- und
+      Kreditwürdigkeitsprüfung, Scoring, Versicherungs-Risikobewertung,
       Zugang zu Sozialleistungen.
   * "limited": nur Transparenzpflichten nach Artikel 50 (Chatbots, Deepfakes).
-  * "minimal": alle uebrigen KI-Systeme (Spamfilter, Empfehlungen).
-- "annex_iii_categories" enthaelt ausschliesslich Werte aus dieser Liste:
-  [{_ANNEX_III}]. Trifft keine zu, gib eine leere Liste zurueck.
+  * "minimal": alle übrigen KI-Systeme (Spamfilter, Empfehlungen).
+- "annex_iii_categories" enthält ausschließlich Werte aus dieser Liste:
+  [{_ANNEX_III}]. Trifft keine zu, gib eine leere Liste zurück.
 - "obligations" nennt die konkreten Folgepflichten (z. B. Risikomanagementsystem
   nach Art. 9, Daten-Governance nach Art. 10, technische Dokumentation nach
-  Art. 11, menschliche Aufsicht nach Art. 14, Konformitaetsbewertung nach Art. 43).
+  Art. 11, menschliche Aufsicht nach Art. 14, Konformitätsbewertung nach Art. 43).
 
 TEIL B - DSGVO
 Erkenne personenbezogene Daten und insbesondere besondere Kategorien nach
-Artikel 9 (Gesundheitsdaten, Religions- und Weltanschauungszugehoerigkeit,
-ethnische Herkunft, politische Meinung, Gewerkschaftszugehoerigkeit, Biometrie,
+Artikel 9 (Gesundheitsdaten, Religions- und Weltanschauungszugehörigkeit,
+ethnische Herkunft, politische Meinung, Gewerkschaftszugehörigkeit, Biometrie,
 Genetik, Sexualleben) sowie strafrechtliche Daten nach Artikel 10.
 - Ausweis-, Pass-, Sozialversicherungs- und Steueridentifikationsnummern sind
   ebenfalls zu melden.
-- "masked_value" enthaelt NIEMALS den vollstaendigen Wert. Maskiere die Mitte,
+- "masked_value" enthält NIEMALS den vollständigen Wert. Maskiere die Mitte,
   Beispiel: "DE89****3000", "M***@example.com", "geb. **.**.1985".
-- "context" ist ein kurzer, ebenfalls entschaerfter Umgebungstext.
+- "context" ist ein kurzer, ebenfalls entschärfter Umgebungstext.
 - Risikostufe: "high" bei besonderen Kategorien nach Art. 9/10, "medium" bei
   Ausweis-, Konto- oder Sozialdaten, "low" bei blossen Kontaktdaten von
-  Ansprechpartnern, "none" wenn ausschliesslich Firmendaten vorliegen.
+  Ansprechpartnern, "none" wenn ausschließlich Firmendaten vorliegen.
 
-Antwortschema (exakt diese Schluessel, keine zusaetzlichen):
+Antwortschema (exakt diese Schluessel, keine zusätzlichen):
 {{
   "ai_act": {{
     "describes_ai_system": true oder false,
@@ -254,7 +254,7 @@ Antwortschema (exakt diese Schluessel, keine zusaetzlichen):
         "name": string,
         "purpose": string,
         "risk_level": einer von [{_RISK_LEVELS}],
-        "annex_iii_categories": [ausschliesslich Werte aus der Anhang-III-Liste],
+        "annex_iii_categories": [ausschließlich Werte aus der Anhang-III-Liste],
         "evidence": string,
         "confidence": Zahl zwischen 0.0 und 1.0
       }}
@@ -302,18 +302,18 @@ def build_extraction_prompt(text: str) -> str:
         "=== DOKUMENTBEGINN ===\n"
         f"{text}\n"
         "=== DOKUMENTENDE ===\n\n"
-        "Antworte ausschliesslich mit dem JSON-Objekt gemaess Schema."
+        "Antworte ausschließlich mit dem JSON-Objekt gemäß Schema."
     )
 
 
 def build_compliance_prompt(text: str) -> str:
     return (
-        "Pruefe das folgende Dokument auf EU-AI-Act-Relevanz und auf "
+        "Prüfe das folgende Dokument auf EU-AI-Act-Relevanz und auf "
         "personenbezogene Daten nach DSGVO.\n\n"
         "=== DOKUMENTBEGINN ===\n"
         f"{text}\n"
         "=== DOKUMENTENDE ===\n\n"
-        "Antworte ausschliesslich mit dem JSON-Objekt gemaess Schema."
+        "Antworte ausschließlich mit dem JSON-Objekt gemäß Schema."
     )
 
 
@@ -355,7 +355,7 @@ def extract_json_object(content: str) -> dict[str, Any]:
                 parsed = json.loads(content[start : end + 1])
             except json.JSONDecodeError as exc:
                 raise LLMResponseError(
-                    f"Antwort des Modells ist kein gueltiges JSON: {exc}"
+                    f"Antwort des Modells ist kein gültiges JSON: {exc}"
                 ) from exc
 
     if not isinstance(parsed, dict):
@@ -434,8 +434,8 @@ class StructuredLLMClient:
                         "content": (
                             "Deine Antwort entsprach nicht dem geforderten Schema. "
                             f"Fehler:\n{exc}\n\n"
-                            "Antworte erneut - ausschliesslich mit einem einzigen, "
-                            "gueltigen JSON-Objekt gemaess Schema."
+                            "Antworte erneut - ausschließlich mit einem einzigen, "
+                            "gültigen JSON-Objekt gemäß Schema."
                         ),
                     },
                 ]
@@ -555,7 +555,7 @@ class OllamaClient(StructuredLLMClient):
             response = await self._client.post(self._settings.ollama_chat_url, json=payload)
         except httpx.TimeoutException as exc:
             raise OllamaTimeoutError(
-                f"Das lokale Modell hat {self._settings.ollama_timeout_seconds:.0f} s ueberschritten."
+                f"Das lokale Modell hat {self._settings.ollama_timeout_seconds:.0f} s überschritten."
             ) from exc
         except httpx.HTTPError as exc:
             logger.debug("Ollama-Aufruf gescheitert: %r", exc)
@@ -569,7 +569,7 @@ class OllamaClient(StructuredLLMClient):
             )
         if response.status_code in (408, 429) or response.status_code >= 500:
             raise OllamaUnavailableError(
-                f"Ollama ist ausgelastet oder gestoert (HTTP {response.status_code})."
+                f"Ollama ist ausgelastet oder gestört (HTTP {response.status_code})."
             )
         if response.status_code >= 400:
             raise LLMResponseError(

@@ -26,7 +26,7 @@ async def _append(ledger: AuditLedger, doc: str = "doc-1", score: int | None = 9
         sha256_hash="a" * 64,
         model_name="qwen2.5:14b-instruct",
         prompt_hash="b" * 64,
-        result_summary="Keine Compliance-Auffaelligkeiten",
+        result_summary="Keine Compliance-Auffälligkeiten",
         compliance_score=score,
         risk_tier="not_applicable",
     )
@@ -84,7 +84,7 @@ async def test_manipulation_wird_mit_sequenz_nachgewiesen(ledger: AuditLedger) -
     result = await ledger.verify_chain()
     assert result.valid is False
     assert result.broken_at_seq == 2
-    assert "veraendert" in (result.reason or "")
+    assert "verändert" in (result.reason or "")
 
 
 async def test_geloeschter_eintrag_wird_erkannt(ledger: AuditLedger) -> None:

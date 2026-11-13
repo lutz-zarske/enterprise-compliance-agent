@@ -2,11 +2,11 @@
 
 Die Modelle erfuellen zwei Aufgaben gleichzeitig:
 
-* **Vertrag gegenueber dem LLM** - aus ``model_json_schema()`` wird der
+* **Vertrag gegenüber dem LLM** - aus ``model_json_schema()`` wird der
   JSON-Vertrag generiert, den das Modell einhalten muss.  Diese Modelle sind
-  bewusst tolerant gegenueber typischen LLM-Eigenheiten (deutsche Datums- und
-  Betragsformate, ``"nicht angegeben"`` statt ``null``, zusaetzliche Keys).
-* **Vertrag gegenueber dem API-Client** - aus denselben Modellen entsteht die
+  bewusst tolerant gegenüber typischen LLM-Eigenheiten (deutsche Datums- und
+  Betragsformate, ``"nicht angegeben"`` statt ``null``, zusätzliche Keys).
+* **Vertrag gegenüber dem API-Client** - aus denselben Modellen entsteht die
   OpenAPI-Dokumentation.
 
 Alles, was aus dem Modell kommt, wird strikt validiert, bevor es die
@@ -58,7 +58,7 @@ _IBAN_RE = re.compile(r"^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$")
 
 
 def normalize_optional_text(value: Any) -> Any:
-    """Trimmt Strings und uebersetzt Platzhalter-Formulierungen nach ``None``."""
+    """Trimmt Strings und übersetzt Platzhalter-Formulierungen nach ``None``."""
     if not isinstance(value, str):
         return value
     cleaned = " ".join(value.split())
@@ -139,7 +139,7 @@ def parse_flexible_amount(value: Any) -> Any:
 
 
 def normalize_currency(value: Any) -> Any:
-    """Normalisiert Waehrungsangaben auf ISO-4217 (``EUR``, ``USD``, ...)."""
+    """Normalisiert Währungsangaben auf ISO-4217 (``EUR``, ``USD``, ...)."""
     value = normalize_optional_text(value)
     if not isinstance(value, str):
         return value
@@ -151,7 +151,7 @@ def normalize_currency(value: Any) -> Any:
 
 
 def normalize_iban(value: Any) -> Any:
-    """Entfernt Gruppierungszeichen und schreibt die IBAN gross."""
+    """Entfernt Gruppierungszeichen und schreibt die IBAN groß."""
     value = normalize_optional_text(value)
     if not isinstance(value, str):
         return value
@@ -160,7 +160,7 @@ def normalize_iban(value: Any) -> Any:
 
 
 def iban_checksum_valid(iban: str) -> bool:
-    """IBAN-Pruefsumme nach ISO 13616 / MOD-97-10."""
+    """IBAN-Prüfsumme nach ISO 13616 / MOD-97-10."""
     candidate = re.sub(r"[\s\-]", "", iban).upper()
     if not _IBAN_RE.fullmatch(candidate):
         return False
@@ -300,7 +300,7 @@ PII_CATEGORY_LABELS: dict[PIICategory, str] = {
 
 
 class RiskLevel(str, Enum):
-    """Generische Risikoeinstufung fuer den DSGVO-Teilbericht."""
+    """Generische Risikoeinstufung für den DSGVO-Teilbericht."""
 
     NONE = "none"
     LOW = "low"
@@ -309,7 +309,7 @@ class RiskLevel(str, Enum):
 
 
 class DetectionSource(str, Enum):
-    """Herkunft eines PII-Treffers - fuer die Nachvollziehbarkeit des Audits."""
+    """Herkunft eines PII-Treffers - für die Nachvollziehbarkeit des Audits."""
 
     LLM = "llm"
     RULE_BASED = "rule_based"
@@ -329,13 +329,13 @@ _LLM_CONFIG = ConfigDict(
 
 
 class LLMModel(BaseModel):
-    """Basis fuer alle Modelle, die direkt aus einer LLM-Antwort entstehen."""
+    """Basis für alle Modelle, die direkt aus einer LLM-Antwort entstehen."""
 
     model_config = _LLM_CONFIG
 
 
 class ApiModel(BaseModel):
-    """Basis fuer alle nach aussen sichtbaren API-Modelle."""
+    """Basis für alle nach aussen sichtbaren API-Modelle."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -386,7 +386,7 @@ class ExtractionResult(LLMModel):
     recipient: str | None = Field(
         default=None,
         max_length=300,
-        description="Empfaenger des Dokuments (Firma oder Person).",
+        description="Empfänger des Dokuments (Firma oder Person).",
     )
     document_number: str | None = Field(
         default=None,
@@ -399,7 +399,7 @@ class ExtractionResult(LLMModel):
     )
     due_date: date | None = Field(
         default=None,
-        description="Faelligkeitsdatum bzw. Vertragsende im Format YYYY-MM-DD.",
+        description="Fälligkeitsdatum bzw. Vertragsende im Format YYYY-MM-DD.",
     )
     total_amount: Decimal | None = Field(
         default=None,
@@ -409,7 +409,7 @@ class ExtractionResult(LLMModel):
         default=None,
         min_length=3,
         max_length=3,
-        description="Waehrung als ISO-4217-Code, z. B. EUR.",
+        description="Währung als ISO-4217-Code, z. B. EUR.",
     )
     iban: str | None = Field(
         default=None,
@@ -419,11 +419,11 @@ class ExtractionResult(LLMModel):
     summary: str = Field(
         default="",
         max_length=2000,
-        description="Sachliche Zusammenfassung in zwei bis vier Saetzen (Deutsch).",
+        description="Sachliche Zusammenfassung in zwei bis vier Sätzen (Deutsch).",
     )
     # --- Pflichtangaben nach Paragraf 14 Abs. 4 UStG (seit v2.0) -------------
     sender_address: str | None = Field(default=None, max_length=400, description="Anschrift des Ausstellers.")
-    recipient_address: str | None = Field(default=None, max_length=400, description="Anschrift des Empfaengers.")
+    recipient_address: str | None = Field(default=None, max_length=400, description="Anschrift des Empfängers.")
     sender_tax_number: str | None = Field(default=None, max_length=40, description="Steuernummer des Ausstellers.")
     sender_vat_id: str | None = Field(default=None, max_length=20, description="USt-IdNr. des Ausstellers.")
     service_date: date | None = Field(default=None, description="Liefer-/Leistungsdatum.")
@@ -439,7 +439,7 @@ class ExtractionResult(LLMModel):
     )
     issues: list[str] = Field(
         default_factory=list,
-        description="Auffaelligkeiten: fehlende Pflichtangaben, Widersprueche, ungewoehnliche Klauseln.",
+        description="Auffälligkeiten: fehlende Pflichtangaben, Widersprüche, ungewöhnliche Klauseln.",
     )
 
     # --- Normalisierung ----------------------------------------------------
@@ -519,7 +519,7 @@ class ExtractionResult(LLMModel):
         return _clean_string_list(value)
 
     @computed_field(  # type: ignore[prop-decorator]
-        description="MOD-97-Pruefsummenkontrolle; null, wenn keine IBAN gefunden wurde."
+        description="MOD-97-Prüfsummenkontrolle; null, wenn keine IBAN gefunden wurde."
     )
     @property
     def iban_valid(self) -> bool | None:
@@ -546,7 +546,7 @@ class AISystemFinding(LLMModel):
     )
     risk_level: AIActRiskLevel = Field(
         default=AIActRiskLevel.MINIMAL,
-        description="Risikostufe nach EU AI Act fuer genau dieses System.",
+        description="Risikostufe nach EU AI Act für genau dieses System.",
     )
     annex_iii_categories: list[AnnexIIICategory] = Field(
         default_factory=list,
@@ -555,13 +555,13 @@ class AISystemFinding(LLMModel):
     evidence: str = Field(
         default="",
         max_length=1000,
-        description="Woertliche oder sinngemaesse Textstelle, die die Einstufung stuetzt.",
+        description="Wörtliche oder sinngemäße Textstelle, die die Einstufung stützt.",
     )
     confidence: float = Field(
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Selbsteinschaetzung der Sicherheit zwischen 0.0 und 1.0.",
+        description="Selbsteinschätzung der Sicherheit zwischen 0.0 und 1.0.",
     )
 
     @field_validator("name", "purpose", "evidence", mode="before")
@@ -596,7 +596,7 @@ class AISystemFinding(LLMModel):
 
 
 class AIActAssessment(LLMModel):
-    """Gesamtergebnis der EU-AI-Act-Pruefung eines Dokuments."""
+    """Gesamtergebnis der EU-AI-Act-Prüfung eines Dokuments."""
 
     describes_ai_system: bool = Field(
         default=False,
@@ -604,7 +604,7 @@ class AIActAssessment(LLMModel):
     )
     overall_risk_level: AIActRiskLevel = Field(
         default=AIActRiskLevel.NOT_APPLICABLE,
-        description="Hoechste im Dokument festgestellte Risikostufe.",
+        description="Höchste im Dokument festgestellte Risikostufe.",
     )
     systems: list[AISystemFinding] = Field(
         default_factory=list,
@@ -613,7 +613,7 @@ class AIActAssessment(LLMModel):
     reasoning: str = Field(
         default="",
         max_length=2000,
-        description="Nachvollziehbare Begruendung der Gesamteinstufung auf Deutsch.",
+        description="Nachvollziehbare Begründung der Gesamteinstufung auf Deutsch.",
     )
     obligations: list[str] = Field(
         default_factory=list,
@@ -662,13 +662,13 @@ class PIIFinding(LLMModel):
         max_length=200,
         description=(
             "Maskierter Auszug des Fundes, z. B. 'DE89****1234'. "
-            "Niemals der vollstaendige Wert."
+            "Niemals der vollständige Wert."
         ),
     )
     context: str = Field(
         default="",
         max_length=500,
-        description="Kurzer, ebenfalls entschaerfter Kontext der Fundstelle.",
+        description="Kurzer, ebenfalls entschärfter Kontext der Fundstelle.",
     )
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     source: DetectionSource = Field(
@@ -700,11 +700,11 @@ class PIIFinding(LLMModel):
 
 
 class GDPRAssessment(LLMModel):
-    """Gesamtergebnis der DSGVO-Pruefung eines Dokuments."""
+    """Gesamtergebnis der DSGVO-Prüfung eines Dokuments."""
 
     contains_personal_data: bool = Field(
         default=False,
-        description="Enthaelt das Dokument personenbezogene Daten?",
+        description="Enthält das Dokument personenbezogene Daten?",
     )
     findings: list[PIIFinding] = Field(
         default_factory=list,
@@ -717,11 +717,11 @@ class GDPRAssessment(LLMModel):
     reasoning: str = Field(
         default="",
         max_length=2000,
-        description="Begruendung der Einstufung auf Deutsch.",
+        description="Begründung der Einstufung auf Deutsch.",
     )
     recommendations: list[str] = Field(
         default_factory=list,
-        description="Empfohlene Massnahmen, z. B. Loeschfristen oder Zugriffsbeschraenkungen.",
+        description="Empfohlene Maßnahmen, z. B. Löschfristen oder Zugriffsbeschränkungen.",
     )
 
     @field_validator("reasoning", mode="before")
@@ -766,7 +766,7 @@ class GDPRAssessment(LLMModel):
 
 
 class ComplianceAudit(ApiModel):
-    """Buendel aus AI-Act- und DSGVO-Bewertung inklusive Metadaten."""
+    """Bündel aus AI-Act- und DSGVO-Bewertung inklusive Metadaten."""
 
     # Dieses Modell wird als JSON persistiert und beim Lesen wieder validiert.
     # Berechnete Felder (``headline``) sind Teil des Dumps, aber keine Eingabe-
@@ -785,17 +785,17 @@ class ComplianceAudit(ApiModel):
     )
     failover: list[dict[str, str]] | None = Field(
         default=None,
-        description="Provider-Wechsel waehrend der Analyse (Ausfall, 429, Zeitueberschreitung), je Wechsel im Ledger.",
+        description="Provider-Wechsel während der Analyse (Ausfall, 429, Zeitüberschreitung), je Wechsel im Ledger.",
     )
     heuristic: bool = Field(
         default=False,
-        description="True, wenn alle KI-Stufen ausfielen und das deterministische Regelwerk die Pruefung abschloss.",
+        description="True, wenn alle KI-Stufen ausfielen und das deterministische Regelwerk die Prüfung abschloss.",
     )
     fallback_reason: str | None = Field(
-        default=None, description="Grund fuer das regelbasierte Referenz-Audit (z. B. Ueberlast aller Stufen)."
+        default=None, description="Grund für das regelbasierte Referenz-Audit (z. B. Überlast aller Stufen)."
     )
 
-    @computed_field(description="Kurzfazit fuer Uebersichtslisten und Dashboards.")  # type: ignore[prop-decorator]
+    @computed_field(description="Kurzfazit für Übersichtslisten und Dashboards.")  # type: ignore[prop-decorator]
     @property
     def headline(self) -> str:
         parts: list[str] = []
@@ -807,7 +807,7 @@ class ComplianceAudit(ApiModel):
             parts.append("DSGVO: besondere Kategorien (Art. 9/10)")
         elif self.gdpr.contains_personal_data:
             parts.append(f"DSGVO: personenbezogene Daten ({self.gdpr.risk_level.value})")
-        return " | ".join(parts) if parts else "Keine Compliance-Auffaelligkeiten"
+        return " | ".join(parts) if parts else "Keine Compliance-Auffälligkeiten"
 
 
 # ---------------------------------------------------------------------------
@@ -818,7 +818,7 @@ DocumentId = Annotated[str, Field(description="UUID4 des Dokuments.")]
 
 
 class DocumentSummary(ApiModel):
-    """Zeile der tabellarischen Uebersicht (GET /documents)."""
+    """Zeile der tabellarischen Übersicht (GET /documents)."""
 
     id: DocumentId
     filename: str
@@ -849,7 +849,7 @@ class DocumentSummary(ApiModel):
 
 
 class DocumentListResponse(ApiModel):
-    """Paginierte Uebersicht aller Dokumente."""
+    """Paginierte Übersicht aller Dokumente."""
 
     items: list[DocumentSummary]
     total: int = Field(ge=0, description="Gesamtzahl der Dokumente im aktiven Filter.")
@@ -873,7 +873,7 @@ class DocumentDetail(ApiModel):
     compliance: ComplianceAudit | None = None
     text_preview: str | None = Field(
         default=None,
-        description="Erste Zeichen des extrahierten Textes (gekuerzt, gemaess PII-Strenge geschwaerzt).",
+        description="Erste Zeichen des extrahierten Textes (gekürzt, gemäß PII-Strenge geschwärzt).",
     )
     scorecard: Scorecard | None = None
     sign_off: SignOff | None = None
@@ -903,7 +903,7 @@ class UploadResponse(ApiModel):
     char_count: int
     duplicate_of: DocumentId | None = Field(
         default=None,
-        description="Gesetzt, wenn bereits ein Dokument mit identischer Pruefsumme existiert.",
+        description="Gesetzt, wenn bereits ein Dokument mit identischer Prüfsumme existiert.",
     )
     created_at: datetime
 
@@ -941,7 +941,7 @@ class ScoreBand(str, Enum):
 
 
 class ScoreCheck(ApiModel):
-    """Ein einzelnes Pruefmerkmal (z. B. Paragraf 14 Abs. 4 Nr. 2 UStG)."""
+    """Ein einzelnes Prüfmerkmal (z. B. Paragraf 14 Abs. 4 Nr. 2 UStG)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -986,7 +986,7 @@ class RetentionInfo(ApiModel):
 
 
 class HumanOverride(ApiModel):
-    """Uebersteuerung einer KI-Einstufung durch eine natuerliche Person (Art. 14 Abs. 4 lit. d AI Act)."""
+    """Uebersteuerung einer KI-Einstufung durch eine natürliche Person (Art. 14 Abs. 4 lit. d AI Act)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -1003,14 +1003,14 @@ class HumanOverride(ApiModel):
 
 
 class Scorecard(ApiModel):
-    """Deterministischer Compliance-Score (0-100) mit Begruendung je Abzug."""
+    """Deterministischer Compliance-Score (0-100) mit Begründung je Abzug."""
 
     model_config = ConfigDict(extra="ignore")
 
     score: int = Field(ge=0, le=100)
     band: ScoreBand
     band_label: str
-    cap_applied: str | None = Field(default=None, description="Begruendung, falls der Score gedeckelt wurde.")
+    cap_applied: str | None = Field(default=None, description="Begründung, falls der Score gedeckelt wurde.")
     tiles: list[ScoreTile]
     release_recommendation: str
     release_blocked: bool
@@ -1021,7 +1021,7 @@ class Scorecard(ApiModel):
     computed_at: datetime
     ruleset_version: str
     human_override: HumanOverride | None = Field(
-        default=None, description="Gesetzt, wenn eine Pruefperson die KI-Einstufung uebersteuert hat."
+        default=None, description="Gesetzt, wenn eine Prüfperson die KI-Einstufung uebersteuert hat."
     )
     retention: RetentionInfo | None = Field(
         default=None, description="Aufbewahrungsfrist bei Rechnungen mit Belegdatum (BEG IV)."
@@ -1034,7 +1034,7 @@ class Scorecard(ApiModel):
 
 
 class EInvoiceParty(ApiModel):
-    """Verkaeufer bzw. Kaeufer aus dem XML-Datensatz."""
+    """Verkäufer bzw. Käufer aus dem XML-Datensatz."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -1082,7 +1082,7 @@ class EInvoiceLine(ApiModel):
 
 
 class LeitwegCheck(ApiModel):
-    """Formal- und Pruefziffernkontrolle einer Leitweg-ID (KoSIT-Formatspezifikation 2.0.2)."""
+    """Formal- und Prüfziffernkontrolle einer Leitweg-ID (KoSIT-Formatspezifikation 2.0.2)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -1112,11 +1112,11 @@ class BusinessTermField(ApiModel):
 
 
 class EInvoiceData(ApiModel):
-    """Ausgelesener EN-16931-Datensatz (CII oder UBL) samt Pruefbefunden.
+    """Ausgelesener EN-16931-Datensatz (CII oder UBL) samt Prüfbefunden.
 
     Der Datensatz entsteht beim Upload und wird mit dem Dokument gespeichert.
     Bei hybriden Rechnungen (ZUGFeRD/Factur-X) ist er nach dem BMF-Schreiben vom
-    15.10.2024 (Rz. 36) der fuehrende Teil der Rechnung.
+    15.10.2024 (Rz. 36) der führende Teil der Rechnung.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -1163,7 +1163,7 @@ class EInvoiceData(ApiModel):
     xml_sha256: str | None = None
     xml_size: int | None = None
 
-    @computed_field(description="Zentrale Business Terms fuer die Tabellenansicht.")  # type: ignore[prop-decorator]
+    @computed_field(description="Zentrale Business Terms für die Tabellenansicht.")  # type: ignore[prop-decorator]
     @property
     def business_terms(self) -> list[BusinessTermField]:
         def money(value: Decimal | None) -> str | None:
@@ -1208,13 +1208,13 @@ class SignOffRequest(ApiModel):
 
 
 class OverrideRequest(ApiModel):
-    """Uebersteuerung der EU-AI-Act-Einstufung durch die Pruefperson."""
+    """Uebersteuerung der EU-AI-Act-Einstufung durch die Prüfperson."""
 
     auditor_name: str = Field(min_length=2, max_length=120)
-    risk_level: AIActRiskLevel = Field(description="Neue Risikostufe nach Wuerdigung durch die Pruefperson.")
+    risk_level: AIActRiskLevel = Field(description="Neue Risikostufe nach Würdigung durch die Prüfperson.")
     reason: str = Field(
         min_length=20, max_length=2000,
-        description="Begruendung - nachvollziehbar fuer Dritte (Art. 14 Abs. 4 lit. d, Art. 12 AI Act).",
+        description="Begründung - nachvollziehbar für Dritte (Art. 14 Abs. 4 lit. d, Art. 12 AI Act).",
     )
     legal_basis: str = Field(
         min_length=3, max_length=300, description="Rechtsnorm, z. B. 'Art. 6 Abs. 3 lit. d VO (EU) 2024/1689'."
@@ -1242,7 +1242,7 @@ InferenceModeLiteral = Literal["local", "gemini", "anthropic", "openai"]
 
 
 class BackupKeyInput(ApiModel):
-    """Ein Ausweich-Schluessel der Kaskade (Schluessel wird verschluesselt gespeichert, nie zurueckgegeben)."""
+    """Ein Ausweich-Schluessel der Kaskade (Schluessel wird verschlüsselt gespeichert, nie zurückgegeben)."""
 
     id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,40}$", description="Stabile Kennung des Eintrags.")
     provider: Literal["gemini", "anthropic", "openai"]
@@ -1256,7 +1256,7 @@ class SettingsUpdate(ApiModel):
     inference_mode: InferenceModeLiteral | None = None
     models: dict[str, str] | None = Field(default=None, description="Modell je Provider.")
     api_keys: dict[str, str] | None = Field(
-        default=None, description="Neue Provider-Keys; leerer String loescht den Key."
+        default=None, description="Neue Provider-Keys; leerer String löscht den Key."
     )
     pii_strictness: Literal["strict", "standard", "audit_only"] | None = None
     enforce_ustg_check: bool | None = None
@@ -1274,7 +1274,7 @@ class SettingsUpdate(ApiModel):
         default=None,
         max_length=6,
         description=(
-            "Ganze Liste der Ausweich-Schluessel in Reihenfolge; Eintraege ohne api_key behalten "
+            "Ganze Liste der Ausweich-Schluessel in Reihenfolge; Einträge ohne api_key behalten "
             "den gespeicherten Schluessel derselben id."
         ),
     )
@@ -1293,13 +1293,13 @@ class ArchiveRequest(ApiModel):
 
 
 class VatVerifyRequest(ApiModel):
-    """USt-IdNr. fuer die VIES-Abfrage - Laendercode und Nummer getrennt."""
+    """USt-IdNr. für die VIES-Abfrage - Ländercode und Nummer getrennt."""
 
     country_code: str = Field(
-        min_length=2, max_length=2, description="Laendercode nach VIES, z. B. 'DE' (Griechenland: 'EL')."
+        min_length=2, max_length=2, description="Ländercode nach VIES, z. B. 'DE' (Griechenland: 'EL')."
     )
     vat_number: str = Field(
-        min_length=2, max_length=20, description="Nummer ohne Laenderpraefix, z. B. '312345678'."
+        min_length=2, max_length=20, description="Nummer ohne Länderpräfix, z. B. '312345678'."
     )
 
 
@@ -1308,12 +1308,12 @@ class VatVerification(ApiModel):
 
     country_code: str
     vat_number: str
-    valid: bool = Field(description="USt-IdNr. ist laut VIES zum Abfragezeitpunkt gueltig.")
+    valid: bool = Field(description="USt-IdNr. ist laut VIES zum Abfragezeitpunkt gültig.")
     name: str | None = Field(
-        default=None, description="Firmenname laut VIES; Deutschland uebermittelt keine Namen (dann leer)."
+        default=None, description="Firmenname laut VIES; Deutschland übermittelt keine Namen (dann leer)."
     )
     address: str | None = None
-    request_date: datetime | None = Field(default=None, description="Zeitstempel der Behoerdenantwort.")
+    request_date: datetime | None = Field(default=None, description="Zeitstempel der Behördenantwort.")
     request_identifier: str | None = Field(default=None, description="Abfrage-ID von VIES, falls vergeben.")
     source: str = "VIES – Europäische Kommission"
 
@@ -1327,12 +1327,12 @@ class CopilotRequest(ApiModel):
     question: str = Field(min_length=2, max_length=2000)
     history: list[CopilotTurn] = Field(default_factory=list, max_length=20)
     thinking: Literal["low", "medium", "high"] = Field(
-        default="medium", description="Denkstufe: Gruendlichkeit und Laenge der Antwort."
+        default="medium", description="Denkstufe: Gründlichkeit und Länge der Antwort."
     )
     progress_id: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9_-]{6,64}$",
-        description="Vom Client vergebene Kennung fuer die Live-Arbeitsschritte (GET /api/v1/copilot/progress/{id}).",
+        description="Vom Client vergebene Kennung für die Live-Arbeitsschritte (GET /api/v1/copilot/progress/{id}).",
     )
 
 
@@ -1347,12 +1347,12 @@ class CopilotResponse(ApiModel):
     heuristic: bool = Field(
         default=False, description="True, wenn alle KI-Stufen ausfielen und das Regelwerk geantwortet hat."
     )
-    failover: list[dict[str, str]] | None = Field(default=None, description="Stufenwechsel waehrend der Antwort.")
-    notice: str | None = Field(default=None, description="Ruhiger Hinweis fuer die Oberflaeche.")
+    failover: list[dict[str, str]] | None = Field(default=None, description="Stufenwechsel während der Antwort.")
+    notice: str | None = Field(default=None, description="Ruhiger Hinweis für die Oberfläche.")
 
 
 class JobSubmitRequest(ApiModel):
-    """Batch-Pruefung: mehrere Belege auf einmal in die Warteschlange."""
+    """Batch-Prüfung: mehrere Belege auf einmal in die Warteschlange."""
 
     document_ids: list[Annotated[str, Field(min_length=8, max_length=64)]] = Field(min_length=1, max_length=100)
 
@@ -1424,7 +1424,7 @@ class ErrorDetail(ApiModel):
 
     code: str = Field(description="Stabiler Fehlercode, z. B. 'document_not_found'.")
     message: str = Field(description="Menschenlesbare Fehlermeldung auf Deutsch.")
-    hint: str | None = Field(default=None, description="Konkreter Loesungsvorschlag.")
+    hint: str | None = Field(default=None, description="Konkreter Lösungsvorschlag.")
 
 
 class ErrorResponse(ApiModel):
@@ -1434,18 +1434,18 @@ class ErrorResponse(ApiModel):
 
 
 class RedactRequest(ApiModel):
-    """Text fuer das DLP-Gateway (``POST /api/v1/redact``)."""
+    """Text für das DLP-Gateway (``POST /api/v1/redact``)."""
 
-    text: str = Field(min_length=1, max_length=200_000, description="Zu schwaerzender Text (wird nicht gespeichert).")
+    text: str = Field(min_length=1, max_length=200_000, description="Zu schwärzender Text (wird nicht gespeichert).")
     extra_terms: list[Annotated[str, Field(min_length=2, max_length=100)]] = Field(
-        default_factory=list, max_length=50, description="Zusaetzliche Sperrbegriffe nur fuer diese Anfrage."
+        default_factory=list, max_length=50, description="Zusätzliche Sperrbegriffe nur für diese Anfrage."
     )
-    redact_pii: bool = Field(default=True, description="Personenbezogene Daten schwaerzen (ohne Betraege).")
-    redact_amounts: bool = Field(default=False, description="Auch Geldbetraege schwaerzen.")
+    redact_pii: bool = Field(default=True, description="Personenbezogene Daten schwärzen (ohne Beträge).")
+    redact_amounts: bool = Field(default=False, description="Auch Geldbeträge schwärzen.")
 
 
 class RedactResponse(ApiModel):
-    """Geschwaerzter Text und Treffer je Kategorie - nie die gefundenen Werte."""
+    """Geschwärzter Text und Treffer je Kategorie - nie die gefundenen Werte."""
 
     redacted_text: str
     counts: dict[str, int]
@@ -1454,8 +1454,8 @@ class RedactResponse(ApiModel):
 
 
 class ReleaseApplyRequest(ApiModel):
-    """Bestaetigung eines Release-Wechsels durch die Administration."""
+    """Bestätigung eines Release-Wechsels durch die Administration."""
 
     tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.4.1'.")
-    commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestaetigter Commit-Hash des Tags (40 Zeichen).")
+    commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(min_length=2, max_length=120, description="Wer das Update freigibt.")

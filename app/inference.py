@@ -125,7 +125,7 @@ class FailoverClient(StructuredLLMClient):
         try:
             self.on_event(kind, info)
         except Exception:  # noqa: BLE001 - ein Anzeige-Rueckruf darf die Pruefung nie kippen
-            logger.debug("Ereignis-Rueckruf fehlgeschlagen", exc_info=True)
+            logger.debug("Ereignis-Rückruf fehlgeschlagen", exc_info=True)
 
     async def _post_chat(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> str:
         while True:
@@ -271,7 +271,7 @@ class InferenceRouter:
             except ProviderNotConfiguredError:
                 if position == 0:
                     raise  # Der primaere Provider muss eingerichtet sein.
-                logger.warning("Ausweich-Stufe %s ohne API-Key - uebersprungen.", stage.provider.value)
+                logger.warning("Ausweich-Stufe %s ohne API-Key - übersprungen.", stage.provider.value)
                 continue
             clients.append(VaultedClient(inner, vault))
             stages.append(stage)

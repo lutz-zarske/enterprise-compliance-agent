@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 326 pytest](https://img.shields.io/badge/pytest-326_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 327 pytest](https://img.shields.io/badge/pytest-327_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -24,7 +24,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > every result lands in a SHA-256 hash chain with Ed25519-signed reviewer
 > events, and a fail-safe AI cascade (local Ollama or cloud LLMs behind a
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
-> FastAPI · Next.js 15 · 326 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 327 offline tests · runs without GPU or API key.
 > The documentation is in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -245,7 +245,7 @@ zuerst selbst (Standard nach 2 s und 5 s), dann übernimmt die nächste:
   aus – eine Fehlkonfiguration bleibt sichtbar.
 * Eine lokal eingestellte Prüfung geht nie automatisch in die Cloud.
 * Ein Regelwerk-Audit ist überall gekennzeichnet („Regelbasiertes
-  Referenz-Audit – KI temporär überlastet“) und lässt sich mit erreichbarem
+  Referenz-Audit – KI nicht verfügbar“) und lässt sich mit erreichbarem
   Modell über „Neu prüfen“ wiederholen.
 * Optional begrenzt `CLOUD_DAILY_TOKEN_LIMIT` die Cloud-Tokens je Tag; danach
   übernehmen lokale Stufen bzw. das Regelwerk.
@@ -406,12 +406,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 326 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 327 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-326 Tests (Stand v2.5.0) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+327 Tests (Stand v2.5.0) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.

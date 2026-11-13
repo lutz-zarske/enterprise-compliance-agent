@@ -132,22 +132,22 @@ class ReleaseManager:
     def preflight(self, tag: str, confirm_commit: str, *, active_analyses: int) -> dict[str, Any]:
         """Prueft alle Vorbedingungen; liefert das Release oder wirft ``ReleaseError``."""
         if self.busy:
-            raise ReleaseError("release_update_running", "Ein Update laeuft bereits.")
+            raise ReleaseError("release_update_running", "Ein Update läuft bereits.")
         if active_analyses:
             raise ReleaseError("analysis_running", f"{active_analyses} Analyse(n) laufen noch - bitte abwarten.")
         if not self._is_checkout():
             raise ReleaseError("no_git_checkout", "Keine Git-Arbeitskopie - Update über ein neues Image.")
         latest = self.latest()
         if latest is None or latest["tag"] != tag:
-            raise ReleaseError("release_not_found", f"{tag} ist nicht die neueste verfuegbare Version.")
+            raise ReleaseError("release_not_found", f"{tag} ist nicht die neueste verfügbare Version.")
         if latest["commit"] != confirm_commit:
-            raise ReleaseError("hash_mismatch", "Der bestaetigte Commit-Hash passt nicht zum Release-Tag.")
+            raise ReleaseError("hash_mismatch", "Der bestätigte Commit-Hash passt nicht zum Release-Tag.")
         if latest["signature"] == "invalid":
-            raise ReleaseError("signature_invalid", "Die Signatur des Release-Tags ist ungueltig.")
+            raise ReleaseError("signature_invalid", "Die Signatur des Release-Tags ist ungültig.")
         if not latest["fast_forward"]:
-            raise ReleaseError("not_fast_forward", "Lokaler Stand ist abgezweigt - kein Fast-Forward moeglich.")
+            raise ReleaseError("not_fast_forward", "Lokaler Stand ist abgezweigt - kein Fast-Forward möglich.")
         if self._git("status", "--porcelain", "--untracked-files=no").stdout.strip():
-            raise ReleaseError("dirty_worktree", "Lokale Aenderungen vorhanden - Update abgebrochen.")
+            raise ReleaseError("dirty_worktree", "Lokale Änderungen vorhanden - Update abgebrochen.")
         return latest
 
     def fast_forward(self, tag: str) -> str:

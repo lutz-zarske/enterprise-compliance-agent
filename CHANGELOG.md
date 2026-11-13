@@ -20,6 +20,9 @@ Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE
   lokale Modell, wird ein installiertes vorgeschlagen, nie still gewechselt.
 - Optionales Cloud-Tagesbudget; Ollama-Kontext 32 768 Tokens; `localhost`
   wird intern auf `127.0.0.1` normalisiert.
+- Fehlermeldungen nennen die Ursache je Status (Anfragelimit, Überlast,
+  Störung) und ohne Ausweich-Stufe den nächsten Schritt; Meldungen,
+  API-Beschreibungen und Prompts durchgehend mit Umlauten.
 
 **Oberfläche**
 
@@ -33,7 +36,7 @@ Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE
 **Dokumentation und Qualität**
 
 - Architekturüberblick, verbindliche Regeln für Änderungen, englische
-  Kurzfassung, MIT-Lizenz; 326 Tests ohne Netz und ohne Sprachmodell.
+  Kurzfassung, MIT-Lizenz; 327 Tests ohne Netz und ohne Sprachmodell.
 
 ## v2.4.1 – 12.11.2026
 

@@ -36,10 +36,10 @@ from app.llm import StructuredLLMClient
 
 #: Zusatzanweisung an Cloud-Modelle, damit Platzhalter erhalten bleiben.
 VAULT_SYSTEM_NOTE = (
-    "Hinweis zum Datenschutz: Geschuetzte Werte wurden durch Platzhalter der Form "
+    "Hinweis zum Datenschutz: Geschützte Werte wurden durch Platzhalter der Form "
     "{{TYP_n}} ersetzt (z. B. {{PERSON_1}}, {{ORG_1}}, {{IBAN_1}}, {{AMOUNT_1}}). "
-    "Uebernimm Platzhalter unveraendert und vollstaendig mit doppelten geschweiften "
-    "Klammern als String in die passenden Felder. Versuche nicht, sie aufzuloesen."
+    "Übernimm Platzhalter unverändert und vollständig mit doppelten geschweiften "
+    "Klammern als String in die passenden Felder. Versuche nicht, sie aufzulösen."
 )
 
 _PLACEHOLDER = re.compile(r"\{\{([A-Z_]+_\d+)\}\}")
