@@ -115,6 +115,10 @@ function ModelStatus({ health, settings }: { health: HealthResponse | null; sett
   if (!mode || !model) return null;
   const local = mode === "local";
   const ready = local ? health?.ollama.status === "ok" : Boolean(health?.inference?.configured);
+  // Ein Wort, das zum Statuspunkt passt - nie "Lokal" neben einem Hinweis "Lokale KI aus".
+  const state = local
+    ? ready ? "Lokal" : health?.ollama.status === "degraded" ? "Modell fehlt" : "Aus"
+    : ready ? "Cloud" : "Kein Key";
   const chain = settings?.chain ?? [];
   return (
     <Tooltip
@@ -133,14 +137,20 @@ function ModelStatus({ health, settings }: { health: HealthResponse | null; sett
               ? "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner."
               : "Cloud-Inferenz über das Privacy Gateway (Pseudonymisierung nach Art. 4 Nr. 5 DSGVO)."}
           </span>
-          {!ready && <span className="mt-1 block text-warn">Nicht erreichbar – das Regelwerk schließt Prüfungen gekennzeichnet ab.</span>}
+          {!ready && (
+            <span className="mt-1 block text-warn">
+              {local
+                ? "Nicht bereit – bis zum Start schließt das Regelwerk Prüfungen gekennzeichnet ab."
+                : "Kein API-Key hinterlegt – Einstellungen › KI-Modelle."}
+            </span>
+          )}
         </>
       }
     >
       <span tabIndex={0} className="hidden cursor-help items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-xs text-muted xl:inline-flex">
         {formatModel(model)}
-        <span className="text-subtle">· {local ? "Lokal" : "Cloud"}</span>
-        <span className={cx("h-2 w-2 rounded-full", ready ? "bg-ok" : "bg-subtle")} aria-label={ready ? "bereit" : "nicht erreichbar"} />
+        <span className="text-subtle">· {state}</span>
+        <span className={cx("h-2 w-2 rounded-full", ready ? "bg-ok" : "bg-subtle")} aria-label={ready ? "bereit" : "nicht bereit"} />
       </span>
     </Tooltip>
   );

@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: pytest](https://img.shields.io/badge/Tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 326 pytest](https://img.shields.io/badge/pytest-326_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -17,6 +17,15 @@ KI-Kaskade (lokal über Ollama oder Cloud über ein Privacy Gateway) sorgt dafü
 dass keine Prüfung an einer überlasteten KI scheitert.
 Läuft ohne GPU: Musterdaten und das Regelwerk-Audit funktionieren sofort, mit
 eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
+
+> **English summary:** Audit-proof pre-screening of invoices and contracts
+> under German VAT law (§ 14 UStG), EU e-invoicing (EN 16931), the EU AI Act
+> and the GDPR. A deterministic rule engine computes the compliance score,
+> every result lands in a SHA-256 hash chain with Ed25519-signed reviewer
+> events, and a fail-safe AI cascade (local Ollama or cloud LLMs behind a
+> pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
+> FastAPI · Next.js 15 · 326 offline tests · runs without GPU or API key.
+> The documentation is in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
 
@@ -32,6 +41,10 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 ---
 
 ## Schnellstart
+
+```bash
+git clone https://github.com/lutz-zarske/enterprise-compliance-agent.git && cd enterprise-compliance-agent
+```
 
 **Docker (alle Plattformen):**
 
@@ -138,8 +151,10 @@ Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
   Beleg, Systemereignisse), Kopf-Hash und Schlüssel-Fingerabdruck,
   GoBD-Prüfdatenpaket, Verfahrensdokumentation und das Regelwerk.
 * **Kopfzeile:** Job-Monitor nur während einer Prüfung, Hinweise nur bei
-  Handlungsbedarf (z. B. „Lokale KI aus“ mit Start-Knopf), Offline-Hinweis,
-  Modellname mit Statuspunkt; Dark, Light oder System.
+  Handlungsbedarf (z. B. „Lokale KI aus“ mit Start-Knopf, wenn lokal das
+  Hauptmodell ist; für Ollama als reine Cloud-Reserve zeigt die Ausweich-Kaskade
+  den Zustand), Offline-Hinweis, Modellname mit Zustand (Lokal, Cloud, Aus)
+  und Statuspunkt; Dark, Light oder System.
 
 | Taste | Wirkung |
 |---|---|
@@ -211,7 +226,7 @@ zuerst selbst (Standard nach 2 s und 5 s), dann übernimmt die nächste:
 | Stufe | Was passiert | Konfiguration |
 |---|---|---|
 | 1 | Hauptmodell des aktiven Anbieters | Einstellungen › KI-Modelle |
-| 2 | Ausweichmodell desselben Anbieters (z. B. `gemini-3.7-flash`) | „Ausweichmodell bei Überlast“ |
+| 2 | Ausweichmodell desselben Anbieters (z. B. `gemini-3.6-flash`) | „Ausweichmodell bei Überlast“ |
 | 3 | Ausweich-Schlüssel der Reihe nach – auch ein zweiter Gemini-Key | Einstellungen › Ausweich-Kaskade, bis zu 6 |
 | 4 | Anbieter-Fallbacks, z. B. lokales Ollama | „Lokal ausweichen“ |
 | 5 | Deterministisches Regelwerk (§ 14 UStG, IBAN-Prüfsumme, Regex-PII, konservative AI-Act-Einstufung) | `HEURISTIC_FALLBACK=true` |
@@ -334,7 +349,7 @@ curl -s -X POST "$API/documents/$ID/extract?wait=true" | jq '.scorecard | {score
 # Kaskade: Gemini primär, Ausweichmodell, zweiter Key, zuletzt lokal
 curl -s -X POST $API/api/settings -H "Content-Type: application/json" -d '{
   "inference_mode": "gemini", "api_keys": {"gemini": "<KEY_1>"},
-  "ausweich_modelle": {"gemini": "gemini-3.7-flash"},
+  "ausweich_modelle": {"gemini": "gemini-3.6-flash"},
   "ausweich_schluessel": [{"id": "g2", "provider": "gemini", "api_key": "<KEY_2>"}],
   "fallbacks": ["local"]}' | jq .chain
 
@@ -364,7 +379,7 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 | `INFERENCE_MODE` | `local` | `local` · `gemini` · `anthropic` · `openai` (zur Laufzeit änderbar) |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | `localhost` wird intern auf `127.0.0.1` normalisiert |
 | `OLLAMA_MODEL` · `OLLAMA_NUM_CTX` | `qwen2.5:14b-instruct` · `32768` | Lokales Modell und Kontextfenster |
-| `GEMINI_MODEL` · `ANTHROPIC_MODEL` · `OPENAI_MODEL` | `gemini-3.8-flash` · `claude-sonnet-5` · `gpt-4o` | Startwerte; die Live-Modell-Liste schlägt neuere vor |
+| `GEMINI_MODEL` · `ANTHROPIC_MODEL` · `OPENAI_MODEL` | `gemini-3.8-flash` · `claude-sonnet-5` · `gpt-4o` | Startwerte (Stand 11/2026 aktiv; OpenAI schaltet GPT-4o am 14.01.2027 ab); die Live-Modell-Liste schlägt neuere vor |
 | `GEMINI_/ANTHROPIC_/OPENAI_API_KEY` | leer | Startwerte für Cloud-Anbieter |
 | `LLM_RETRY_DELAYS` | `2,5` | Wiederholungen je Stufe (Sekunden) |
 | `HEURISTIC_FALLBACK` | `true` | Regelwerk schließt ab, wenn alle KI-Stufen ausfallen |
@@ -383,12 +398,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # kein LLM, kein API-Key, kein Netz
-cd frontend && npm run lint && npm run build
-docker compose config
+python -m pytest -q                         # 326 Tests, kein LLM, kein API-Key, kein Netz
+cd frontend && npx tsc --noEmit && npm run lint && npm run build
+docker compose config --quiet
 ```
 
-Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+326 Tests (Stand v2.5.0) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -404,6 +419,27 @@ mit Cloud-Keys) wird in Tests ignoriert.
 
 ---
 
+## Entwicklung
+
+| Aufgabe | Befehl |
+|---|---|
+| Backend mit Neuladen | `uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload` |
+| Frontend (Entwicklung) | `cd frontend && npm run dev` (Port 3001) |
+| Frontend (Demo, Produktion) | `cd frontend && npm run build && npm run start` |
+| Typprüfung | `cd frontend && npx tsc --noEmit` |
+| Prüfpaket offline prüfen | `python scripts/verify_pruefpaket.py <paket.zip> --fingerprint <fp>` |
+
+* **Windows-Starter:** `Start_Compliance_Agent.ps1` muss **UTF-8 mit BOM und
+  CRLF** bleiben – Windows PowerShell 5.1 liest Dateien ohne BOM als ANSI und
+  zeigt Umlaute falsch an. `.gitattributes` erzwingt CRLF für `*.ps1`, `*.bat`
+  und `*.cmd`; Editoren dürfen das BOM beim Speichern nicht entfernen.
+* **Regeln für Änderungen** (Recht, Ledger, Kaskade, Oberfläche):
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#verbindliche-regeln-für-änderungen).
+* Die CI (`.github/workflows/ci.yml`) führt `pytest`, `npm run lint`,
+  `npm run build` sowie `docker compose config` und `docker compose build` aus.
+
+---
+
 ## Docker
 
 | Dienst | Port | Details |
@@ -413,7 +449,10 @@ mit Cloud-Keys) wird in Tests ignoriert.
 | `ollama` | 11434 | nur mit `--profile full` (Flash Attention, 8-Bit-KV-Cache); danach `docker compose exec ollama ollama pull qwen2.5:14b-instruct` |
 
 `PUBLIC_API_URL` legt fest, unter welcher Adresse der **Browser** die API
-erreicht (zur Build-Zeit eingebettet, Default `http://localhost:8001`).
+erreicht (zur Build-Zeit eingebettet, Default `http://127.0.0.1:8001`; für den
+Zugriff von anderen Rechnern die Server-Adresse setzen und `CORS_ORIGINS`
+entsprechend erweitern). Ist die eingebettete Adresse nicht erreichbar,
+probiert das Frontend zusätzlich den eigenen Host, `127.0.0.1` und `localhost`.
 Im Container lässt sich Ollama nicht aus der Oberfläche starten; das übernimmt
 der `ollama`-Dienst.
 

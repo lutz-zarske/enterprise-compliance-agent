@@ -32,7 +32,6 @@ from functools import cache
 from typing import Any
 from xml.sax.saxutils import escape
 
-from app.config import BASE_DIR
 
 
 def _escape_pdf_text(value: str) -> bytes:
@@ -157,16 +156,16 @@ FAULTY_INVOICE_LINES = [
     "Bitte sofort ueberweisen auf: DE12 3456 7890 1234 5678 90",
 ]
 
-RECRUITING_FALLBACK_LINES = [
+# Fiktiver Vertrag; Kontaktadresse unter der reservierten Domain .example (RFC 2606),
+# IBAN ist das Standard-Beispiel der Bundesbank-Dokumentation.
+RECRUITING_LINES = [
     "VERTRAG UEBER KI-GESTUETZTES RECRUITING & BEWERBERMANAGEMENT",
     "Zwischen TalentScreen AI GmbH und Enterprise Corp SE.",
     "Das System TalentAI bewertet Bewerber automatisiert gemaess Anhang III Nr. 4 EU AI Act.",
     "Rechnungsbetrag: 45000 EUR faellig zum 31.12.2024.",
     "Bankverbindung: DE89370400440532013000.",
-    "Kontakt: datenschutz@talentscreen-ai.de.",
+    "Kontakt: datenschutz@talentscreen.example.",
 ]
-
-SAMPLE_CONTRACT = BASE_DIR / "data" / "sample_talentai_contract.pdf"
 
 
 # ---------------------------------------------------------------------------
@@ -379,15 +378,15 @@ def build_hybrid_pdf(spec: dict[str, Any], **visual: Any) -> bytes:
 
 
 def demo_documents() -> list[tuple[str, bytes]]:
-    """Liefert (Dateiname, PDF-Bytes) der vier Referenzdokumente."""
-    try:
-        recruiting = SAMPLE_CONTRACT.read_bytes()
-    except OSError:
-        recruiting = build_pdf([RECRUITING_FALLBACK_LINES])
+    """Liefert (Dateiname, PDF-Bytes) der vier Referenzdokumente.
+
+    Alle vier entstehen aus Code - lokal und im Container (dort ist ``data/``
+    per ``.dockerignore`` ausgeschlossen) byte-gleich.
+    """
     return [
         ("Rechnung_Gueltig_14UStG.pdf", build_pdf([VALID_INVOICE_LINES])),
         ("Rechnung_Fehlerhaft_Steuerfalle.pdf", build_pdf([FAULTY_INVOICE_LINES])),
-        ("KI_Recruiting_Dienstleistervertrag.pdf", recruiting),
+        ("KI_Recruiting_Dienstleistervertrag.pdf", build_pdf([RECRUITING_LINES])),
         (HYBRID_FILENAME, build_hybrid_pdf(HYBRID_INVOICE)),
     ]
 
@@ -534,8 +533,8 @@ REFERENCE_AUDITS: dict[str, dict[str, dict]] = {
                 "findings": [
                     {
                         "category": "contact_data",
-                        "masked_value": "datenschutz@talentscreen-ai.de",
-                        "context": "Kontakt: datenschutz@talentscreen-ai.de",
+                        "masked_value": "datenschutz@talentscreen.example",
+                        "context": "Kontakt: datenschutz@talentscreen.example",
                         "confidence": 0.9,
                     }
                 ],

@@ -10,11 +10,18 @@ import { AlertTriangle, Download, FileText, Mail, MessageSquare, Send } from "./
 import { Select } from "./Select";
 import { AutoTextarea, CopyButton, EmptyState, Segmented, Spinner } from "./ui";
 
-const SUGGESTIONS = [
-  "Welche Pflichtangaben fehlen in dieser Rechnung?",
-  "Warum stuft das System dieses PDF als Anhang III Nr. 4 ein?",
-  "Wie muss die Rechnung korrigiert werden, um vorsteuerabzugsberechtigt zu sein?",
-];
+/** Standardfragen (für die Musterdaten liegen dazu Antworten ohne Modell vor, siehe app/demo.py). */
+const Q_FIELDS = "Welche Pflichtangaben fehlen in dieser Rechnung?";
+const Q_AI_ACT = "Warum stuft das System dieses PDF als Anhang III Nr. 4 ein?";
+const Q_CORRECTION = "Wie muss die Rechnung korrigiert werden, um vorsteuerabzugsberechtigt zu sein?";
+
+/** Nur Fragen, die zum Beleg passen: Rechnungsfragen bei Rechnungen, die AI-Act-Frage bei KI-Bezug. */
+function suggestionsFor(document: DocumentDetail | null): string[] {
+  const invoice = document?.extraction?.doc_type === "invoice";
+  const ai = Boolean(document?.compliance?.ai_act.describes_ai_system || document?.compliance?.ai_act.is_high_risk);
+  const list = [...(invoice ? [Q_FIELDS] : []), ...(ai ? [Q_AI_ACT] : []), ...(invoice ? [Q_CORRECTION] : [])];
+  return list.length ? list : [Q_FIELDS, Q_AI_ACT, Q_CORRECTION];
+}
 
 const THINKING: { value: ThinkingLevel; label: string }[] = [
   { value: "low", label: "Knapp" },
@@ -92,6 +99,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
   const messages = document ? threads[document.id] ?? [] : [];
   const defects = correctionDefects(document);
   const isReference = document?.provider === "reference";
+  const suggestions = suggestionsFor(document);
 
   // Modell-Banner erst nach kurzer Verzoegerung - kein Aufblitzen waehrend des Kaltstarts.
   useEffect(() => {
@@ -230,7 +238,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
                 zeigt die Stelle im Beleg.
               </p>
               <div className="grid grid-cols-1 gap-2">
-                {SUGGESTIONS.map((suggestion) => (
+                {suggestions.map((suggestion) => (
                   <button
                     key={suggestion}
                     onClick={() => void ask(suggestion)}
@@ -275,7 +283,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
 
         {isReference && messages.length > 0 && (
           <div className="flex flex-wrap gap-1.5 border-t border-line px-4 pt-2.5" aria-label="Standardfragen">
-            {SUGGESTIONS.map((suggestion) => (
+            {suggestions.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"

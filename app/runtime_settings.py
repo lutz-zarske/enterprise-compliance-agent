@@ -79,18 +79,21 @@ MAX_BACKUP_KEYS = 6
 
 #: Auswahl im Einstellungsdialog, solange kein Key hinterlegt ist (mit Key liefert die
 #: Modell-Liste des Anbieters die tatsaechlich verfuegbaren Modelle, neueste zuerst).
+#: Stand der Anbieter-Dokumentation 11/2026: nur aktive, nicht umgeleitete Modell-IDs.
+#: (``gemini-3.7-flash`` leitet Google inzwischen auf ``gemini-3.8-flash`` um - als
+#: Ausweichmodell waere es wirkungslos.)
 SUGGESTED_MODELS: dict[str, list[str]] = {
     "local": ["qwen2.5:14b-instruct", "qwen2.5:7b-instruct", "llama3.1:8b-instruct-q8_0"],
-    "gemini": ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"],
-    "anthropic": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"],
-    "openai": ["gpt-4o"],
+    "gemini": ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
+    "anthropic": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-5-5"],
+    "openai": ["gpt-4o", "gpt-4o-mini"],
 }
 
 #: Vorschlag fuer das Ausweichmodell desselben Anbieters (leichter, seltener ueberlastet).
 SUGGESTED_FALLBACK_MODELS: dict[str, str] = {
-    "gemini": "gemini-3.7-flash",
-    "anthropic": "claude-haiku-4-5-20251001",
-    "openai": "gpt-4o",
+    "gemini": "gemini-3.6-flash",
+    "anthropic": "claude-haiku-5-5",
+    "openai": "gpt-4o-mini",
 }
 
 PROVIDER_LABELS: dict[str, str] = {

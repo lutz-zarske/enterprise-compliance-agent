@@ -1,7 +1,8 @@
 # ---------------------------------------------------------------------------
 # Standard:            docker compose up --build
-#   -> API (http://localhost:8001) und Frontend (http://localhost:3001) im
+#   -> API (http://127.0.0.1:8001) und Frontend (http://127.0.0.1:3001) im
 #      Container, Ollama laeuft auf dem Host (host.docker.internal).
+#      127.0.0.1 statt localhost: Windows loest localhost bevorzugt nach ::1 auf.
 #
 # Vollstaendiger Stack: docker compose --profile full up --build
 #   -> zusaetzlich ein Ollama-Container; Modell danach einmalig ziehen mit
@@ -63,7 +64,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Adresse, unter der der *Browser* die API erreicht.
-        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:8001}
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://127.0.0.1:8001}
     image: enterprise-compliance-frontend:latest
     container_name: compliance-agent-frontend
     restart: unless-stopped

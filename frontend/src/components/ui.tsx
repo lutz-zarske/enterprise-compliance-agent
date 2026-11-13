@@ -119,10 +119,16 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
   }, [value, items.length]);
 
   // Bei schmaler Spalte scrollt die Leiste: der aktive Tab bleibt immer sichtbar.
+  // Bewusst nur waagerecht in der Leiste selbst - scrollIntoView wuerde auch die Seite
+  // verschieben (auf schmalen Fenstern sprang sie beim Laden zum Inspektor).
   useEffect(() => {
-    listRef.current
-      ?.querySelector<HTMLButtonElement>('[data-active="true"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const list = listRef.current;
+    const button = list?.querySelector<HTMLButtonElement>('[data-active="true"]');
+    if (!list || !button || list.scrollWidth <= list.clientWidth) return;
+    const left = button.offsetLeft;
+    const right = left + button.offsetWidth;
+    if (left < list.scrollLeft) list.scrollLeft = left;
+    else if (right > list.scrollLeft + list.clientWidth) list.scrollLeft = right - list.clientWidth;
   }, [value]);
 
   return (

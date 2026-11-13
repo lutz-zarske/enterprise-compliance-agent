@@ -62,10 +62,12 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
   const showSkeleton = loading && !kpis;
   const avgTone = toneForBand(kpis?.average_band);
   const highRisk = Boolean(kpis && kpis.high_risk_count > 0);
+  // Ohne geprüften Beleg gibt es keine Quote - kein grünes "0 %" als Scheinbefund.
+  const hasQuota = Boolean(kpis && kpis.documents_analyzed > 0);
   const quote = kpis && kpis.documents_total > 0 ? (kpis.documents_analyzed / kpis.documents_total) * 100 : null;
 
   return (
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:gap-4" aria-label="Portfolio-Kennzahlen">
+    <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:gap-4" aria-label="Portfolio-Kennzahlen">
       <Kpi
         loading={showSkeleton}
         label="Geprüfte Dokumente"
@@ -107,9 +109,9 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
       <Kpi
         loading={showSkeleton}
         label="High-Risk-Quote"
-        value={kpis ? percent(kpis.high_risk_quota) : "–"}
-        valueClass={kpis ? (highRisk ? "text-warn" : "text-ok") : undefined}
-        edge={kpis ? (highRisk ? "warn" : "pass") : "neutral"}
+        value={kpis && hasQuota ? percent(kpis.high_risk_quota) : "–"}
+        valueClass={hasQuota ? (highRisk ? "text-warn" : "text-ok") : undefined}
+        edge={hasQuota ? (highRisk ? "warn" : "pass") : "neutral"}
         info={
           <>
             Anteil der Dokumente mit Hochrisiko-Einstufung gem. VO (EU) 2024/1689 Anhang III.

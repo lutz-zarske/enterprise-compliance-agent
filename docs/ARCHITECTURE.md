@@ -169,10 +169,105 @@ frontend/src/
 * **Keine Ersatzdaten:** Ist das Backend nicht erreichbar, zeigt die Oberfläche
   einen Hinweis mit Handlungsanweisung statt erfundener Ergebnisse.
 
+## Verbindliche Regeln für Änderungen
+
+Diese Invarianten tragen die Revisionssicherheit und das ruhige Erscheinungsbild.
+Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
+
+### Recht und Nachvollziehbarkeit
+
+* **XML-Vorrang:** Bei hybriden E-Rechnungen ist der XML-Datensatz maßgeblich
+  (BMF-Schreiben vom 15.10.2024, Rz. 36); der Bildteil wird nur abgeglichen.
+* **Score nie von Hand:** Eine Übersteuerung nach Art. 14 Abs. 4 lit. d AI Act
+  ändert die Eingabe (Risikostufe); der Score wird daraus neu berechnet.
+* **Fristen nur über `app/retention.py`:** Rechnungen und Buchungsbelege
+  8 Jahre (§ 147 Abs. 1 Nr. 4, Abs. 3 AO i. d. F. BEG IV), Kredit- und
+  Wertpapierinstitute sowie Versicherungen 10 Jahre; Handelsbücher und
+  Verfahrensdokumentation 10 Jahre. Die Verfahrensdokumentation
+  (`app/procedural_doc.py`) gliedert nach GoBD Rz. 153.
+* **Pseudonymisierung im Backend** vor jeder Übergabe an einen Cloud-Anbieter
+  (`VaultedClient`); das Mapping bleibt flüchtig im Speicher, alle Cloud-Stufen
+  der Kaskade teilen denselben Vault.
+* **Ledger:** Archivieren blendet aus und löscht nie. Modellwechsel laufen nur
+  über `POST /api/settings`, das `model_change` schreibt. Ein Regelwerk-Audit
+  trägt `provider = "heuristic"` und `details.heuristic_fallback = true`.
+* **Kaskade:** Wechsel nur bei 408, 429, 5xx, Netzwerkfehler,
+  Zeitüberschreitung oder erreichtem Tagesbudget – nie bei 401/403 oder
+  Schemafehlern. Eine lokal eingestellte Prüfung geht nie automatisch in die
+  Cloud.
+* **VIES (`POST /api/vat/verify`):** nur auf Klick der Prüfperson, nur
+  Ländercode und Nummer, Timeout 3 s. Das Ergebnis ist eine Momentaufnahme:
+  nicht speichern, nicht in den Score einrechnen, die Nummer nicht loggen. Das
+  Badge heißt „VIES bestätigt“ – die qualifizierte Bestätigung nach § 18e UStG
+  erteilt nur das BZSt.
+* **DLP-Gateway (`POST /api/v1/redact`):** Request `{"text" (1–200 000 Zeichen),
+  "extra_terms" (≤ 50), "redact_pii" = true, "redact_amounts" = false}`, Response
+  `{"redacted_text", "counts", "total", "ruleset_version"}`. Zugangsdaten →
+  `[REDACTED_SECRET]`; vertrauliche Dateinamen, Werte geschützter Parameter,
+  `DLP_TERMS` und `extra_terms` → `[REDACTED_CONFIDENTIAL]`; PII →
+  `[REDACTED_<KATEGORIE>]`. Kein Mapping, der Text wird nie gespeichert oder
+  geloggt.
+* **Release-Assistent:** kein automatisches Pullen. Eingespielt wird nur nach
+  Bestätigung des Commit-Hashes, als Fast-Forward, ohne lokale Änderungen und
+  ohne offene Prüf-Jobs, standardmäßig nur von localhost; vorher eine
+  SQLite-Sicherung nach `data/backups/`, danach `release_update` im Ledger.
+* **Secrets:** keine `.env`, API-Keys oder `data/*.key` committen. Tests laufen
+  ausschließlich mit `httpx.MockTransport` und ignorieren eine lokale `.env`.
+
+### Oberfläche
+
+* **Tokens nur aus `frontend/src/app/globals.css`:** Dark `#07080c` (Canvas),
+  `#0f1118` (Surface), `#161924` (Surface 2), Konturen Weiß 10 % (Hover 18 %);
+  Light `#f8fafc` / `#ffffff`. Kategorienfarben `--viz-1` … `--viz-8`
+  (farbfehlsichtig validiert). Keine knalligen Verläufe, kein reines Schwarz.
+* **Statische Karten:** `.card` reagiert nicht auf den Zeiger; Hover-Feedback
+  nur an Bedienelementen.
+* **Drei Ansichten, je ein Wort:** Prüfung, Copilot, Protokoll – alle bleiben
+  eingehängt. Die Kopfzeile bleibt schlank: Logo mit Versions-Popover,
+  Bereiche, Job-Monitor nur während einer Prüfung (12 s Nachlauf), Hinweise nur
+  bei Handlungsbedarf, Offline-Hinweis, Release-Pille nur bei neuer Version,
+  Musterdaten, Modellname mit Statuspunkt, Hilfe, Farbschema, Einstellungen.
+* **Keine Emojis:** Status über die SVG-Icons aus `components/icons.tsx` und
+  Farbpunkte.
+* **Markierungen im Belegtext:** Grün konform, Gelb Prüfhinweis, Rot Verstoß,
+  Indigo PII; Fundstellen je Kriterium nur über `lib/evidence.ts`. Jeder Abzug
+  und jede Risikoklasse hat einen Tooltip mit Paragraph und Rechtsfolge.
+* **Fehler ruhig formulieren:** Problem plus Handlungsanweisung, nie
+  Klassennamen oder „Failed to fetch“; `app/error.tsx` fängt Abstürze ab.
+* **Zahlen und Schrift:** UI-Zahlen in Inter mit `tabular-nums`, große
+  Kennzahlen optional `.zahl-display`; JetBrains Mono nur für Hashes,
+  Signaturen, XML-Kennungen, Code und Beleg-Rohtext; Beträge in Tabellen
+  rechtsbündig. Schriften lokal über `@fontsource`, kein CDN und kein
+  `next/font/google` – der Docker-Build läuft ohne Netz.
+* **Menüs, Popovers, Tooltips:** nie ein natives `<select>`, sondern
+  `components/Select.tsx`; schwebende Menüs über `lib/popover.ts` mit dem
+  Popover-Bus (höchstens eines offen). Popovers der Kopfzeile rendern per
+  Portal, weil die Kopfzeile selbst `backdrop-filter` trägt. Tooltips nur über
+  `Tooltip` aus `components/ui.tsx` (Portal, `position: fixed`,
+  Viewport-Clamping).
+* **`backdrop-filter` nur als Standard-Eigenschaft notieren:** Das
+  `-webkit-`-Präfix ergänzt der Build. Doppelt notiert, behielt Lightning CSS
+  nur das Präfix – in Chromium ohne Wirkung.
+* **Scrollbereiche und Eingaben:** Klasse `scroll-area` plus `pr-4`; keine
+  Schrift unter `text-xs` (Ausnahme: Belegtext 13 px); mehrzeilige Eingaben
+  über `AutoTextarea`, nie mit Zieh-Ecke.
+* **Viewports:** 1920 × 945 und 2560 × 1305 ohne Seiten-Scrollen im Copilot,
+  feste Inspektorhöhe (`PANEL_HEIGHT`), Inhalt `max-w-[1920px]` bzw.
+  `2xl:max-w-[2400px]`.
+* **Bewegung nur mit Funktion:** gleitender Tab-Indikator, Fortschritt,
+  Spinner; Tabs und Modale 150 ms ease-out, `prefers-reduced-motion` wird
+  respektiert; Skeleton statt Spinner im Inhalt; Toasts oben rechts (3 s,
+  Warnung/Fehler 6 s, Überfahren pausiert).
+* **Tastatur und Onboarding:** Modale schließen mit `Escape`; `J`/`K`
+  wechseln das Dokument, `1`–`5` die Inspektor-Reiter, `?` zeigt die Kürzel,
+  `Strg`/`⌘` + `Enter` versiegelt. Die Tour läuft einmalig
+  (`localStorage` `eca-onboarding-done`). Platzhalter bleiben neutral, nie mit
+  Personennamen.
+
 ## Tests
 
-`pytest` deckt die Kette vom HTTP-Request bis zur Datenbank ab, ohne LLM und
-ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+`pytest` (326 Tests, Stand v2.5.0) deckt die Kette vom HTTP-Request bis zur
+Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die
 Resilienz-Tests (`tests/test_v25_resilience.py`) prüfen unter anderem
@@ -190,5 +285,5 @@ Fortschritt, Batch und Abbruch der Jobs.
   Datenbank hilft die externe Ablage des Kopf-Hashes (`GET /api/audit/head`).
 * **Regelbasierte Pseudonymisierung:** kein NER-Modell; Namen ohne Anrede oder
   Rolle bleiben unerkannt.
-* **Kein OCR, keine XSD/Schematron-Validierung** – siehe Abschnitt „Grenzen“
-  im README.
+* **Kein OCR, keine XSD/Schematron-Validierung** – siehe
+  [„Bekannte Grenzen“ im README](../README.md#bekannte-grenzen).

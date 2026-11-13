@@ -8,7 +8,7 @@ import { DocumentList } from "../components/DocumentList";
 import { DocumentUploader } from "../components/DocumentUploader";
 import { ExportModal } from "../components/ExportModal";
 import { Header, type View, VIEW_LABELS } from "../components/Header";
-import { Download, FileText, Layers, MessageSquare, RefreshCw, ShieldCheck, WifiOff, Zap } from "../components/icons";
+import { Download, FileText, Layers, RefreshCw, ShieldCheck, WifiOff, Zap } from "../components/icons";
 import { NACHLAUF_MS, type FinishedJob } from "../components/JobMonitor";
 import { KpiStrip } from "../components/KpiStrip";
 import { markOnboardingDone, onboardingDone, ShortcutsModal, SpotlightTour, WelcomeModal } from "../components/Onboarding";
@@ -515,9 +515,6 @@ export default function DashboardPage() {
                           {detail.status === "extracted" ? (isReference ? "Live neu prüfen" : "Neu prüfen") : "Audit starten"}
                         </button>
                       </Tooltip>
-                      <button className="btn" onClick={() => setView("copilot")} disabled={offline}>
-                        <MessageSquare size={14} aria-hidden="true" /> Copilot
-                      </button>
                       <button className="btn" onClick={() => setExportOpen(true)} disabled={offline}>
                         <Download size={14} aria-hidden="true" /> Export
                       </button>

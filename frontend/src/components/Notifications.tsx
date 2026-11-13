@@ -39,9 +39,9 @@ function readHidden(): string[] {
 
 /**
  * Kontextabhaengige Hinweise in der Kopfzeile - nur sichtbar, wenn es etwas zu tun gibt:
- * lokale KI aus (mit 1-Klick-Start, wenn das lokale Modell in der Kaskade steht),
- * fehlendes lokales Modell (Vorschlag aus der Vorrangliste), Cloud ohne Key,
- * Ledger-Befund, erschoepftes Cloud-Budget.
+ * lokale KI aus (mit 1-Klick-Start, wenn lokal das Hauptmodell ist), fehlendes lokales
+ * Modell (Vorschlag aus der Vorrangliste), Cloud ohne Key, Ledger-Befund, erschoepftes
+ * Cloud-Budget.
  */
 export function Notifications({ health, settings, ledger, online, onOpenSettings, onChanged, notify }: {
   health: HealthResponse | null;
@@ -79,9 +79,11 @@ export function Notifications({ health, settings, ledger, online, onOpenSettings
     setOpen(false);
   }, []);
 
-  const usesLocal = Boolean(health?.inference?.uses_local);
-  const ollamaDown = online && usesLocal && health?.ollama.status === "unavailable";
-  const modelMissing = online && usesLocal && health?.ollama.status === "degraded" && !health.ollama.model_available;
+  // Nur wenn lokal das Hauptmodell ist. Steht Ollama bloß als Reserve hinter einem
+  // Cloud-Modell, zeigt Einstellungen › Ausweich-Kaskade den Zustand - kein Störsignal hier.
+  const primaryLocal = (settings?.inference_mode ?? health?.inference?.mode) === "local";
+  const ollamaDown = online && primaryLocal && health?.ollama.status === "unavailable";
+  const modelMissing = online && primaryLocal && health?.ollama.status === "degraded" && !health.ollama.model_available;
 
   useEffect(() => {
     if (!ollamaDown) return;

@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from app.demo import FAULTY_INVOICE_LINES, RECRUITING_FALLBACK_LINES, VALID_INVOICE_LINES
+from app.demo import FAULTY_INVOICE_LINES, RECRUITING_LINES, VALID_INVOICE_LINES
 from app.schemas import ComplianceAudit, ExtractionResult, ScoreBand
 from app.scoring import analyze_text, band_for, compute_scorecard, detect_structured_einvoice
 
@@ -113,7 +113,7 @@ def test_hochrisiko_ohne_konformitaet_deckelt_auf_59() -> None:
     )
     card = compute_scorecard(
         contract, _compliance("high", annex=["employment_and_worker_management"]),
-        "\n".join(RECRUITING_FALLBACK_LINES),
+        "\n".join(RECRUITING_LINES),
     )
     assert card.score == 59
     assert card.cap_applied and "Hochrisiko" in card.cap_applied

@@ -134,17 +134,17 @@ def test_ausweichmodell_desselben_anbieters(
 ) -> None:
     fake_gemini.status_by_model["gemini-3.8-flash"] = [status]
     client = _gemini_client(make_full_client, fake_gemini)
-    client.post("/api/settings", json={"ausweich_modelle": {"gemini": "gemini-3.7-flash"}})
+    client.post("/api/settings", json={"ausweich_modelle": {"gemini": "gemini-3.6-flash"}})
     document_id = uploaded_document_id(client, invoice_pdf)
 
     body = client.post(f"/documents/{document_id}/extract?wait=true").json()
-    assert body["model"] == "gemini-3.7-flash" and body["provider"] == "gemini"
+    assert body["model"] == "gemini-3.6-flash" and body["provider"] == "gemini"
     switch = body["compliance"]["failover"][0]
     assert (switch["from_model"], switch["to_model"], switch["to_stage"]) == (
-        "gemini-3.8-flash", "gemini-3.7-flash", "ausweichmodell",
+        "gemini-3.8-flash", "gemini-3.6-flash", "ausweichmodell",
     )
     # Erst zweimal wiederholt (Backoff), dann gewechselt.
-    assert [call["model"] for call in fake_gemini.calls][:4] == ["gemini-3.8-flash"] * 3 + ["gemini-3.7-flash"]
+    assert [call["model"] for call in fake_gemini.calls][:4] == ["gemini-3.8-flash"] * 3 + ["gemini-3.6-flash"]
     events = [entry["event_type"] for entry in _trail(client, document_id)]
     assert events[:2] == ["analysis", "provider_failover"]
 
@@ -183,7 +183,7 @@ def test_abgelehnter_key_loest_keinen_wechsel_aus(
     fake_gemini.status_by_key[KEY_A] = 401
     client = _gemini_client(make_full_client, fake_gemini)
     client.post("/api/settings", json={
-        "fallbacks": ["local"], "ausweich_modelle": {"gemini": "gemini-3.7-flash"},
+        "fallbacks": ["local"], "ausweich_modelle": {"gemini": "gemini-3.6-flash"},
         "ausweich_schluessel": [{"id": "g2", "provider": "gemini", "api_key": KEY_B}],
     })
     document_id = uploaded_document_id(client, invoice_pdf)
@@ -323,7 +323,7 @@ def test_job_ereignisse_tragen_einheitliche_zeitstempel(
 ) -> None:
     fake_gemini.status_by_model["gemini-3.8-flash"] = [503]
     client = _gemini_client(make_full_client, fake_gemini)
-    client.post("/api/settings", json={"ausweich_modelle": {"gemini": "gemini-3.7-flash"}})
+    client.post("/api/settings", json={"ausweich_modelle": {"gemini": "gemini-3.6-flash"}})
     document_id = uploaded_document_id(client, invoice_pdf)
     job = client.post(f"/documents/{document_id}/extract").json()
     done = _poll(client, job["job_id"], {"done"})
