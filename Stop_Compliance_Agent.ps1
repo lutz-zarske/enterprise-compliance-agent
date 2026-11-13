@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Beendet die mit Start_Compliance_Agent.bat gestarteten Hintergrundprozesse (Backend und Frontend).
 #>

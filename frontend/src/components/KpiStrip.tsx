@@ -67,7 +67,7 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
   const quote = kpis && kpis.documents_total > 0 ? (kpis.documents_analyzed / kpis.documents_total) * 100 : null;
 
   return (
-    <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:gap-4" aria-label="Portfolio-Kennzahlen">
+    <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:gap-4" aria-label="Portfolio-Kennzahlen">
       <Kpi
         loading={showSkeleton}
         label="Geprüfte Dokumente"

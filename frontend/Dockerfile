@@ -12,6 +12,7 @@ WORKDIR /app
 # Wird zur Build-Zeit in das Client-Bundle eingebettet (Browser -> Backend).
 ARG NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8001
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
+    NEXT_STANDALONE=1 \
     NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

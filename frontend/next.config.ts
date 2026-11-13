@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
+// Standalone-Ausgabe nur fuer das schlanke Docker-Image (NEXT_STANDALONE=1 -> node server.js),
+// damit `npm run start` im lokalen Schnellstart ohne Next.js-Warnung laeuft.
 const nextConfig: NextConfig = {
-  // Standalone-Ausgabe fuer ein schlankes Docker-Image (node server.js).
-  output: "standalone",
+  ...(process.env.NEXT_STANDALONE === "1" ? { output: "standalone" } : {}),
   poweredByHeader: false,
   reactStrictMode: true,
   // Kein schwebendes „N“-Badge im Entwicklungsmodus.

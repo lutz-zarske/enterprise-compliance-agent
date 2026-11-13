@@ -13,14 +13,19 @@ import { AutoTextarea, CopyButton, EmptyState, Segmented, Spinner } from "./ui";
 /** Standardfragen (für die Musterdaten liegen dazu Antworten ohne Modell vor, siehe app/demo.py). */
 const Q_FIELDS = "Welche Pflichtangaben fehlen in dieser Rechnung?";
 const Q_AI_ACT = "Warum stuft das System dieses PDF als Anhang III Nr. 4 ein?";
+const Q_AI_ACT_GENERAL = "Welche Pflichten ergeben sich aus der EU-AI-Act-Einstufung dieses Dokuments?";
 const Q_CORRECTION = "Wie muss die Rechnung korrigiert werden, um vorsteuerabzugsberechtigt zu sein?";
+const Q_GDPR_GENERAL = "Welche Datenschutz- und DSGVO-Pflichten betreffen dieses Dokument?";
+const Q_SUMMARY_GENERAL = "Welche wesentlichen Compliance-Befunde und Fundstellen liegen vor?";
 
-/** Nur Fragen, die zum Beleg passen: Rechnungsfragen bei Rechnungen, die AI-Act-Frage bei KI-Bezug. */
+/** Nur Fragen, die zum geprüften Beleg passen; ungeprüfte Dokumente zeigen keine irreführenden Vorschlagschips. */
 function suggestionsFor(document: DocumentDetail | null): string[] {
-  const invoice = document?.extraction?.doc_type === "invoice";
-  const ai = Boolean(document?.compliance?.ai_act.describes_ai_system || document?.compliance?.ai_act.is_high_risk);
-  const list = [...(invoice ? [Q_FIELDS] : []), ...(ai ? [Q_AI_ACT] : []), ...(invoice ? [Q_CORRECTION] : [])];
-  return list.length ? list : [Q_FIELDS, Q_AI_ACT, Q_CORRECTION];
+  if (!document || document.status !== "extracted") return [];
+  const invoice = document.extraction?.doc_type === "invoice";
+  const ai = Boolean(document.compliance?.ai_act.describes_ai_system || document.compliance?.ai_act.is_high_risk);
+  const aiQuestion = document.provider === "reference" ? Q_AI_ACT : Q_AI_ACT_GENERAL;
+  const list = [...(invoice ? [Q_FIELDS] : []), ...(ai ? [aiQuestion] : []), ...(invoice ? [Q_CORRECTION] : [])];
+  return list.length ? list : [Q_GDPR_GENERAL, Q_SUMMARY_GENERAL];
 }
 
 const THINKING: { value: ThinkingLevel; label: string }[] = [
@@ -237,17 +242,19 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
                 den Belegtext und das Prüfergebnis und verweisen auf Zeilen ([Z. n]) und Normen. Ein Klick auf einen Zeilenverweis
                 zeigt die Stelle im Beleg.
               </p>
-              <div className="grid grid-cols-1 gap-2">
-                {suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => void ask(suggestion)}
-                    className="rounded-lg border border-line px-3 py-2 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-hover"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
+              {suggestions.length > 0 && (
+                <div className="grid grid-cols-1 gap-2">
+                  {suggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => void ask(suggestion)}
+                      className="rounded-lg border border-line px-3 py-2 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-hover"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {messages.map((message, index) =>
