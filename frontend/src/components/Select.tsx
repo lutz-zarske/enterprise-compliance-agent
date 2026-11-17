@@ -21,13 +21,16 @@ export interface SelectOption<T extends string = string> {
  * dem Layout (kein Springen der Spalte); Pfeiltasten bewegen, Enter/Leertaste
  * uebernehmen, Escape schliesst, Tab verlaesst. Rollen combobox/listbox/option.
  */
-export function Select<T extends string = string>({ value, options, onChange, ariaLabel, className, width = 220 }: {
+export function Select<T extends string = string>({ value, options, onChange, ariaLabel, className, width = 220, disabled = false, placeholder }: {
   value: T;
   options: readonly SelectOption<T>[];
   onChange: (value: T) => void;
   ariaLabel: string;
   className?: string;
   width?: number;
+  disabled?: boolean;
+  /** Text, solange nichts gewaehlt ist. */
+  placeholder?: string;
 }) {
   const { tr } = useI18n();
   const [open, setOpen] = useState(false);
@@ -114,15 +117,17 @@ export function Select<T extends string = string>({ value, options, onChange, ar
         aria-haspopup="listbox"
         aria-controls={`${id}-list`}
         aria-label={ariaLabel}
+        disabled={disabled}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={onKeyDown}
         className={cx(
           "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors duration-150",
-          open ? "border-accent-line bg-surface-2 text-fg" : "border-line bg-surface-solid text-muted hover:border-line-strong hover:text-fg",
+          open ? "border-accent-line bg-surface-2 text-fg" : "border-line bg-surface-solid text-muted enabled:hover:border-line-strong enabled:hover:text-fg",
+          "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         )}
       >
-        <span className="truncate">{selected?.label ?? tr("Bitte wählen", "Please select", "Seleccionar")}</span>
+        <span className={cx("truncate", !selected && "font-normal text-subtle")}>{selected?.label ?? placeholder ?? tr("Bitte wählen", "Please select", "Seleccionar")}</span>
         <ChevronDown
           size={13}
           aria-hidden="true"

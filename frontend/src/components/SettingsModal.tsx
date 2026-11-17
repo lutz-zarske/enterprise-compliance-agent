@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, getAccessKey, getApiBase, setAccessKey } from "../lib/api";
 import type {
   ReleaseStatus,
@@ -19,6 +19,8 @@ import { cx, formatModel, providerDisplayName } from "../lib/format";
 import { LOCALE_TAG, type Locale, useI18n } from "../lib/i18n";
 import {
   ArrowUpCircle,
+  Bot,
+  Check,
   CheckCircle,
   Eye,
   EyeOff,
@@ -31,14 +33,13 @@ import {
   Power,
   Scale,
   Server,
-  Sliders,
   Trash,
   XCircle,
 } from "./icons";
 import { ReleasePanel } from "./ReleaseAssistant";
 import { Select } from "./Select";
 import { useTheme, type ThemeChoice } from "./ThemeProvider";
-import { AutoTextarea, Modal, Segmented, Spinner, Toggle, Tooltip } from "./ui";
+import { AutoTextarea, Modal, ProgressBar, Segmented, Spinner, Toggle, Tooltip } from "./ui";
 
 type Section = "ai" | "compliance" | "appearance" | "connection" | "about";
 type AiPart = "models" | "cascade";
@@ -75,9 +76,9 @@ function useCatalog(provider: InferenceMode, enabled: boolean, settings: Runtime
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const keyStored = hasKey(settings, provider);
   useEffect(() => {
+    setCatalog(null);
     if (!enabled) return;
     let alive = true;
-    setCatalog(null);
     api.models(provider).then((result) => alive && setCatalog(result)).catch(() => alive && setCatalog(null));
     return () => {
       alive = false;
@@ -102,16 +103,30 @@ function Field({ label, hint, children }: { label: string; hint?: React.ReactNod
   );
 }
 
-function SectionTitle({ title, text }: { title: string; text?: string }) {
+/** Ueberschrift eines Bereichs; ``quiet``: Titel nur fuer Screenreader (der Reiter darueber nennt ihn schon). */
+function SectionTitle({ title, text, hint, quiet = false }: { title: string; text?: string; hint?: React.ReactNode; quiet?: boolean }) {
+  const info = hint && (
+    <Tooltip content={hint}>
+      <span tabIndex={0} className="inline-flex align-[-2px] text-subtle"><Info size={13} aria-hidden="true" /></span>
+    </Tooltip>
+  );
   return (
     <div className="mb-4">
-      <h3 className="text-base font-semibold text-fg">{title}</h3>
-      {text && <p className="mt-0.5 text-xs leading-relaxed text-subtle">{text}</p>}
+      <h3 className={quiet ? "sr-only" : "flex items-center gap-1.5 text-base font-semibold text-fg"}>
+        {title}
+        {!quiet && info}
+      </h3>
+      {text && (
+        <p className={cx("max-w-[65ch] text-xs leading-relaxed", quiet ? "text-muted" : "mt-0.5 text-subtle")}>
+          {text}
+          {quiet && info && <> {info}</>}
+        </p>
+      )}
     </div>
   );
 }
 
-function ModelSelect({ provider, value, onChange, catalog, label, allowOff, exclude }: {
+function ModelSelect({ provider, value, onChange, catalog, label, allowOff, exclude, disabled = false }: {
   provider: InferenceMode;
   value: string;
   onChange: (model: string) => void;
@@ -119,8 +134,18 @@ function ModelSelect({ provider, value, onChange, catalog, label, allowOff, excl
   label: string;
   allowOff?: boolean;
   exclude?: string;
+  /** Gesperrt, solange kein Key hinterlegt ist - ohne Key liefert der Anbieter keine Liste. */
+  disabled?: boolean;
 }) {
   const { tr, td } = useI18n();
+  if (disabled) {
+    const offLabel = tr("Aus", "Off", "Desactivado");
+    return (
+      <Field label={label}>
+        <Select value={value} onChange={onChange} ariaLabel={label} width={320} className="h-9 w-full justify-between" options={[{ value, label: value || offLabel }]} disabled />
+      </Field>
+    );
+  }
   const names = (catalog?.models ?? []).filter((name) => name !== exclude);
   const all = value && !names.includes(value) ? [value, ...names] : names;
   const options = [
@@ -141,8 +166,8 @@ function ModelSelect({ provider, value, onChange, catalog, label, allowOff, excl
       label={label}
       hint={
         catalog?.source === "api"
-          ? tr("Liste live aus der API des Anbieters, neueste zuerst.", "Live model catalog from provider API, newest first.", "Catálogo en vivo de la API del proveedor.")
-          : td(catalog?.message) || tr("Vorschlagsliste – mit hinterlegtem Key kommt die Liste direkt vom Anbieter.", "Suggested list – live catalog loads once an API key is configured.", "Lista sugerida; el catálogo en vivo se carga al añadir clave API.")
+          ? tr("Direkt vom Anbieter, neueste zuerst.", "Straight from the provider, newest first.", "Directamente del proveedor, los más recientes primero.")
+          : td(catalog?.message) || tr("Vorschlagsliste – der Anbieter war nicht erreichbar.", "Suggested list – the provider could not be reached.", "Lista sugerida: no se pudo contactar con el proveedor.")
       }
     >
       {catalog ? (
@@ -154,24 +179,34 @@ function ModelSelect({ provider, value, onChange, catalog, label, allowOff, excl
   );
 }
 
-function KeyInput({ value, onChange, placeholder, name }: { value: string; onChange: (value: string) => void; placeholder: string; name: string }) {
+function KeyInput({ value, onChange, placeholder, name, label, disabled = false }: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  name: string;
+  label: string;
+  disabled?: boolean;
+}) {
   const { tr } = useI18n();
   const [show, setShow] = useState(false);
   return (
     <div className="relative">
       <input
-        className="input h-9 pr-10 font-mono"
+        className="input h-9 pr-10 font-mono placeholder:font-sans disabled:cursor-not-allowed disabled:opacity-50"
         type={show ? "text" : "password"}
         name={name}
         value={value}
+        aria-label={label}
         autoComplete="off"
         spellCheck={false}
+        disabled={disabled}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
       <button
         type="button"
-        className="icon-target absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md text-subtle transition-colors duration-150 hover:text-fg"
+        disabled={disabled}
+        className="icon-target absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md text-subtle transition-colors duration-150 enabled:hover:text-fg disabled:opacity-50"
         onClick={() => setShow((visible) => !visible)}
         aria-label={show ? tr("Key verbergen", "Hide key", "Ocultar clave") : tr("Key anzeigen", "Show key", "Mostrar clave")}
       >
@@ -290,6 +325,23 @@ function LocalAiControl({ active, onChanged, notify, compact = false }: { active
   );
 }
 
+/** Letzter Verbindungstest je Konfiguration - bleibt beim Schliessen und erneuten Oeffnen sichtbar. */
+const lastTests = new Map<string, ConnectionTestResult>();
+const testKey = (settings: RuntimeSettings, mode: InferenceMode) =>
+  `${mode}|${settings.models[mode]}|${mode === "local" ? "" : settings.masked_keys?.[mode] ?? ""}`;
+
+/** Vorauswahl: der aktive Cloud-Anbieter, sonst der erste mit Key, sonst keiner. */
+function initialProvider(settings: RuntimeSettings): CloudMode | "" {
+  if (settings.inference_mode !== "local") return settings.inference_mode;
+  return CLOUD.find(({ value }) => hasKey(settings, value))?.value ?? "";
+}
+
+/**
+ * Anbieter → Key → Modelle, in dieser Reihenfolge freigeschaltet: Ohne Anbieter kein Key,
+ * ohne hinterlegten Key keine Modell-Liste (der Anbieter liefert sie erst mit Key).
+ * Ein Klick auf „Speichern“ speichert und prüft danach die Verbindung; waehrenddessen ist
+ * der Knopf gesperrt, das Ergebnis steht als Haken daneben.
+ */
 function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
   settings: RuntimeSettings;
   active: boolean;
@@ -299,183 +351,281 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
 }) {
   const { tr, td } = useI18n();
   const [location, setLocation] = useState<"local" | "cloud">(settings.inference_mode === "local" ? "local" : "cloud");
-  const [provider, setProvider] = useState<CloudMode>(settings.inference_mode === "local" ? "gemini" : settings.inference_mode);
+  const [provider, setProvider] = useState<CloudMode | "">(() => initialProvider(settings));
   const [model, setModel] = useState("");
   const [fallbackModel, setFallbackModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [phase, setPhase] = useState<"idle" | "saving" | "testing">("idle");
   const [result, setResult] = useState<ConnectionTestResult | null>(null);
-  const { busy, save } = useSave(onSaved, notify);
-  const mode: InferenceMode = location === "local" ? "local" : provider;
-  const catalog = useCatalog(mode, active, settings);
-  const keyStored = hasKey(settings, mode);
+  const running = useRef(false);
+  const { busy: saving, save } = useSave(onSaved, notify);
+
+  const mode: InferenceMode | null = location === "local" ? "local" : provider || null;
+  const cloud = mode !== null && mode !== "local";
+  const keyStored = mode !== null && hasKey(settings, mode);
+  const modelsReady = mode === "local" || keyStored;
+  const catalog = useCatalog(mode ?? "local", active && mode !== null && modelsReady, settings);
+  const savedFallback = cloud ? settings.ausweich_modelle?.[mode as CloudMode] ?? "" : "";
+  const typedKey = apiKey.trim();
+  const dirty =
+    mode !== null &&
+    (mode !== settings.inference_mode || model !== settings.models[mode] || fallbackModel !== savedFallback || typedKey !== "");
+  const verified = Boolean(result?.ok) && !dirty;
+  const busy = phase !== "idle" || saving;
+  const canSave = mode !== null && !busy && !verified && Boolean(model.trim()) && (!cloud || keyStored || typedKey.length >= 8);
 
   useEffect(() => {
     if (!active) return;
     setLocation(settings.inference_mode === "local" ? "local" : "cloud");
-    if (settings.inference_mode !== "local") setProvider(settings.inference_mode);
-    setResult(null);
+    setProvider(initialProvider(settings));
     // Nur beim Oeffnen synchronisieren - nicht bei jedem Speichern.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Modell je Provider: das gespeicherte; ist noch kein Key hinterlegt, das neueste aus dem Katalog.
+  // Formular je Anbieter aus den gespeicherten Werten; der letzte Test dieser Konfiguration bleibt stehen.
   useEffect(() => {
-    const fresh = mode !== "local" && !hasKey(settings, mode) && catalog?.source === "api";
-    setModel(fresh && catalog?.models[0] ? catalog.models[0] : settings.models[mode]);
+    if (!mode) return;
+    setModel(settings.models[mode]);
     setFallbackModel(mode === "local" ? "" : settings.ausweich_modelle?.[mode] ?? "");
     setApiKey("");
-  }, [mode, settings, catalog]);
+    setResult(lastTests.get(testKey(settings, mode)) ?? null);
+  }, [mode, settings]);
 
   async function saveAndTest() {
-    const update: SettingsUpdate = { inference_mode: mode, models: { [mode]: model } };
-    if (mode !== "local") {
-      update.ausweich_modelle = { [mode]: fallbackModel };
-      if (apiKey) update.api_keys = { [mode]: apiKey };
-    }
+    if (!mode || running.current) return;
+    running.current = true;
     setResult(null);
-    const updated = await save(update);
-    if (!updated) return;
-    setApiKey("");
     try {
-      setResult(await api.testConnection(mode));
-    } catch (err) {
-      setResult({ ok: false, provider: mode, model, message: err instanceof ApiError ? err.message : String(err) });
+      let current = settings;
+      if (dirty) {
+        setPhase("saving");
+        const update: SettingsUpdate = { inference_mode: mode, models: { [mode]: model.trim() } };
+        if (mode !== "local") {
+          update.ausweich_modelle = { [mode]: fallbackModel };
+          if (typedKey) update.api_keys = { [mode]: typedKey };
+        }
+        const updated = await save(update);
+        if (!updated) return;
+        current = updated;
+        setApiKey("");
+      }
+      setPhase("testing");
+      let outcome: ConnectionTestResult;
+      try {
+        outcome = await api.testConnection(mode);
+      } catch (err) {
+        outcome = { ok: false, provider: mode, model, message: err instanceof ApiError ? err.message : String(err) };
+      }
+      lastTests.set(testKey(current, mode), outcome);
+      setResult(outcome);
+    } finally {
+      running.current = false;
+      setPhase("idle");
     }
   }
+
+  async function removeKey() {
+    if (!mode || mode === "local") return;
+    const updated = await save({ api_keys: { [mode]: "" } });
+    if (updated) notify("ok", tr("API-Key entfernt", "API key removed", "Clave API eliminada"));
+  }
+
+  const status =
+    phase === "saving"
+      ? { tone: "text-subtle", icon: <Spinner size={12} />, text: tr("Speichert …", "Saving …", "Guardando …") }
+      : phase === "testing"
+        ? { tone: "text-subtle", icon: <Spinner size={12} />, text: tr("Verbindung wird geprüft …", "Checking connection …", "Comprobando conexión …") }
+        : result && !dirty
+          ? result.ok
+            ? { tone: "text-ok", icon: <span className="anim-check inline-flex"><Check size={15} aria-hidden="true" /></span>, text: tr("Verbunden", "Connected", "Conectado") }
+            : { tone: "text-bad", icon: <XCircle size={14} aria-hidden="true" />, text: tr("Keine Verbindung", "No connection", "Sin conexión") }
+          : null;
 
   return (
     <div className="space-y-5">
       <SectionTitle
+        quiet
         title={tr("Modelle", "Models", "Modelos")}
         text={tr(
-          "Hauptmodell und Ausweichmodell desselben Anbieters. Jeder Modellwechsel wird mit Modell-ID, Prompt-Hash und Zeitstempel signiert im Ledger verankert – nie still.",
-          "Primary model and fallback model for the selected provider. Every model change is Ed25519-signed with model ID, prompt hash and timestamp in the ledger.",
-          "Modelo principal y alternativo del proveedor. Cada cambio queda firmado en el registro con ID del modelo y hash del prompt.",
+          "Jeder Modellwechsel wird signiert im Protokoll vermerkt.",
+          "Every model change is signed and recorded in the audit trail.",
+          "Cada cambio de modelo queda firmado en el registro.",
         )}
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <Segmented<"local" | "cloud">
-          ariaLabel={tr("Inferenz-Ort", "Inference location", "Ubicación de inferencia")}
-          value={location}
-          onChange={setLocation}
-          options={[
-            { value: "local", label: tr("Lokal (Ollama)", "Local (Ollama)", "Local (Ollama)") },
-            { value: "cloud", label: tr("Cloud (API)", "Cloud (API)", "Nube (API)") },
-          ]}
-        />
-        {location === "cloud" && <Select<CloudMode> value={provider} onChange={setProvider} options={CLOUD} ariaLabel={tr("Cloud-Anbieter", "Cloud provider", "Proveedor en la nube")} width={220} className="h-8" />}
-      </div>
+      <Segmented<"local" | "cloud">
+        ariaLabel={tr("Wo geprüft wird", "Where audits run", "Dónde se analiza")}
+        value={location}
+        onChange={setLocation}
+        options={[
+          { value: "local", label: tr("Lokal (Ollama)", "Local (Ollama)", "Local (Ollama)") },
+          { value: "cloud", label: tr("Cloud (API)", "Cloud (API)", "Nube (API)") },
+        ]}
+      />
 
       {catalog?.upgrade && catalog.upgrade !== model && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-ok-line bg-ok-soft px-3 py-2 text-xs text-fg">
           <ArrowUpCircle size={14} className="text-ok" aria-hidden="true" />
           <span className="min-w-0 flex-1">
-            {tr("Neueres Modell derselben Klasse verfügbar:", "Newer model in the same tier available:", "Nuevo modelo equivalente disponible:")}{" "}
-            <span className="font-semibold">{catalog.upgrade}</span>. {tr("Die Übernahme wird im Ledger verankert.", "Activation is logged in the ledger.", "El cambio queda registrado.")}
+            {tr("Neueres Modell verfügbar:", "Newer model available:", "Modelo más reciente disponible:")} <span className="font-semibold">{catalog.upgrade}</span>
           </span>
-          <button className="btn btn-sm" disabled={busy} onClick={() => void save({ models: { [mode]: catalog.upgrade! } })}>
-            {tr("Übernehmen", "Apply", "Aplicar")}
+          <button className="btn btn-sm" disabled={busy} onClick={() => setModel(catalog.upgrade!)}>
+            {tr("Auswählen", "Select", "Seleccionar")}
           </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <ModelSelect provider={mode} value={model} onChange={setModel} catalog={catalog} label={tr("Hauptmodell", "Primary Model", "Modelo principal")} />
-        {mode !== "local" && (
-          <ModelSelect
-            provider={mode}
-            value={fallbackModel}
-            onChange={setFallbackModel}
-            catalog={catalog}
-            label={tr("Ausweichmodell bei Überlast", "Fallback Model on Overload", "Modelo alternativo por sobrecarga")}
-            allowOff
-            exclude={model}
-          />
-        )}
-        {mode !== "local" && (
-          <Field
-            label={`API-Key ${providerDisplayName(mode)}${keyStored ? ` · ${tr("hinterlegt", "stored", "guardada")} (${settings.masked_keys?.[mode] ?? "…"})` : ""}`}
-            hint={tr(
-              "Serverseitig Fernet-verschlüsselt gespeichert und nur maskiert zurückgegeben. Weitere Schlüssel unter „Ausweich-Kaskade“.",
-              "Stored Fernet-encrypted on the server and returned masked only. Configure extra keys under “Fallback Cascade”.",
-              "Almacenada con cifrado Fernet en el servidor. Claves adicionales en «Cascada de respaldo».",
-            )}
-          >
-            <KeyInput
-              value={apiKey}
-              onChange={setApiKey}
-              name={`${mode}-api-key`}
-              placeholder={
-                keyStored
-                  ? tr("Neuen Key eingeben, um ihn zu ersetzen…", "Enter new key to replace…", "Introducir nueva clave para reemplazar…")
-                  : tr("Key eingeben…", "Enter API key…", "Introducir clave API…")
-              }
+      {location === "cloud" && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Field label={tr("Anbieter", "Provider", "Proveedor")}>
+            <Select<CloudMode | "">
+              value={provider}
+              onChange={setProvider}
+              options={CLOUD}
+              placeholder={tr("Anbieter wählen …", "Choose a provider …", "Elegir proveedor …")}
+              ariaLabel={tr("Cloud-Anbieter", "Cloud provider", "Proveedor en la nube")}
+              width={320}
+              className="h-9 w-full justify-between"
             />
           </Field>
-        )}
-      </div>
-
-      {mode !== "local" && fallbackModel === "" && settings.suggested_fallback_models?.[mode] && (
-        <p className="text-xs text-subtle">
-          {tr("Tipp:", "Tip:", "Consejo:")}{" "}
-          <button type="button" className="font-medium text-accent hover:underline" onClick={() => setFallbackModel(settings.suggested_fallback_models[mode])}>
-            {settings.suggested_fallback_models[mode]}
-          </button>{" "}
-          {tr(
-            "als Ausweichmodell übernimmt bei Überlast des Hauptmodells, bevor die Kaskade den Anbieter wechselt.",
-            "can act as same-provider fallback on overload before the cascade switches providers.",
-            "actúa como respaldo del mismo proveedor antes de cambiar en la cascada.",
-          )}
-        </p>
+          <div>
+            <span className="label-caps flex items-center gap-1.5">
+              API-Key
+              <Tooltip
+                content={tr(
+                  "Wird verschlüsselt auf dem Server gespeichert und nie im Klartext angezeigt. Weitere Keys unter „Ausweich-Kaskade“.",
+                  "Stored encrypted on the server and never shown in plain text. More keys under “Fallback cascade”.",
+                  "Se guarda cifrada en el servidor y nunca se muestra en claro. Más claves en «Cascada de respaldo».",
+                )}
+              >
+                <span tabIndex={0} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
+              </Tooltip>
+              {keyStored && (
+                <span className="ml-auto flex items-center gap-1.5 normal-case tracking-normal text-subtle">
+                  <KeyRound size={12} className="text-ok" aria-hidden="true" />
+                  <span className="font-mono">{settings.masked_keys?.[mode as CloudMode] ?? "…"}</span>
+                  <button type="button" className="font-medium text-subtle underline-offset-2 transition-colors duration-150 hover:text-bad hover:underline disabled:opacity-50" disabled={busy} onClick={() => void removeKey()}>
+                    {tr("Entfernen", "Remove", "Eliminar")}
+                  </button>
+                </span>
+              )}
+            </span>
+            <div className="mt-1">
+              <KeyInput
+                value={apiKey}
+                onChange={setApiKey}
+                name={`${mode ?? "cloud"}-api-key`}
+                label={tr("API-Key", "API key", "Clave API")}
+                disabled={!cloud || busy}
+                placeholder={
+                  !cloud
+                    ? tr("Zuerst Anbieter wählen", "Choose a provider first", "Elija primero un proveedor")
+                    : keyStored
+                      ? tr("Zum Ersetzen neuen Key einfügen", "Paste a new key to replace it", "Pegue una clave nueva para reemplazarla")
+                      : tr("Key einfügen …", "Paste API key …", "Pegar clave API …")
+                }
+              />
+            </div>
+          </div>
+        </div>
       )}
 
-      {mode !== "local" && (
+      {mode !== null && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <ModelSelect provider={mode} value={model} onChange={setModel} catalog={catalog} label={tr("Hauptmodell", "Primary model", "Modelo principal")} disabled={!modelsReady} />
+            {cloud && (
+              <div>
+                <ModelSelect
+                  provider={mode}
+                  value={fallbackModel}
+                  onChange={setFallbackModel}
+                  catalog={catalog}
+                  label={tr("Ausweichmodell bei Überlast", "Fallback model on overload", "Modelo alternativo por sobrecarga")}
+                  allowOff
+                  exclude={model}
+                  disabled={!modelsReady}
+                />
+                {modelsReady && fallbackModel === "" && settings.suggested_fallback_models?.[mode] && (
+                  <p className="mt-1.5 text-xs text-subtle">
+                    {tr("Empfohlen:", "Recommended:", "Recomendado:")}{" "}
+                    <button type="button" className="font-medium text-accent underline-offset-2 hover:underline" onClick={() => setFallbackModel(settings.suggested_fallback_models[mode])}>
+                      {settings.suggested_fallback_models[mode]}
+                    </button>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          {!modelsReady && (
+            <p className="text-xs text-subtle">
+              {tr(
+                "Die Modell-Liste lädt, sobald der Key gespeichert ist.",
+                "The model list loads once the key is saved.",
+                "La lista de modelos se carga en cuanto se guarda la clave.",
+              )}
+            </p>
+          )}
+        </div>
+      )}
+
+      {cloud && (
         <details className="group rounded-lg border border-pii-line bg-pii-soft px-3 py-2 text-xs text-fg">
           <summary className="flex cursor-pointer list-none items-center gap-2 font-medium text-pii">
             <Lock size={13} aria-hidden="true" />{" "}
             {tr(
-              "Privacy Gateway: vor jedem Cloud-Aufruf lokal pseudonymisiert (Art. 4 Nr. 5 DSGVO)",
-              "Privacy Gateway: pseudonymized locally before every cloud call (GDPR Art. 4(5))",
-              "Privacy Gateway: seudonimizado localmente antes de cada envío a la nube (RGPD Art. 4(5))",
+              "Privacy Gateway: Belege gehen nur pseudonymisiert in die Cloud",
+              "Privacy Gateway: documents reach the cloud only pseudonymized",
+              "Privacy Gateway: los documentos llegan a la nube solo seudonimizados",
             )}
             <span className="ml-auto text-subtle transition-transform duration-150 group-open:rotate-90" aria-hidden="true">›</span>
           </summary>
-          <p className="mt-2 leading-relaxed text-muted">
+          <p className="mt-2 max-w-[65ch] leading-relaxed text-muted">
             {tr(
-              "Erkannte Namen mit Anrede oder Rolle, Firmen, IBANs, Steuer-IDs, Adressen, Kontaktdaten und Beträge gehen nur als Platzhalter an den Anbieter und werden lokal re-identifiziert; das Mapping verlässt den Server nie. Pseudonymisierte Daten bleiben personenbezogen: AV-Vertrag und Transfergrundlage sind für jeden Anbieter der Kaskade nötig.",
-              "Detected names, companies, IBANs, tax IDs, addresses, contact info and amounts are sent only as placeholders and re-identified locally; mapping tables never leave your server.",
-              "Nombres, empresas, IBAN, NIF, direcciones, contactos e importes se envían solo como marcadores y se reidentifican localmente; las tablas nunca salen del servidor.",
+              "Namen, Firmen, IBANs, Steuer-IDs, Adressen, Kontaktdaten und Beträge gehen nur als Platzhalter an den Anbieter und werden lokal wieder eingesetzt; die Zuordnung verlässt den Server nie (Art. 4 Nr. 5 DSGVO). Pseudonymisierte Daten bleiben personenbezogen – für jeden Anbieter der Kaskade sind AV-Vertrag und Transfergrundlage nötig.",
+              "Names, companies, IBANs, tax IDs, addresses, contact details and amounts reach the provider only as placeholders and are restored locally; the mapping never leaves the server (GDPR Art. 4(5)). Pseudonymized data is still personal data – every provider in the cascade needs a DPA and a transfer basis.",
+              "Nombres, empresas, IBAN, NIF, direcciones, contactos e importes llegan al proveedor solo como marcadores y se restauran en local; la asignación nunca sale del servidor (RGPD art. 4(5)). Los datos seudonimizados siguen siendo personales: cada proveedor necesita contrato de encargo y base de transferencia.",
             )}
           </p>
         </details>
       )}
 
-      {result && (
-        <div className={cx("flex flex-wrap items-start gap-2 rounded-lg border p-3 text-xs", result.ok ? "border-ok-line bg-ok-soft text-fg" : "border-bad-line bg-bad-soft text-fg")}>
-          {result.ok ? <CheckCircle size={14} className="mt-0.5 text-ok" /> : <XCircle size={14} className="mt-0.5 text-bad" />}
+      {result && !result.ok && !dirty && phase === "idle" && (
+        <div className="anim-fade flex flex-wrap items-start gap-2 rounded-lg border border-bad-line bg-bad-soft p-3 text-xs text-fg" role="alert">
+          <XCircle size={14} className="mt-0.5 shrink-0 text-bad" aria-hidden="true" />
           <span className="min-w-0 flex-1">{td(result.message)}</span>
           {result.suggested_model && (
-            <button className="btn btn-sm" disabled={busy} onClick={() => void save({ models: { local: result.suggested_model! } }).then(() => setResult(null))}>
-              {tr(`Übernehmen: ${formatModel(result.suggested_model)}`, `Apply ${formatModel(result.suggested_model)}`, `Aplicar ${formatModel(result.suggested_model)}`)}
+            <button className="btn btn-sm" disabled={busy} onClick={() => setModel(result.suggested_model!)}>
+              {tr(`${formatModel(result.suggested_model)} auswählen`, `Select ${formatModel(result.suggested_model)}`, `Seleccionar ${formatModel(result.suggested_model)}`)}
             </button>
           )}
         </div>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2">
-        {mode !== "local" && keyStored && (
-          <button className="btn" disabled={busy} onClick={() => void save({ api_keys: { [mode]: "" } }).then((ok) => ok && notify("ok", tr("API-Key gelöscht", "API key removed", "Clave API eliminada")))}>
-            {tr("Key löschen", "Delete key", "Eliminar clave")}
-          </button>
-        )}
-        <button className="btn btn-primary" onClick={() => void saveAndTest()} disabled={busy || !model.trim() || (mode !== "local" && !keyStored && !apiKey)}>
-          {busy && <Spinner size={13} />} {tr("Speichern & Verbindung testen", "Save & Test Connection", "Guardar y probar conexión")}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <span role="status" aria-live="polite" className="min-h-5">
+          {status && (
+            <span key={`${phase}-${result?.ok}`} className={cx("anim-fade flex items-center gap-1.5 text-xs font-medium", status.tone)}>
+              {status.icon}
+              {result?.ok && phase === "idle" ? (
+                <Tooltip content={td(result.message)} align="right" inline>
+                  <span tabIndex={0}>{status.text}</span>
+                </Tooltip>
+              ) : (
+                status.text
+              )}
+            </span>
+          )}
+        </span>
+        <button className="btn btn-primary min-w-[7.5rem] justify-center" onClick={() => void saveAndTest()} disabled={!canSave}>
+          {tr("Speichern", "Save", "Guardar")}
         </button>
       </div>
 
-      <div className="border-t border-line pt-4">
-        <LocalAiControl active={active} onChanged={onAccessChanged} notify={notify} />
-      </div>
+      {location === "local" && (
+        <div className="border-t border-line pt-4">
+          <LocalAiControl active={active} onChanged={onAccessChanged} notify={notify} />
+        </div>
+      )}
     </div>
   );
 }
@@ -501,6 +651,7 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
   const isCloud = settings.inference_mode !== "local";
   const existing = () => backups.map(({ id, provider: p, model: m }) => ({ id, provider: p, model: m }));
 
+  const retries = (settings.retry_delays ?? []).map((seconds) => `${seconds.toLocaleString(LOCALE_TAG[locale])} s`).join(", ");
   const stageLabels: Record<string, string> = {
     primary: tr("Hauptmodell", "Primary model", "Modelo principal"),
     ausweichmodell: tr("Ausweichmodell", "Fallback model", "Modelo alternativo"),
@@ -516,36 +667,46 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
       setKey("");
       setModel("");
       setAdding(false);
-      notify("ok", tr("Ausweich-Schlüssel hinzugefügt", "Backup key added", "Clave de respaldo añadida"), tr("Verschlüsselt gespeichert; die Kaskade ist im Ledger verankert.", "Stored encrypted; cascade updated in the ledger.", "Guardada cifrada; cascada registrada."));
+      notify("ok", tr("Ausweich-Schlüssel hinzugefügt", "Backup key added", "Clave de respaldo añadida"), tr("Verschlüsselt gespeichert.", "Stored encrypted.", "Guardada cifrada."));
     }
   }
 
   return (
     <div className="space-y-5">
       <SectionTitle
-        title={tr("Ausweich-Kaskade", "Fallback Cascade", "Cascada de respaldo")}
+        quiet
+        title={tr("Ausweich-Kaskade", "Fallback cascade", "Cascada de respaldo")}
         text={tr(
-          `Bei HTTP 408, 429, 5xx, Verbindungsfehler oder Zeitüberschreitung wiederholt jede Stufe zunächst (${(settings.retry_delays ?? []).map((s) => `${s} s`).join(", ") || "ohne Pause"}), dann übernimmt die nächste. Abgelehnte Keys (401/403) und Schemafehler lösen bewusst keinen Wechsel aus. Jeder Wechsel steht als provider_failover im Ledger; alle Cloud-Stufen laufen durch denselben Privacy Vault.`,
-          `On HTTP 408, 429, 5xx, network errors or timeouts each stage retries first (${(settings.retry_delays ?? []).map((s) => `${s}s`).join(", ") || "no delay"}), then hands off cleanly. Invalid keys (401/403) and schema errors intentionally fail fast. Every transition is logged as provider_failover in the ledger.`,
-          `Ante HTTP 408, 429, 5xx o tiempos agotados, cada nivel reintenta primero (${(settings.retry_delays ?? []).map((s) => `${s} s`).join(", ") || "sin pausa"}) y luego pasa al siguiente. Cada salto queda registrado como provider_failover.`,
+          "Antwortet eine Stufe nicht, versucht sie es kurz erneut und gibt dann an die nächste ab. Ein abgelehnter Key löst keinen Wechsel aus.",
+          "If a stage does not respond, it retries briefly and then hands over to the next. A rejected key never triggers a switch.",
+          "Si un nivel no responde, reintenta brevemente y pasa al siguiente. Una clave rechazada nunca provoca un cambio.",
+        )}
+        hint={tr(
+          `Wechsel bei HTTP 408, 429, 5xx, Verbindungsfehler, Zeitüberschreitung oder erreichtem Tageslimit; Wiederholung nach ${retries || "–"}. Kein Wechsel bei 401/403 oder Schemafehlern. Jeder Wechsel steht signiert im Protokoll; alle Cloud-Stufen laufen durch dasselbe Privacy Gateway.`,
+          `Switches on HTTP 408, 429, 5xx, connection errors, timeouts or a reached daily limit; retries after ${retries || "–"}. No switch on 401/403 or schema errors. Every switch is signed in the audit trail; all cloud stages share the same Privacy Gateway.`,
+          `Cambia ante HTTP 408, 429, 5xx, errores de conexión, tiempo agotado o límite diario alcanzado; reintenta tras ${retries || "–"}. Sin cambio ante 401/403 o errores de esquema. Cada cambio queda firmado en el registro.`,
         )}
       />
 
-      <ol className="space-y-1.5" aria-label={tr("Effektive Kaskade", "Effective cascade", "Cascada efectiva")}>
+      <ol className="cascade-steps" aria-label={tr("Reihenfolge der Kaskade", "Cascade order", "Orden de la cascada")}>
         {(settings.chain ?? []).map((stage, index) => (
-          <li key={`${stage.stage}-${stage.backup_id ?? stage.provider}-${index}`} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2 text-sm">
-            <span className="w-6 text-right text-xs tabular-nums text-subtle">{index + 1}</span>
-            <span className="w-36 shrink-0 text-xs text-subtle">{stageLabels[stage.stage]}</span>
-            <span className="min-w-0 flex-1 truncate text-fg">{providerDisplayName(stage.provider)}</span>
-            <span className="truncate text-xs text-muted">{stage.model}</span>
+          <li key={`${stage.stage}-${stage.backup_id ?? stage.provider}-${index}`} className="cascade-step">
+            <span className="cascade-dot" aria-hidden="true">{index + 1}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-fg">{providerDisplayName(stage.provider)} <span className="text-muted">· {stage.model}</span></span>
+              <span className="block text-xs text-subtle">{stageLabels[stage.stage]}</span>
+            </span>
           </li>
         ))}
-        <li className="flex items-center gap-3 rounded-lg border border-dashed border-line px-3 py-2 text-sm">
-          <span className="w-6 text-right text-xs tabular-nums text-subtle">{(settings.chain?.length ?? 0) + 1}</span>
-          <span className="w-36 shrink-0 text-xs text-subtle">{tr("Letzte Stufe", "Final stage", "Último nivel")}</span>
-          <span className="min-w-0 flex-1 text-fg">{tr("Deterministisches Regelwerk", "Deterministic ruleset", "Motor determinista de reglas")}</span>
-          <span className={cx("text-xs", settings.heuristic_fallback ? "text-ok" : "text-subtle")}>
-            {settings.heuristic_fallback ? tr("aktiv · gekennzeichnet", "active · badged", "activo · etiquetado") : tr("aus (HEURISTIC_FALLBACK)", "off (HEURISTIC_FALLBACK)", "desactivado")}
+        <li className="cascade-step">
+          <span className="cascade-dot cascade-dot-final" aria-hidden="true">{(settings.chain?.length ?? 0) + 1}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm text-fg">{tr("Regelwerk", "Ruleset", "Motor de reglas")} <span className="text-muted">· {tr("deterministisch", "deterministic", "determinista")}</span></span>
+            <span className={cx("block text-xs", settings.heuristic_fallback ? "text-subtle" : "text-warn")}>
+              {settings.heuristic_fallback
+                ? tr("Letzte Stufe – Ergebnis wird als Regelwerk-Audit gekennzeichnet", "Final stage – result is badged as a rules audit", "Último nivel: el resultado se marca como auditoría por reglas")
+                : tr("Ausgeschaltet – fällt alles aus, bricht die Prüfung mit Fehler ab", "Off – if everything fails, the audit stops with an error", "Desactivado: si todo falla, el análisis termina con error")}
+            </span>
           </span>
         </li>
       </ol>
@@ -562,9 +723,9 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
         {!isCloud && (
           <p className="text-xs text-subtle">
             {tr(
-              "Gilt nur, wenn ein Cloud-Anbieter aktiv ist – eine lokal eingestellte Prüfung geht nie automatisch in die Cloud.",
-              "Only applies when a cloud provider is primary – local mode never leaks documents to cloud APIs.",
-              "Solo aplica cuando la nube está activa; el modo local nunca envía documentos fuera.",
+              "Nur mit Cloud-Hauptmodell – lokal eingestellte Prüfungen gehen nie automatisch in die Cloud.",
+              "Only with a cloud primary model – local audits never move to the cloud automatically.",
+              "Solo con modelo principal en la nube: los análisis locales nunca pasan a la nube automáticamente.",
             )}
           </p>
         )}
@@ -602,7 +763,7 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
               </Field>
             </div>
             <Field label="API-Key">
-              <KeyInput value={key} onChange={setKey} name="backup-api-key" placeholder={tr("Schlüssel eingeben (auch ein zweiter Key desselben Anbieters)…", "Enter key (even a secondary key for the same provider)…", "Introducir clave…")} />
+              <KeyInput value={key} onChange={setKey} name="backup-api-key" label="API-Key" placeholder={tr("Key einfügen – auch ein zweiter desselben Anbieters …", "Paste key – a second one from the same provider works too …", "Pegar clave; también una segunda del mismo proveedor …")} />
             </Field>
             <div className="flex justify-end gap-2">
               <button className="btn" onClick={() => setAdding(false)}>{tr("Abbrechen", "Cancel", "Cancelar")}</button>
@@ -621,11 +782,11 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
             checked={localFallback}
             onChange={(value) => void save({ fallbacks: value ? [...fallbacks.filter((item) => item !== "local"), "local"] : fallbacks.filter((item) => item !== "local") })}
             label={tr("Lokal ausweichen (Ollama)", "Fall back to Local (Ollama)", "Respaldo local (Ollama)")}
-            description={tr("Fallen alle Cloud-Stufen aus, prüft das lokale Modell – kein Dokumentinhalt verlässt dann den Rechner.", "If all cloud tiers fail, runs locally so no document leaves your machine.", "Si fallan las etapas en la nube, analiza en local sin salida de datos.")}
+            description={tr("Wenn alle Cloud-Stufen ausfallen – der Beleg bleibt dann auf diesem Rechner.", "When all cloud stages fail – the document then stays on this machine.", "Si fallan todos los niveles en la nube; el documento se queda en este equipo.")}
           />
         ) : (
           <p className="text-xs text-subtle">
-            {tr("Lokal ist das Hauptmodell; fällt es aus, schließt das Regelwerk die Prüfung gekennzeichnet ab.", "Local is active; if unavailable, the deterministic ruleset finishes and badges the audit.", "El modo local es el principal; si no está disponible, concluye el motor de reglas.")}
+            {tr("Lokal ist das Hauptmodell; fällt es aus, übernimmt das Regelwerk.", "Local is the primary model; if it fails, the ruleset takes over.", "El modelo principal es local; si falla, actúa el motor de reglas.")}
           </p>
         )}
         {(localFallback || !isCloud) && <LocalAiControl compact active onChanged={onAccessChanged} notify={notify} />}
@@ -639,7 +800,7 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
         ))}
         {keyed.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-subtle">
-            {tr("Weiteren Anbieter mit hinterlegtem Hauptschlüssel anhängen:", "Append another configured provider:", "Añadir otro proveedor configurado:")}
+            {tr("Anbieter anhängen:", "Append provider:", "Añadir proveedor:")}
             {keyed.map((mode) => (
               <button key={mode} className="btn btn-sm" disabled={busy} onClick={() => void save({ fallbacks: [...fallbacks.filter((item) => item !== "local"), mode, ...(localFallback ? ["local" as const] : [])] })}>
                 <Plus size={12} aria-hidden="true" /> {providerDisplayName(mode)}
@@ -650,17 +811,34 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
       </section>
 
       {settings.cloud_budget && (
-        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-muted">
-          {tr("Cloud-Tagesbudget:", "Daily cloud budget:", "Presupuesto diario nube:")}{" "}
-          {settings.cloud_budget.enabled ? (
-            <>
-              <span className="tabular-nums">{settings.cloud_budget.tokens.toLocaleString(LOCALE_TAG[locale])}</span> {tr("von", "of", "de")}{" "}
-              <span className="tabular-nums">{settings.cloud_budget.limit.toLocaleString(LOCALE_TAG[locale])}</span> {tr("Tokens heute verbraucht.", "tokens used today.", "tokens consumidos hoy.")}
-            </>
-          ) : (
-            <>{tr("ohne Limit", "unlimited", "sin límite")} (<span className="font-mono">CLOUD_DAILY_TOKEN_LIMIT=-1</span>); {tr("heute", "today", "hoy")} <span className="tabular-nums">{settings.cloud_budget.tokens.toLocaleString(LOCALE_TAG[locale])}</span> tokens.</>
+        <section className="space-y-2 border-t border-line pt-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+            <span className="label-caps flex items-center gap-1.5">
+              {tr("Cloud-Verbrauch heute", "Cloud usage today", "Uso de la nube hoy")}
+              <Tooltip
+                content={tr(
+                  "Tokens aller Cloud-Aufrufe seit Mitternacht. Ein optionales Tageslimit in der Serverkonfiguration schützt vor unerwarteten Kosten – ist es erreicht, prüfen lokale Stufen bzw. das Regelwerk.",
+                  "Tokens of all cloud calls since midnight. An optional daily limit in the server configuration guards against unexpected costs – once reached, local stages or the ruleset take over.",
+                  "Tokens de todas las llamadas a la nube desde medianoche. Un límite diario opcional en la configuración del servidor evita costes inesperados.",
+                )}
+              >
+                <span tabIndex={0} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
+              </Tooltip>
+            </span>
+            <span className="tabular-nums text-muted">
+              <span className="font-medium text-fg">{settings.cloud_budget.tokens.toLocaleString(LOCALE_TAG[locale])}</span>
+              {settings.cloud_budget.enabled
+                ? ` / ${settings.cloud_budget.limit.toLocaleString(LOCALE_TAG[locale])} ${tr("Tokens", "tokens", "tokens")}`
+                : ` ${tr("Tokens · ohne Tageslimit", "tokens · no daily limit", "tokens · sin límite diario")}`}
+            </span>
+          </div>
+          {settings.cloud_budget.enabled && (
+            <ProgressBar
+              value={settings.cloud_budget.limit > 0 ? Math.min(1, settings.cloud_budget.tokens / settings.cloud_budget.limit) : 0}
+              label={tr("Cloud-Tageslimit", "Daily cloud limit", "Límite diario de la nube")}
+            />
           )}
-        </p>
+        </section>
       )}
     </div>
   );
@@ -708,7 +886,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
     try {
       setResult(await api.redact(probe));
     } catch (err) {
-      notify("bad", tr("Probe-Schwärzung fehlgeschlagen", "Redaction test failed", "Error en prueba de anonimización"), err instanceof ApiError ? err.message : String(err));
+      notify("bad", tr("Testschwärzung fehlgeschlagen", "Redaction test failed", "Error en la prueba de anonimización"), err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -719,13 +897,13 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
       <SectionTitle
         title="Compliance"
         text={tr(
-          "Änderungen gelten für die nächste Analyse; bestehende Prüfergebnisse bleiben unverändert im Ledger.",
-          "Changes apply to subsequent audits; existing ledger entries remain immutable.",
-          "Los cambios aplican al siguiente análisis; las entradas existentes en el registro son inmutables.",
+          "Gilt ab der nächsten Prüfung; bisherige Ergebnisse bleiben unverändert.",
+          "Applies from the next audit; existing results stay unchanged.",
+          "Se aplica desde el próximo análisis; los resultados anteriores no cambian.",
         )}
       />
       <div>
-        <p className="label-caps mb-2">{tr("PII-Maskierungsgrad (Textansicht & Vorschau)", "PII Masking Level (Text View & Preview)", "Nivel de ocultación PII (vista previa)")}</p>
+        <p className="label-caps mb-2">{tr("Maskierung in der Belegansicht", "Masking in the document view", "Ocultación en la vista del documento")}</p>
         <Segmented<PiiStrictness>
           ariaLabel={tr("PII-Maskierungsgrad", "PII masking level", "Nivel de ocultación PII")}
           value={settings.pii_strictness}
@@ -734,35 +912,45 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
         />
         <p className="mt-2 text-xs text-muted">{strictnessOptions.find((s) => s.value === settings.pii_strictness)?.text}</p>
         <p className="mt-1 text-xs text-subtle">
-          {tr("PII-Befunde werden unabhängig von dieser Stufe ausschließlich maskiert gespeichert.", "PII findings are always stored strictly masked regardless of preview strictness.", "Los hallazgos PII se guardan siempre enmascarados.")}
+          {tr("Gespeichert wird unabhängig davon immer maskiert.", "Findings are always stored masked, regardless of this setting.", "Los hallazgos se guardan siempre enmascarados.")}
         </p>
       </div>
       <Toggle
         checked={settings.enforce_ustg_check}
         onChange={(value) => void save({ enforce_ustg_check: value })}
-        label={tr("§ 14 UStG Check erzwingen", "Enforce Sec. 14 UStG Audit", "Exigir control § 14 UStG")}
-        description={tr("Prüft bei Rechnungen alle Pflichtangaben nach § 14 Abs. 4 UStG und fließt in den Score ein.", "Audits all mandatory VAT elements under Sec. 14(4) German VAT Act and factors into score.", "Verifica los requisitos de factura según § 14(4) UStG e influye en la puntuación.")}
+        label={tr("Pflichtangaben nach § 14 UStG prüfen", "Check mandatory details under Sec. 14 UStG", "Comprobar datos obligatorios (§ 14 UStG)")}
+        description={tr("Bei Rechnungen alle Angaben nach § 14 Abs. 4 UStG; fließt in den Score ein.", "All details under Sec. 14(4) UStG for invoices; counts towards the score.", "Todos los datos del § 14(4) UStG en facturas; cuenta para la puntuación.")}
       />
       <Toggle
         checked={settings.ai_act_escalation}
         onChange={(value) => void save({ ai_act_escalation: value })}
-        label={tr("EU AI Act Hochrisiko-Eskalation", "EU AI Act High-Risk Escalation", "Escalada de alto riesgo (Reglamento IA)")}
-        description={tr("Stuft automatisch auf „Hochrisiko“, sobald eine Anhang-III-Kategorie belegt ist – auch wenn das Modell niedriger bewertet.", "Automatically escalates to High Risk when any Annex III category triggers, overriding lower LLM ratings.", "Clasifica automáticamente como alto riesgo al detectar Anexo III.")}
+        label={tr("Hochrisiko nach EU AI Act automatisch einstufen", "Auto-classify high risk under the EU AI Act", "Clasificar alto riesgo (Reglamento IA) automáticamente")}
+        description={tr("Sobald eine Anhang-III-Kategorie belegt ist – auch wenn das Modell niedriger bewertet.", "As soon as an Annex III category applies – even if the model rates lower.", "En cuanto aplica una categoría del Anexo III, aunque el modelo valore más bajo.")}
       />
 
       <section className="space-y-2 border-t border-line pt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="label-caps">{tr("Schwärzungs-Gateway (DLP) für andere Anwendungen", "Redaction gateway (DLP) for other applications", "Pasarela de anonimización (DLP) para otras aplicaciones")}</p>
+          <p className="label-caps">{tr("Schwärzungs-Schnittstelle (DLP)", "Redaction interface (DLP)", "Interfaz de anonimización (DLP)")}</p>
           <span className="text-xs tabular-nums text-subtle">{tr("Regelwerk", "Ruleset", "Reglamento")} {settings.dlp?.ruleset_version ?? "–"}</span>
         </div>
-        <p className="text-xs leading-relaxed text-muted">
-          <span className="font-mono">POST {settings.dlp?.endpoint ?? "/api/v1/redact"}</span>{" "}
+        <p className="max-w-[65ch] text-xs leading-relaxed text-muted">
           {tr(
-            "schwärzt Texte endgültig, bevor externe Fachanwendungen oder Analyse-Pipelines sie an ein Cloud-LLM senden: Zugangsdaten, vertrauliche Dateinamen, geschützte Parameter, Sperrbegriffe und personenbezogene Daten. Kein Mapping, nichts wird gespeichert oder geloggt.",
-            "irreversibly redacts text before external applications or pipelines call cloud LLMs: credentials, confidential filenames, blocklisted terms and personal data. Zero persistence or logging.",
-            "anonimiza irreversiblemente textos antes de enviarlos a LLM externos: credenciales, archivos confidenciales y datos personales.",
-          )}{" "}
-          <span className="tabular-nums">{settings.dlp?.configured_terms ?? 0}</span> {tr("Sperrbegriffe aus", "custom blocked terms from", "términos bloqueados de")} <span className="font-mono">DLP_TERMS</span>.
+            "Andere Anwendungen schicken Texte an diese Schnittstelle und erhalten sie endgültig geschwärzt zurück, bevor sie an ein Cloud-LLM gehen: Zugangsdaten, vertrauliche Begriffe und personenbezogene Daten. Nichts wird gespeichert.",
+            "Other applications send text to this interface and get it back permanently redacted before it reaches a cloud LLM: credentials, confidential terms and personal data. Nothing is stored.",
+            "Otras aplicaciones envían textos a esta interfaz y los reciben anonimizados de forma definitiva antes de llegar a un LLM en la nube. No se guarda nada.",
+          )}
+        </p>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-subtle">
+          <code className="font-mono text-muted">POST {settings.dlp?.endpoint ?? "/api/v1/redact"}</code>
+          <Tooltip content={tr("Festgelegt in der Serverkonfiguration (DLP_TERMS).", "Set in the server configuration (DLP_TERMS).", "Definidos en la configuración del servidor (DLP_TERMS).")}>
+            <span tabIndex={0} className="tabular-nums">
+              {tr(
+                `${settings.dlp?.configured_terms ?? 0} eigene Sperrbegriffe`,
+                `${settings.dlp?.configured_terms ?? 0} custom blocked terms`,
+                `${settings.dlp?.configured_terms ?? 0} términos bloqueados propios`,
+              )}
+            </span>
+          </Tooltip>
         </p>
         <AutoTextarea
           minRows={2}
@@ -770,12 +958,12 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
           value={probe}
           onChange={(event) => setProbe(event.target.value)}
           name="dlp-probe"
-          aria-label={tr("Text für die Probe-Schwärzung", "Text for redaction test", "Texto para prueba de ocultación")}
-          placeholder={tr("Probetext einfügen, z. B. eine Zeile mit IBAN und E-Mail…", "Paste sample text, e.g. a line containing IBAN and email…", "Pegar texto de prueba, p. ej. IBAN y correo…")}
+          aria-label={tr("Text für die Testschwärzung", "Text for the redaction test", "Texto para la prueba de anonimización")}
+          placeholder={tr("Testtext einfügen, z. B. eine Zeile mit IBAN und E-Mail …", "Paste sample text, e.g. a line with an IBAN and an email …", "Pegar texto de prueba, p. ej. una línea con IBAN y correo …")}
         />
         <div className="flex justify-end">
           <button className="btn btn-sm" onClick={() => void runProbe()} disabled={busy || !probe.trim()}>
-            {busy && <Spinner size={11} />} {tr("Probe-Schwärzung", "Test Redaction", "Probar ocultación")}
+            {busy && <Spinner size={11} />} {tr("Schwärzung testen", "Test redaction", "Probar anonimización")}
           </button>
         </div>
         {result && (
@@ -800,9 +988,9 @@ function AppearanceSection() {
       <SectionTitle
         title={tr("Darstellung", "Appearance", "Apariencia")}
         text={tr(
-          "Farbschema und Arbeitssprache für Navigation, Meldungen, Copilot und Exporte.",
-          "Color theme and working language for navigation, status messages, Copilot and exported reports.",
-          "Tema de color e idioma de trabajo para navegación, mensajes, Copilot e informes.",
+          "Sprache der Oberfläche, des Copilot und der Exporte; beides gilt für diesen Browser.",
+          "Language of the interface, Copilot and exports; both apply to this browser.",
+          "Idioma de la interfaz, del Copilot y de las exportaciones; ambos se aplican a este navegador.",
         )}
       />
       <Field label={tr("Sprache / Language / Idioma", "Language / Sprache / Idioma", "Idioma / Language / Sprache")}>
@@ -813,7 +1001,7 @@ function AppearanceSection() {
           options={LANGUAGE_OPTIONS}
         />
       </Field>
-      <Field label={tr("Farbschema", "Color Theme", "Tema de color")}>
+      <Field label={tr("Farbschema", "Color theme", "Tema de color")}>
         <Segmented<ThemeChoice>
           ariaLabel={tr("Farbschema", "Color theme", "Tema de color")}
           value={choice}
@@ -825,13 +1013,6 @@ function AppearanceSection() {
           ]}
         />
       </Field>
-      <p className="text-xs text-subtle">
-        {tr(
-          "Beide Einstellungen gelten für diesen Browser (localStorage) und werden vor dem ersten Bildaufbau angewandt.",
-          "Both preferences are saved in this browser (localStorage) and applied before first paint.",
-          "Ambas preferencias se guardan en este navegador (localStorage) y se aplican antes del primer render.",
-        )}
-      </p>
     </div>
   );
 }
@@ -854,9 +1035,9 @@ function ConnectionSection({ open, health, onAccessChanged, notify }: {
       <SectionTitle
         title={tr("Verbindung", "Connection", "Conexión")}
         text={tr(
-          "Mit welchem Backend diese Oberfläche spricht. Lokal ist hier nichts einzustellen – relevant nur, wenn das Backend zentral auf einem Server mit Zugangsschutz läuft.",
-          "Which backend this interface talks to. Nothing to configure for local use – only relevant when the backend runs centrally on a protected server.",
-          "Con qué backend se comunica esta interfaz. En uso local no hay nada que configurar; solo es relevante si el backend se ejecuta en un servidor protegido.",
+          "Lokal ist hier nichts einzustellen. Ein Zugangsschlüssel ist nur nötig, wenn das Backend zentral mit Zugangsschutz läuft.",
+          "Nothing to configure for local use. An access key is only needed when the backend runs centrally with access control.",
+          "En uso local no hay nada que configurar. Solo se necesita una clave si el backend central tiene control de acceso.",
         )}
       />
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm">
@@ -882,15 +1063,15 @@ function ConnectionSection({ open, health, onAccessChanged, notify }: {
       {keyRequired || showKeyForm || accessKey ? (
         <>
           <Field
-            label={tr("Zugangsschlüssel (X-API-Key)", "Access Key (X-API-Key)", "Clave de acceso (X-API-Key)")}
-            hint={tr("Wert der Variable API_KEY auf dem Server. Wird nur in diesem Browser gespeichert.", "Value of the API_KEY variable on the server. Stored only in this browser.", "Valor de la variable API_KEY del servidor. Solo se guarda en este navegador.")}
+            label={tr("Zugangsschlüssel", "Access key", "Clave de acceso")}
+            hint={tr("Vom Administrator des Servers (API_KEY). Wird nur in diesem Browser gespeichert und als X-API-Key mitgesendet.", "From the server administrator (API_KEY). Stored only in this browser and sent as X-API-Key.", "Del administrador del servidor (API_KEY). Solo se guarda en este navegador y se envía como X-API-Key.")}
           >
             <input
-              className="input font-mono"
+              className="input font-mono placeholder:font-sans"
               type="password"
               value={accessKey}
               onChange={(event) => setAccessKeyState(event.target.value)}
-              placeholder={tr("Wert von API_KEY eingeben…", "Enter API_KEY value…", "Introducir valor de API_KEY…")}
+              placeholder={tr("Zugangsschlüssel einfügen …", "Paste access key …", "Pegar clave de acceso …")}
               name="access-key"
               autoComplete="off"
               spellCheck={false}
@@ -902,7 +1083,7 @@ function ConnectionSection({ open, health, onAccessChanged, notify }: {
               onClick={() => {
                 setAccessKey(accessKey.trim());
                 onAccessChanged();
-                notify("ok", tr("Zugangsschlüssel gespeichert", "Access key saved", "Clave de acceso guardada"), tr("Nur in diesem Browser (localStorage).", "Browser localStorage only.", "Solo en este navegador (localStorage)."));
+                notify("ok", tr("Zugangsschlüssel gespeichert", "Access key saved", "Clave de acceso guardada"), tr("Nur in diesem Browser.", "In this browser only.", "Solo en este navegador."));
               }}
             >
               {tr("Übernehmen", "Save", "Aplicar")}
@@ -911,18 +1092,10 @@ function ConnectionSection({ open, health, onAccessChanged, notify }: {
         </>
       ) : (
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowKeyForm(true)}>
-          <KeyRound size={13} aria-hidden="true" /> {tr("Zugangsschlüssel trotzdem hinterlegen", "Enter an access key anyway", "Introducir una clave de todos modos")}
+          <KeyRound size={13} aria-hidden="true" /> {tr("Zugangsschlüssel eingeben", "Enter access key", "Introducir clave de acceso")}
         </button>
       )}
 
-      <p className="flex gap-2 text-xs leading-relaxed text-subtle">
-        <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
-        {tr(
-          "Für einen zentralen Server die Backend-Adresse beim Build setzen (NEXT_PUBLIC_API_BASE_URL bzw. PUBLIC_API_URL im Container). Unter Windows 127.0.0.1 statt localhost – das vermeidet den IPv6-Umweg.",
-          "For a central server, set the backend address at build time (NEXT_PUBLIC_API_BASE_URL, or PUBLIC_API_URL in the container). On Windows use 127.0.0.1 instead of localhost to avoid the IPv6 detour.",
-          "Para un servidor central, defina la dirección del backend al compilar (NEXT_PUBLIC_API_BASE_URL o PUBLIC_API_URL en el contenedor). En Windows use 127.0.0.1 en lugar de localhost.",
-        )}
-      </p>
     </div>
   );
 }
@@ -939,14 +1112,14 @@ function AboutSection({ version, release, checking, notify }: {
       <SectionTitle
         title={tr("Über", "About", "Acerca de")}
         text={tr(
-          `Enterprise Compliance Agent${version ? ` v${version}` : ""}. Neue Releases per Klick installieren – mit automatischer Datenbanksicherung und Erhalt aller lokalen Daten.`,
-          `Enterprise Compliance Agent${version ? ` v${version}` : ""}. Install new releases in one click – with automatic database backups and preserved local data.`,
-          `Enterprise Compliance Agent${version ? ` v${version}` : ""}. Instala nuevas versiones en un clic con copia de seguridad automática.`,
+          "Enterprise Compliance Agent – Updates per Klick, vorher wird die Datenbank automatisch gesichert.",
+          "Enterprise Compliance Agent – one-click updates with an automatic database backup first.",
+          "Enterprise Compliance Agent: actualizaciones en un clic con copia de seguridad automática previa.",
         )}
       />
       <ReleasePanel initial={release} installedVersion={version} externalChecking={checking} notify={notify} />
       <div className="border-t border-line pt-4">
-        <p className="label-caps">{tr("Regulatorischer Stand", "Regulatory Baseline", "Marco normativo")}</p>
+        <p className="label-caps">{tr("Regulatorischer Stand", "Regulatory baseline", "Marco normativo")}</p>
         <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
           <li>{tr("EU AI Act – VO (EU) 2024/1689; Anhang-III-Pflichten ab 02.12.2027 (VO (EU) 2026/1744)", "EU AI Act – Reg. (EU) 2024/1689; Annex III obligations from 02 Dec 2027 (Reg. (EU) 2026/1744)", "Reglamento IA – Reg. (UE) 2024/1689; obligaciones Anexo III desde 02/12/2027")}</li>
           <li>{tr("§ 14 Abs. 4 UStG, E-Rechnung nach EN 16931; XML-Vorrang nach BMF-Schreiben vom 15.10.2024, Rz. 36", "Sec. 14(4) UStG, E-Invoice under EN 16931; XML precedence under BMF 15 Oct 2024", "§ 14(4) UStG, factura electrónica EN 16931; prioridad XML según circular BMF 15/10/2024")}</li>
@@ -994,11 +1167,11 @@ export function SettingsModal({ open, settings, health, version, onClose, onSave
   }, [open]);
 
   const sections: { key: Section; label: string; icon: React.ReactNode }[] = [
-    { key: "ai", label: tr("KI", "AI", "IA"), icon: <Sliders size={15} aria-hidden="true" /> },
+    { key: "ai", label: tr("KI-Einrichtung", "AI setup", "Configuración IA"), icon: <Bot size={16} aria-hidden="true" /> },
     { key: "compliance", label: "Compliance", icon: <Scale size={15} aria-hidden="true" /> },
     { key: "appearance", label: tr("Darstellung", "Appearance", "Apariencia"), icon: <Palette size={15} aria-hidden="true" /> },
     { key: "connection", label: tr("Verbindung", "Connection", "Conexión"), icon: <Server size={15} aria-hidden="true" /> },
-    { key: "about", label: tr("Über", "About", "Acerca de"), icon: <ArrowUpCircle size={15} aria-hidden="true" /> },
+    { key: "about", label: tr("Über", "About", "Acerca de"), icon: <Info size={15} aria-hidden="true" /> },
   ];
   return (
     <Modal open={open} onClose={onClose} title={tr("Einstellungen", "Settings", "Ajustes")} width="max-w-5xl" padded={false}>

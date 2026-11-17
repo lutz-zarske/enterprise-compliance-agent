@@ -95,7 +95,7 @@ class OllamaUnavailableError(LLMError):
 
     code = "ollama_unavailable"
     hint = (
-        "Lokale KI starten (Einstellungen › KI) oder im Terminal 'ollama serve' ausführen; "
+        "Lokale KI starten (Einstellungen › KI-Einrichtung) oder im Terminal 'ollama serve' ausführen; "
         "Erreichbarkeit mit scripts/smoke_test_ollama.py prüfen."
     )
     failover = True
@@ -117,7 +117,7 @@ class OllamaTimeoutError(LLMError):
     """
 
     code = "llm_timeout"
-    hint = "OLLAMA_TIMEOUT_SECONDS erhöhen oder ein kleineres Modell verwenden."
+    hint = "Ein kleineres lokales Modell wählen oder das Zeitlimit in der Serverkonfiguration anheben."
     failover = True
 
 

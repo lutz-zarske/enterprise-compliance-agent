@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
-import { cx, formatDate, formatModel, providerLabel } from "../lib/format";
+import { cx, formatDate, formatModel, providerLabel, TONE_TEXT, toneForScore } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import type { DocumentDetail, DocumentSummary, LedgerEntry, LedgerVerification } from "../types/api";
 import { BookOpen, Download, Fingerprint, Layers, Lock, Package, RefreshCw, Scale, ShieldAlert, ShieldCheck } from "./icons";
@@ -129,7 +129,7 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
                 {entry.model_name && <span className="block truncate text-subtle">{formatModel(entry.model_name)}</span>}
               </td>
               <td className="border-b border-line px-3 py-2 text-muted [overflow-wrap:anywhere]">{td(entry.result_summary)}</td>
-              <td className="border-b border-line px-3 py-2 text-right tabular-nums text-fg">{entry.compliance_score ?? "–"}</td>
+              <td className={cx("border-b border-line px-3 py-2 text-right font-medium tabular-nums", entry.compliance_score == null ? "text-subtle" : TONE_TEXT[toneForScore(entry.compliance_score)])}>{entry.compliance_score ?? "–"}</td>
               <td className="whitespace-nowrap border-b border-line px-3 py-2"><HashBadge value={entry.entry_hash} label="SHA-256" /></td>
             </tr>
           );

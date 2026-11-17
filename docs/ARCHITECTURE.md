@@ -150,7 +150,7 @@ frontend/src/
   components/JobMonitor   Kopfzeilen-Pille, Phasen, Restzeit, zweistufiger Abbruch, 12-s-Nachlauf
   components/CopilotView  Gespräch mit Live-Arbeitsschritten, Belegtext mit [Z. n]-Sprung
   components/ProtocolView Hash-Kette, Exporte, Regelwerk
-  components/SettingsModal Zwei Spalten: KI (Modelle, Ausweich-Kaskade), Compliance, Darstellung, Verbindung, Über
+  components/SettingsModal Zwei Spalten: KI-Einrichtung (Modelle, Ausweich-Kaskade), Compliance, Darstellung, Verbindung, Über
   components/ui           Portal-Tooltip, PillTabs, ProgressBar, AutoTextarea, HashBadge …
   lib/popover.ts          Popover-Lage im Fenster und Popover-Bus (höchstens eines offen)
   lib/useJobs.ts          Warteschlange abfragen, Abschluss genau einmal melden
@@ -270,7 +270,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (331 Tests, Stand v2.6.1) deckt die Kette vom HTTP-Request bis zur
+`pytest` (332 Tests, Stand v2.6.2) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die

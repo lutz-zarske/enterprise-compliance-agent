@@ -459,7 +459,7 @@ def test_ueberlast_meldung_nennt_die_tatsaechliche_ursache() -> None:
     # Nur ein Key, keine Ausweich-Stufe: Ursache plus konkreter nächster Schritt.
     single = fallback_explanation(ProviderUnavailableError(overload_message("Gemini", 503)), stages=1)
     assert single.startswith("Gemini ist vorübergehend überlastet (HTTP 503).")
-    assert "Einstellungen › KI › Ausweich-Kaskade" in single
+    assert "Einstellungen › KI-Einrichtung › Ausweich-Kaskade" in single
     # Mit Kaskade: kein Ratschlag, eine Kaskade anzulegen, sondern der Hinweis auf alle Stufen.
     chain = fallback_explanation(ProviderUnavailableError(overload_message("Claude", 529)), stages=3)
     assert chain.endswith("Auch die übrigen 2 Stufen der Ausweich-Kaskade antworteten nicht.")
@@ -531,3 +531,21 @@ def test_gemini_verbindungstest_erkennt_503_ueberlast(
     assert result["code"] == "provider_unavailable"
     assert "503" in result["message"]
     assert fake_gemini.calls[0]["body"]["generationConfig"]["maxOutputTokens"] == 1
+
+
+def test_verbindungstest_mehrfachklick_pingt_nur_einmal(
+    make_full_client: Callable[..., TestClient], fake_gemini: FakeGemini
+) -> None:
+    """Mehrfachklicks auf „Speichern“ verbrauchen kein Anfragelimit: derselbe Test kommt aus dem Speicher."""
+    client = _gemini_client(make_full_client, fake_gemini)
+    first = client.post("/api/settings/test-connection", json={"provider": "gemini"}).json()
+    second = client.post("/api/settings/test-connection", json={"provider": "gemini"}).json()
+    assert first["ok"] is True and "cached" not in first
+    assert second["ok"] is True and second["cached"] is True
+    assert len(fake_gemini.calls) == 1
+
+    # Ein neuer Schlüssel ist eine neue Konfiguration und wird wieder echt geprüft.
+    client.post("/api/settings", json={"api_keys": {"gemini": "AIza-zweiter-key-987654"}})
+    third = client.post("/api/settings/test-connection", json={"provider": "gemini"}).json()
+    assert "cached" not in third
+    assert len(fake_gemini.calls) == 2

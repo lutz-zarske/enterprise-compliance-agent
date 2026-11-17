@@ -33,7 +33,7 @@ class BudgetExceededError(LLMError):
     """Tagesbudget fuer Cloud-Tokens aufgebraucht."""
 
     code = "cloud_budget_exceeded"
-    hint = "CLOUD_DAILY_TOKEN_LIMIT anheben oder lokal prüfen - lokale Modelle sind nicht begrenzt."
+    hint = "Bis morgen lokal prüfen – lokale Modelle sind nicht begrenzt – oder das Tageslimit in der Serverkonfiguration anheben."
     failover = True
     retry = False
 

@@ -10,6 +10,7 @@ konkretem Handlungshinweis.  Analysen laufen als Hintergrund-Jobs
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import secrets
@@ -56,6 +57,7 @@ from app.runtime_settings import (
     SUGGESTED_MODELS,
     InferenceMode,
     RuntimeSettingsStore,
+    RuntimeSnapshot,
     SettingsError,
 )
 from app.model_catalog import parse_catalog, suggest_upgrade
@@ -119,6 +121,8 @@ _api_key_scheme = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
 
 #: Grenze fuer den gepufferten Upload-Lesevorgang.
 _CHUNK_SIZE = 1024 * 1024
+#: So lange gilt ein Cloud-Verbindungstest als aktuell (Schutz vor Mehrfachklicks).
+CONNECTION_TEST_TTL_SECONDS = 15.0
 
 DESCRIPTION = """\
 Institutionelles Backend zur automatisierten Prüfung von Geschäftsdokumenten.
@@ -561,6 +565,10 @@ async def _procedural_doc(
 
 
 def _register_routes(application: FastAPI) -> None:
+    # Verbindungstest: je (Anbieter, Modell, Schlüssel) kurz merken und nacheinander ausführen -
+    # Mehrfachklicks verbrauchen so kein Anfragelimit beim Anbieter.
+    connection_tests: dict[tuple[str, str, str], tuple[float, dict[str, object]]] = {}
+    connection_test_lock = asyncio.Lock()
     error_responses: dict[int | str, dict[str, object]] = {
         401: {"model": ErrorResponse, "description": "API-Key fehlt oder ist ungültig"},
         404: {"model": ErrorResponse, "description": "Dokument nicht gefunden"},
@@ -1428,11 +1436,30 @@ def _register_routes(application: FastAPI) -> None:
                                        + (f" Installiert ist {suggestion} – per Klick übernehmen." if suggestion else "")}
                 message = f"Ollama erreichbar, Modell {model} installiert."
             else:
-                router: InferenceRouter = request.app.state.router
-                message = await router.cloud_client(mode, snap).test_connection()
+                return await _cloud_connection_test(request, mode, model, snap)
         except LLMError as exc:
             return {"ok": False, "provider": mode.value, "model": model, "message": str(exc), "code": exc.code}
         return {"ok": True, "provider": mode.value, "model": model, "message": message}
+
+    async def _cloud_connection_test(
+        request: Request, mode: InferenceMode, model: str, snap: RuntimeSnapshot
+    ) -> dict[str, object]:
+        """Cloud-Ping höchstens einmal je CONNECTION_TEST_TTL_SECONDS und Konfiguration."""
+        fingerprint = hashlib.sha256((snap.key_for(mode.value) or "").encode()).hexdigest()[:16]
+        cache_key = (mode.value, model, fingerprint)
+        async with connection_test_lock:
+            cached = connection_tests.get(cache_key)
+            if cached and time.monotonic() - cached[0] < CONNECTION_TEST_TTL_SECONDS:
+                return {**cached[1], "cached": True}
+            try:
+                router: InferenceRouter = request.app.state.router
+                message = await router.cloud_client(mode, snap).test_connection()
+                result: dict[str, object] = {"ok": True, "provider": mode.value, "model": model, "message": message}
+            except LLMError as exc:
+                result = {"ok": False, "provider": mode.value, "model": model, "message": str(exc), "code": exc.code}
+            connection_tests.clear()
+            connection_tests[cache_key] = (time.monotonic(), result)
+            return result
 
     # --- Release-Assistent -------------------------------------------------
     @application.get(

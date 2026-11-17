@@ -97,8 +97,8 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-fg">
-          {tr("Installiert:", "Installed:", "Instalado:")} <span className="tabular-nums">v{status?.current_version ?? installedVersion ?? "…"}</span>
-          {status?.current_commit && <span className="ml-2 text-xs tabular-nums text-subtle">{status.current_commit.slice(0, 10)}</span>}
+          {tr("Version", "Version", "Versión")} <span className="font-medium tabular-nums">{status?.current_version ?? installedVersion ?? "…"}</span>
+          {status?.current_commit && <span className="ml-2 font-mono text-xs text-subtle">{status.current_commit.slice(0, 10)}</span>}
         </p>
         <button className="btn" onClick={() => void check()} disabled={searching || busy}>
           {searching ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />} {tr("Nach Updates suchen", "Check for updates", "Buscar actualizaciones")}
@@ -111,7 +111,7 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
       )}
       {!searching && status && status.git && !latest && (
         <p className="flex items-center gap-2 text-xs text-ok">
-          <CheckCircle size={14} aria-hidden="true" /> {tr("Aktuellste Version installiert.", "Latest version is installed.", "Última versión instalada.")}
+          <CheckCircle size={14} aria-hidden="true" /> {tr("Aktuellste Version.", "Latest version.", "Versión más reciente.")}
         </p>
       )}
 
@@ -147,9 +147,9 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
           )}
           <p className="text-xs leading-relaxed text-muted">
             {tr(
-              "Lokale Daten, Einstellungen, API-Keys und geprüfte Belege (data/agent.db, .env) bleiben vollständig erhalten. Vor dem Update legt das System automatisch eine Sicherungskopie unter data/backups/ an.",
-              "Local data, settings, API keys and audited documents (data/agent.db, .env) are preserved. A backup is automatically created in data/backups/ before updating.",
-              "Los datos locales, ajustes, claves API y documentos (data/agent.db, .env) se conservan. Se crea una copia en data/backups/ automáticamente.",
+              "Belege, Einstellungen und API-Keys bleiben erhalten; vorher wird die Datenbank nach data/backups/ gesichert.",
+              "Documents, settings and API keys are kept; the database is backed up to data/backups/ first.",
+              "Se conservan documentos, ajustes y claves API; antes se guarda una copia de la base de datos en data/backups/.",
             )}
           </p>
           <div className="flex justify-end">

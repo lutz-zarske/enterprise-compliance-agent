@@ -361,27 +361,38 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
 
         <div className="scroll-area min-h-0 flex-1 space-y-4 px-4 py-4">
           {messages.length === 0 && (
-            <div className="space-y-3">
-              <p className="text-xs leading-relaxed text-subtle">
-                {tr(
-                  `Fragen zu ${document.filename}. Antworten stützen sich ausschließlich auf den Belegtext und das Prüfergebnis und verweisen auf Zeilen ([Z. n]) und Normen. Ein Klick auf einen Zeilenverweis zeigt die Stelle im Beleg.`,
-                  `Questions about ${document.filename}. Answers rely strictly on the document text and audit findings, citing lines ([Z. n]) and statutes. Click any citation to jump to the source line.`,
-                  `Preguntas sobre ${document.filename}. Las respuestas se basan exclusivamente en el documento y los hallazgos, citando líneas ([Z. n]) y normativa.`,
+            <div className="flex h-full flex-col justify-center py-4">
+              <div className="mx-auto w-full max-w-xl">
+                <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-accent-line bg-accent-soft text-accent" aria-hidden="true">
+                  <MessageSquare size={18} />
+                </span>
+                <h3 className="mt-3 text-center text-sm font-semibold text-fg">
+                  {tr("Fragen zum Beleg", "Ask about this document", "Preguntas sobre el documento")}
+                </h3>
+                <p className="mx-auto mt-1 max-w-[56ch] text-center text-xs leading-relaxed text-subtle">
+                  {tr(
+                    "Antworten stützen sich nur auf Belegtext und Prüfergebnis und nennen Zeilen und Normen. Ein Klick auf einen Zeilenverweis zeigt die Stelle im Beleg.",
+                    "Answers rely only on the document text and audit findings, citing lines and statutes. Click a line reference to see it in the document.",
+                    "Las respuestas se basan solo en el documento y los hallazgos, citando líneas y normas. Un clic en una referencia muestra la línea.",
+                  )}
+                </p>
+                {suggestions.length > 0 && (
+                  <ul className="mt-5 grid gap-2">
+                    {suggestions.map((suggestion) => (
+                      <li key={suggestion.label}>
+                        <button
+                          type="button"
+                          onClick={() => void ask(suggestion.prompt)}
+                          className="group flex w-full items-center gap-3 rounded-lg border border-line px-3.5 py-2.5 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-hover"
+                        >
+                          <span className="min-w-0 flex-1">{suggestion.label}</span>
+                          <Send size={13} aria-hidden="true" className="shrink-0 text-subtle transition-colors duration-150 group-hover:text-accent" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </p>
-              {suggestions.length > 0 && (
-                <div className="grid grid-cols-1 gap-2">
-                  {suggestions.map((suggestion) => (
-                    <button
-                      key={suggestion.label}
-                      onClick={() => void ask(suggestion.prompt)}
-                      className="rounded-lg border border-line px-3 py-2 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-hover"
-                    >
-                      {suggestion.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              </div>
             </div>
           )}
           {messages.map((message, index) =>

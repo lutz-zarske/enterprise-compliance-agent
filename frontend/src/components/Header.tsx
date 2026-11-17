@@ -168,9 +168,9 @@ function ModelStatus({ health, settings }: { health: HealthResponse | null; sett
                     "No disponible – el motor de reglas completa las auditorías (marcado).",
                   )
                 : tr(
-                    "Kein API-Key hinterlegt – Einstellungen › KI.",
-                    "No API key configured – Settings › AI.",
-                    "Sin clave API configurada – Ajustes › IA.",
+                    "Kein API-Key hinterlegt – Einstellungen › KI-Einrichtung.",
+                    "No API key configured – Settings › AI setup.",
+                    "Sin clave API configurada – Ajustes › Configuración IA.",
                   )}
             </span>
           )}

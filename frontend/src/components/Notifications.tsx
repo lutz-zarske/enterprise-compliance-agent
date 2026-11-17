@@ -187,9 +187,9 @@ export function Notifications({ health, settings, ledger, online, onOpenSettings
       tone: "warn",
       title: tr("Cloud-Tagesbudget erreicht", "Daily cloud budget reached", "Presupuesto diario alcanzado"),
       text: tr(
-        "Bis morgen prüfen lokale Stufen bzw. das Regelwerk; Limit über CLOUD_DAILY_TOKEN_LIMIT.",
-        "Local stages or the rule engine handle audits until tomorrow; configured via CLOUD_DAILY_TOKEN_LIMIT.",
-        "Las etapas locales o el motor de reglas continuarán hasta mañana.",
+        "Bis Mitternacht prüfen lokale Stufen bzw. das Regelwerk.",
+        "Local stages or the ruleset handle audits until midnight.",
+        "Hasta medianoche analizan los niveles locales o el motor de reglas.",
       ),
     });
   }

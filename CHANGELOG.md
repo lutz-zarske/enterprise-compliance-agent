@@ -3,6 +3,25 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.6.2 – 17.11.2026
+
+**KI-Einrichtung**
+
+- Einstellungen in der Reihenfolge Anbieter → API-Key → Modelle: Der Key lässt sich erst nach Wahl des Anbieters eingeben, die Modell-Liste erst nach gespeichertem Key wählen (der Anbieter liefert sie nur mit Key).
+- Ein Knopf „Speichern“: speichert und prüft danach die Verbindung; währenddessen gesperrt, das Ergebnis steht als „Verbunden“ mit Haken daneben. Ohne Änderung bleibt der Knopf nach erfolgreichem Test gesperrt.
+- Verbindungstest im Backend gegen Mehrfachklicks geschützt: Derselbe Test (Anbieter, Modell, Schlüssel) wird 15 s lang aus dem Speicher beantwortet und nie parallel ausgeführt – kein verbrauchtes Anfragelimit beim Anbieter mehr.
+- Reiter „KI-Einrichtung“ mit eigenem Symbol; Ausweich-Kaskade als Stufenfolge; „Cloud-Verbrauch heute“ statt Variablenname, Tageslimit mit Fortschrittsbalken.
+
+**Texte und Oberfläche**
+
+- Einstellungen sprachlich gestrafft; Konfigurationsvariablen (z. B. `CLOUD_DAILY_TOKEN_LIMIT`, `HEURISTIC_FALLBACK`, `DLP_TERMS`) nicht mehr im Fließtext, sondern nur noch in Tooltips bzw. der Dokumentation. Auch Fehlerhinweise des Backends nennen keine Variablen mehr.
+- „Über“ zeigt „Version 2.6.2“ und „Aktuellste Version.“ statt doppeltem „installiert“.
+- Copilot ohne Verlauf mit ruhigem Einstieg und Vorschlagskarten; Scores im Prüfprotokoll nach Ampel eingefärbt.
+
+**Sicherheit**
+
+- Next.js 15.5.25 → 15.5.29 (u. a. GHSA-2464-fhr4-w9xw, GHSA-4jqv-mc3x-m676), PostCSS über `overrides` auf 8.5.32, `sharp` und `source-map-js` aktualisiert: `npm audit --omit=dev` meldet 0 Schwachstellen.
+
 ## v2.6.1 – 17.11.2026
 
 **Updater und Start**

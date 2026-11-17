@@ -152,6 +152,12 @@ export function toneForBand(band: ScoreBand | null | undefined): Tone {
   return "neutral";
 }
 
+/** Band zu einem Score - dieselben Schwellen wie ``band_for`` in app/scoring.py (85 / 60). */
+export function toneForScore(score: number | null | undefined): Tone {
+  if (score == null) return "neutral";
+  return score >= 85 ? "ok" : score >= 60 ? "warn" : "bad";
+}
+
 export function toneForStatus(status: CheckStatus): Tone {
   return status === "pass" ? "ok" : status === "warn" ? "warn" : status === "fail" ? "bad" : "neutral";
 }
