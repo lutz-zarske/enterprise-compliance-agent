@@ -16,7 +16,7 @@ import { OverrideModal } from "../components/OverrideModal";
 import { ProtocolView } from "../components/ProtocolView";
 import { UpdaterLock } from "../components/ReleaseAssistant";
 import { Scorecard } from "../components/Scorecard";
-import { SettingsModal } from "../components/SettingsModal";
+import { prefetchModelCatalog, SettingsModal } from "../components/SettingsModal";
 import { SealModal } from "../components/SignOffPanel";
 import { meldeBereit } from "../components/SplashAbbau";
 import { EmptyState, HashBadge, isModEnter, isTypingTarget, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
@@ -106,10 +106,12 @@ export default function DashboardPage() {
     [notify, td],
   );
 
+  // Ansicht nur je Browser-Tab merken: Neuladen (etwa nach einem Update) bleibt in der Ansicht,
+  // ein neuer Start über den Starter öffnet immer „Prüfung“.
   const setView = useCallback((next: View) => {
     setViewState(next);
     try {
-      window.localStorage.setItem(VIEW_STORAGE, next);
+      window.sessionStorage.setItem(VIEW_STORAGE, next);
     } catch {
       /* privater Modus */
     }
@@ -117,7 +119,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(VIEW_STORAGE);
+      window.localStorage.removeItem(VIEW_STORAGE); // Altstand bis v2.6.2
+      const stored = window.sessionStorage.getItem(VIEW_STORAGE);
       if (stored === "workspace" || stored === "copilot" || stored === "protocol") setViewState(stored);
     } catch {
       /* privater Modus */
@@ -181,6 +184,7 @@ export default function DashboardPage() {
       setHealth(h);
       setOffline(false);
       setSettings(runtime);
+      prefetchModelCatalog(runtime);
       if (!selectedRef.current && items.length) setSelectedId(items[0].id);
       if (selectedRef.current) await loadDetail(selectedRef.current);
     } catch (err) {

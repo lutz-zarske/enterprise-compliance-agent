@@ -475,6 +475,8 @@ export interface CloudBudget {
   limit: number;
   enabled: boolean;
   remaining: number | null;
+  /** Obergrenze aus der Serverkonfiguration; null = frei wählbar. */
+  max: number | null;
 }
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
@@ -602,6 +604,8 @@ export interface SettingsUpdate {
   pii_strictness?: PiiStrictness;
   enforce_ustg_check?: boolean;
   ai_act_escalation?: boolean;
+  /** Tageslimit für Cloud-Tokens; -1 = ohne Limit. */
+  cloud_daily_token_limit?: number;
   fallbacks?: InferenceMode[];
   ausweich_modelle?: Partial<Record<CloudMode, string>>;
   ausweich_schluessel?: { id: string; provider: CloudMode; model?: string; api_key?: string }[];

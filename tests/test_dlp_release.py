@@ -182,6 +182,8 @@ def test_neustart_nur_ueber_den_windows_starter(tmp_path: Path, monkeypatch: pyt
     # Erst stoppen, dann ohne neues Browserfenster starten - die Updater-Sperre laedt selbst neu.
     assert inner.index("Stop_Compliance_Agent.ps1") < inner.index("Start_Compliance_Agent.ps1")
     assert inner.rstrip().endswith("-NoBrowser")
+    # Unsichtbar starten: SW_HIDE, sonst öffnet Windows 11 ein Terminal-Fenster.
+    assert "ShowWindow = [uint16]0" in calls[-1][-1] and "ProcessStartupInformation = $si" in calls[-1][-1]
 
     returncode = 1
     assert manager.schedule_restart_if_managed() is False

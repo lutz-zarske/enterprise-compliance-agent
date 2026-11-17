@@ -39,9 +39,10 @@ from app.ai_budget import CloudBudget
 from app.audit_ledger import NO_DOCUMENT_HASH, SYSTEM_DOCUMENT_ID, AuditEventType, AuditLedger
 from app.config import APP_TITLE, APP_VERSION, BASE_DIR, Settings, get_settings
 from app.db import DocumentRecord, build_repository, utcnow
+from app.docx_export import render_docx
 from app.gobd_export import build_gobd_package
 from app.jobs import Job, JobContext, JobManager
-from app.procedural_doc import build_procedural_doc
+from app.procedural_doc import build_procedural_doc, procedural_ui
 from app.procedural_doc import render_html as render_procedural_html
 from app.procedural_doc import render_markdown as render_procedural_markdown
 from app.inference import InferenceRouter
@@ -51,7 +52,7 @@ from app.providers import (
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
-from app.reporting import REPORT_CSP, build_report, render_html, render_markdown
+from app.reporting import REPORT_CSP, build_report, export_stem, render_html, render_markdown, report_title
 from app.runtime_settings import (
     CLOUD_PROVIDERS,
     SUGGESTED_MODELS,
@@ -186,7 +187,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     signer = SystemSigner(settings.data_dir / ".signing.key")
     ledger = AuditLedger(engine, signer=signer)
     runtime = RuntimeSettingsStore(settings, engine)
-    budget = CloudBudget(settings.cloud_daily_token_limit, settings.data_dir / "ai_usage.json")
+    budget = CloudBudget(runtime.cloud_daily_token_limit, settings.data_dir / "ai_usage.json")
     router = InferenceRouter(
         settings, runtime, llm, cloud_transport=getattr(app.state, "cloud_transport", None), budget=budget
     )
@@ -527,9 +528,14 @@ def _settings_view(request: Request) -> dict[str, object]:
         **runtime.public_view(),
         "heuristic_fallback": settings.heuristic_fallback,
         "retry_delays": list(settings.retry_delays),
-        "cloud_budget": budget.status() if budget else None,
+        "cloud_budget": {**budget.status(), "max": runtime.cloud_daily_token_limit_max} if budget else None,
         "dlp": {"ruleset_version": DLP_RULESET, "configured_terms": len(terms), "endpoint": "/api/v1/redact"},
     }
+
+
+def _export_name(prefix: str, original_filename: str, extension: str) -> str:
+    """Download-Name: Prefix_Beleg_JJJJ-MM-TT.ext (Exportdatum, UTC) - eindeutig je Beleg und Tag."""
+    return f"{prefix}_{export_stem(original_filename)}_{utcnow().date().isoformat()}.{extension}"
 
 
 def _attachment_header(filename: str, disposition: Literal["attachment", "inline"] = "attachment") -> str:
@@ -1003,14 +1009,14 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/documents/{document_id}/export/procedural-doc",
         tags=["Human Oversight"],
-        summary="GoBD-Verfahrensdokumentation (Entwurf) mit Prüfpfad des Belegs (html | markdown)",
+        summary="GoBD-Verfahrensdokumentation (Entwurf) mit Prüfpfad des Belegs (html | markdown | docx)",
         dependencies=[Depends(require_api_key)],
         responses=error_responses,
     )
     async def export_procedural_doc(
         request: Request,
         document_id: str = Path(...),
-        doc_format: Literal["html", "markdown"] = Query("html", alias="format"),
+        doc_format: Literal["html", "markdown", "docx"] = Query("html", alias="format"),
         lang: Literal["de", "en", "es"] = Query("de"),
         service: DocumentService = Depends(get_service),
     ) -> Response:
@@ -1018,21 +1024,32 @@ def _register_routes(application: FastAPI) -> None:
 
         Organisatorische Angaben, die das System nicht kennt, sind als
         ``[vom Unternehmen zu ergänzen]`` markiert. Aufbewahrung: 10 Jahre
-        (§ 147 Abs. 1 Nr. 1 AO).
+        (§ 147 Abs. 1 Nr. 1 AO). ``format=docx`` liefert eine Word-Datei zum Ergänzen
+        der Platzhalter und Fortschreiben.
         """
         record = await service.require_document(document_id)
         doc = await _procedural_doc(request, record, lang=lang)
-        stem = record.original_filename.rsplit(".", 1)[0]
         prefix = {"de": "Verfahrensdokumentation", "en": "ProceduralDocumentation", "es": "DocumentacionProcedimientos"}[lang]
         if doc_format == "markdown":
             return PlainTextResponse(
                 render_procedural_markdown(doc, lang=lang),
                 media_type="text/markdown; charset=utf-8",
-                headers={"Content-Disposition": _attachment_header(f"{prefix}_{stem}.md")},
+                headers={"Content-Disposition": _attachment_header(_export_name(prefix, record.original_filename, "md"))},
+            )
+        if doc_format == "docx":
+            data = await anyio.to_thread.run_sync(partial(render_docx, doc, procedural_ui(lang)))
+            return Response(
+                data,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={"Content-Disposition": _attachment_header(_export_name(prefix, record.original_filename, "docx"))},
             )
         return HTMLResponse(
             render_procedural_html(doc, lang=lang),
-            headers={"Content-Security-Policy": REPORT_CSP, "X-Content-Type-Options": "nosniff"},
+            headers={
+                "Content-Security-Policy": REPORT_CSP,
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": _attachment_header(_export_name(prefix, record.original_filename, "html"), "inline"),
+            },
         )
 
     @application.post(
@@ -1107,18 +1124,17 @@ def _register_routes(application: FastAPI) -> None:
         report = build_report(
             record, await ledger.list(document_id=document_id, limit=50), await ledger.verify_chain(), lang=lang
         )
-        stem = record.original_filename.rsplit(".", 1)[0]
-        prefix = {"de": "Pruefzertifikat", "en": "AuditCertificate", "es": "CertificadoAuditoria"}[lang]
+        title = report_title(report, lang)
         if report_format == "json":
             return JSONResponse(
                 report,
-                headers={"Content-Disposition": _attachment_header(f"{prefix}_{stem}.json", "inline")},
+                headers={"Content-Disposition": _attachment_header(f"{title}.json", "inline")},
             )
         if report_format == "markdown":
             return PlainTextResponse(
                 render_markdown(report, lang=lang),
                 media_type="text/markdown; charset=utf-8",
-                headers={"Content-Disposition": _attachment_header(f"{prefix}_{stem}.md", "inline")},
+                headers={"Content-Disposition": _attachment_header(f"{title}.md", "inline")},
             )
         return HTMLResponse(
             render_html(report, lang=lang),
@@ -1175,14 +1191,13 @@ def _register_routes(application: FastAPI) -> None:
                 procedural_doc_html=procedural,
             )
         )
-        stem = record.original_filename.rsplit(".", 1)[0]
         pkg_prefix = {"de": "Pruefdatenpaket", "en": "AuditDataPackage", "es": "PaqueteAuditoria"}[lang]
         logger.info("Prüfdatenpaket für %s erzeugt (%s Bytes).", record.id, len(data))
         return Response(
             data,
             media_type="application/zip",
             headers={
-                "Content-Disposition": _attachment_header(f"{pkg_prefix}_{stem}.zip"),
+                "Content-Disposition": _attachment_header(_export_name(pkg_prefix, record.original_filename, "zip")),
                 "X-Content-SHA256": hashlib.sha256(data).hexdigest(),
             },
         )
@@ -1347,6 +1362,9 @@ def _register_routes(application: FastAPI) -> None:
         """
         before = runtime.snapshot().fingerprint()
         after = (await runtime.update(body.model_dump(exclude_none=True))).fingerprint()
+        budget: CloudBudget | None = getattr(request.app.state, "budget", None)
+        if budget is not None:
+            budget.limit = runtime.cloud_daily_token_limit
         logger.info(
             "Einstellungen geändert: %s",
             ", ".join(sorted(body.model_dump(exclude_none=True).keys())),

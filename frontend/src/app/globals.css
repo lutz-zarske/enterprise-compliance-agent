@@ -425,6 +425,53 @@ body {
     scrollbar-color: var(--scroll-thumb-hover) transparent;
   }
 
+  /* --- Copilot-Eingabe: Textfeld und Senden in einer Fläche --------------- */
+  .composer {
+    border-radius: 0.75rem;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  }
+  .composer:hover {
+    border-color: var(--line-strong);
+  }
+  .composer:focus-within {
+    border-color: var(--accent);
+    background: var(--surface-solid);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+  .composer .input,
+  .composer .input:hover,
+  .composer .input:focus {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+  .composer-send {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    width: 2rem;
+    border-radius: 0.5rem;
+    background: var(--primary-bg);
+    color: var(--primary-fg);
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  .composer-send:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+  .composer-send:disabled {
+    background: color-mix(in srgb, var(--fg) 8%, transparent);
+    color: var(--fg-subtle);
+    cursor: not-allowed;
+  }
+  .composer-send:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
   /* --- Segmentschalter (PillTabs) mit gleitendem Indikator ----------------- */
   .pill-tabs {
     position: relative;

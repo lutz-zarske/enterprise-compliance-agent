@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 331 pytest](https://img.shields.io/badge/pytest-332_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 337 pytest](https://img.shields.io/badge/pytest-337_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -24,7 +24,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > every result lands in a SHA-256 hash chain with Ed25519-signed reviewer
 > events, and a fail-safe AI cascade (local Ollama or cloud LLMs behind a
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
-> FastAPI · Next.js 15 · 332 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 337 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -147,7 +147,11 @@ Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
 |---|---|
 | ![Copilot mit Antwort, Zeilenverweisen und hervorgehobener Belegzeile](docs/screenshots/copilot.png) | ![Prüfprotokoll mit Hash-Kette, Ed25519-Status, Exporten und Regelwerk](docs/screenshots/protokoll.png) |
 | **Laufende Prüfung mit Job-Monitor** | **Einstellungen: Ausweich-Kaskade** |
-| ![Job-Monitor in der Kopfzeile, Phasen, Restzeit und Hinweis auf automatischen Neuversuch](docs/screenshots/job-monitor.png) | ![Zweispaltige Einstellungen mit effektiver Kaskade und Ausweich-Schlüsseln](docs/screenshots/einstellungen-kaskade.png) |
+| ![Job-Monitor in der Kopfzeile, Phasen, Restzeit und Hinweis auf automatischen Neuversuch](docs/screenshots/job-monitor.png) | ![Zweispaltige Einstellungen mit effektiver Kaskade, Ausweich-Schlüsseln und Cloud-Tageslimit](docs/screenshots/einstellungen-kaskade.png) |
+
+**Prüfzertifikat (Seite 1, als PDF gespeichert):** Ergebnis, Kurzbefund je Bereich und Siegel der Prüfperson; ab Seite 2 alle Prüfpunkte und der Prüfpfad, mit Kopf- und Fußzeile und „Seite x von y“.
+
+![Prüfzertifikat als PDF: Score 100 von 100, Freigabeempfehlung, Kurzbefunde zu § 14 UStG, Rechenprüfung, EU AI Act und DSGVO, Siegel der Prüfperson](docs/screenshots/pruefzertifikat.png)
 
 * **Prüfung:** KPI-Leiste, Belegliste (Suche, Filter, Batch-Prüfung,
   `J`/`K`), Scorecard mit vier Kacheln und Rechtsfolgen-Tooltips, Inspektor mit
@@ -160,7 +164,8 @@ Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
   an den Lieferanten als editierbarer Entwurf, ohne Sprachmodell.
 * **Protokoll:** vollständige Hash-Kette mit Filtern (alle, dieser
   Beleg, Systemereignisse), Kopf-Hash und Schlüssel-Fingerabdruck,
-  GoBD-Prüfdatenpaket, Verfahrensdokumentation und das Regelwerk.
+  GoBD-Prüfdatenpaket, Verfahrensdokumentation als Word-Datei zum Ergänzen
+  und das Regelwerk.
 * **Kopfzeile & Darstellung:** Job-Monitor nur während einer Prüfung, Hinweise nur bei
   Handlungsbedarf (z. B. „Lokale KI aus“ mit Start-Knopf, wenn lokal das
   Hauptmodell ist; für Ollama als reine Cloud-Reserve zeigt die Ausweich-Kaskade
@@ -222,8 +227,8 @@ Einordnung: [`docs/RECHTLICHE_ANALYSE_2026.md`](docs/RECHTLICHE_ANALYSE_2026.md)
 | **Lokale KI** | Ollama und LM Studio erkennen; Ollama per Klick starten (Flash Attention, 8-Bit-KV-Cache) und stoppen – nur direkt am Server |
 | **Compliance Copilot** | Dokumentbezogene Fragen mit Zeilen- und Normverweisen, Live-Arbeitsschritten und Denkstufe; Regelwerk-Antwort, wenn keine KI erreichbar ist; Korrekturanforderung an den Lieferanten |
 | **Prüfprotokoll** | Append-only mit SHA-256-Hash-Kette für alle Einträge (auch `analysis` und `provider_failover`), DB-Trigger gegen UPDATE/DELETE, zusätzlich Ed25519-Signaturen für Prüfer- und Steuerungsereignisse (`sign_off`, `human_override`, `model_change`, `archive`/`unarchive`, `release_update`), Kettenprüfung per API |
-| **Prüfzertifikat & Prüfdatenpaket** | A4-HTML, Markdown-Memo, JSON; ZIP mit Original, XML, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und signiertem Manifest; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
-| **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 aus dem echten Systemzustand plus Anhang je Beleg |
+| **Prüfzertifikat & Prüfdatenpaket** | A4-Druckvorlage (Ergebnis und Siegel auf Seite 1, Seitenzahlen) bzw. PDF über den Druckdialog, Markdown-Memo, JSON; ZIP mit Original, XML, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und signiertem Manifest; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
+| **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 aus dem echten Systemzustand plus Anhang je Beleg; als Word-Datei (.docx) mit gelb markierten Platzhaltern zum Ergänzen oder als A4-HTML |
 | **DLP-Gateway** | `POST /api/v1/redact`: endgültige Schwärzung für andere Anwendungen vor jedem Cloud-LLM-Aufruf |
 | **Release-Assistent** | Neue Version per `git fetch --tags` prüfen und per Klick installieren – mit automatischer Datenbanksicherung, Erhalt aller lokalen Daten und Ledger-Eintrag |
 | **Musterdaten** | Vier Referenzbelege (gültig, Steuerfalle, KI-Recruiting nach Anhang III, ZUGFeRD an eine Kommune), sofort nutzbar ohne Modell |
@@ -252,8 +257,10 @@ zuerst selbst (Standard nach 2 s und 5 s), dann übernimmt die nächste:
 * Ein Regelwerk-Audit ist überall gekennzeichnet („Regelbasiertes
   Referenz-Audit – KI nicht verfügbar“) und lässt sich mit erreichbarem
   Modell über „Neu prüfen“ wiederholen.
-* Optional begrenzt `CLOUD_DAILY_TOKEN_LIMIT` die Cloud-Tokens je Tag; danach
-  übernehmen lokale Stufen bzw. das Regelwerk.
+* Ein Cloud-Tageslimit (Einstellungen › KI-Einrichtung › Ausweich-Kaskade)
+  begrenzt die Tokens je Tag; danach übernehmen lokale Stufen bzw. das
+  Regelwerk. Setzt der Server `CLOUD_DAILY_TOKEN_LIMIT`, ist das die
+  Obergrenze für den Wert aus der Oberfläche.
 * Neuere Modelle zeigt die Live-Modell-Liste des Anbieters als Vorschlag;
   gewechselt wird nur per Klick, dokumentiert als `model_change`.
 
@@ -298,7 +305,8 @@ Bänder: **≥ 85 grün** (verkehrsfähig) · **60–84 gelb** (Nachbesserung) �
   `document_id = "system"`.
 * `GET /api/documents/{id}/export/gobd` liefert ein ZIP mit Originalbeleg,
   XML-Datensatz, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und
-  `manifest.json` (SHA-256 je Datei, Ed25519-Signatur).
+  `manifest.json` (SHA-256 je Datei, Ed25519-Signatur). Downloads tragen
+  Beleg und Datum im Namen, z. B. `Pruefdatenpaket_<Beleg>_2026-11-17.zip`.
   `python scripts/verify_pruefpaket.py paket.zip --fingerprint <fp>` prüft es
   ohne Server; den Fingerabdruck liefert `GET /api/audit/signing-key`.
 * Ehrliche Einordnung: lineare Hash-Kette, kein Merkle-Baum. Den Kopf-Hash
@@ -338,7 +346,7 @@ Vollständig und interaktiv unter `/docs` (Swagger).
 | `POST` | `/documents/{id}/sign-off` | Prüfer-Siegel (Art. 14), Ed25519-signiert |
 | `POST` | `/api/documents/{id}/override` | Übersteuerung der KI-Einstufung (Art. 14 Abs. 4 lit. d), Score neu |
 | `GET` | `/documents/{id}/report?format=html\|markdown\|json` | Prüfzertifikat |
-| `GET` | `/api/documents/{id}/export/gobd` · `…/export/procedural-doc` | Prüfdatenpaket (ZIP) · Verfahrensdokumentation |
+| `GET` | `/api/documents/{id}/export/gobd` · `…/export/procedural-doc?format=html\|markdown\|docx` | Prüfdatenpaket (ZIP) · Verfahrensdokumentation |
 | `POST` | `/documents/{id}/copilot` | Frage zum Beleg (`thinking`, `progress_id`) |
 | `GET` · `POST` | `/api/v1/copilot/progress/{id}` · `/api/v1/copilot/cancel/{id}` | Live-Arbeitsschritte bzw. Abbruch einer laufenden Copilot-Anfrage |
 | `GET` · `POST` | `/api/v1/ai/local` · `/api/v1/ai/start-ollama` · `/api/v1/ai/stop-local` | Lokale KI erkennen, starten, stoppen (nur localhost) |
@@ -396,7 +404,7 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 | `GEMINI_/ANTHROPIC_/OPENAI_API_KEY` | leer | Startwerte für Cloud-Anbieter |
 | `LLM_RETRY_DELAYS` · `CLOUD_TIMEOUT_SECONDS` | `2,5` · `45` | Wiederholungen je Stufe und Timeout pro Cloud-Anfrage (Sekunden) |
 | `HEURISTIC_FALLBACK` | `true` | Regelwerk schließt ab, wenn alle KI-Stufen ausfallen |
-| `CLOUD_DAILY_TOKEN_LIMIT` | `-1` | Tagesbudget für Cloud-Tokens (`-1` = ohne Limit) |
+| `CLOUD_DAILY_TOKEN_LIMIT` | `-1` | Tagesbudget für Cloud-Tokens (`-1` = ohne Limit); Voreinstellung und Obergrenze für den Wert aus den Einstellungen |
 | `ANALYSIS_WORKERS` | `1` | Gleichzeitige Analysen |
 | `LOCAL_AI_CONTROL_LOCAL_ONLY` | `true` | Ollama-Start/-Stopp nur von localhost |
 | `PII_STRICTNESS` | `standard` | `strict` · `standard` · `audit_only` |
@@ -411,12 +419,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 332 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 337 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-332 Tests (Stand v2.6.2) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+337 Tests (Stand v2.6.3) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.

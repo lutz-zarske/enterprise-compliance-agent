@@ -30,6 +30,7 @@ from app.config import APP_TITLE, APP_VERSION, Settings
 from app.db import DocumentRecord, utcnow
 from app.extractors.einvoice import MAX_XML_BYTES
 from app.llm import PROMPT_HASH
+from app.print_layout import BASE_CSS, page_rules
 from app.retention import RETENTION_NOTE, RETENTION_RULES, invoice_retention
 from app.scoring import RULESET_VERSION
 from app.services import STRUCTURED_PROVIDER, parse_einvoice, parse_extraction, parse_scorecard, parse_sign_off
@@ -224,6 +225,11 @@ def _fmt_ts(value: Any) -> str:
     except ValueError:
         return str(value)
     return parsed.strftime("%d.%m.%Y, %H:%M:%S UTC")
+
+
+def procedural_ui(lang: str) -> dict[str, str]:
+    """Feste Texte der Verfahrensdokumentation in der gewünschten Sprache (auch für den Word-Export)."""
+    return _PD_UI.get(lang, _PD_UI["de"])
 
 
 def build_procedural_doc(
@@ -962,13 +968,21 @@ def _todo(text: str, todo_token: str = ZU_ERGAENZEN) -> str:
     return _e(text).replace(html.escape(todo_token), f'<span class="todo">{html.escape(todo_token)}</span>')
 
 
+_PD_LAYOUT: dict[str, dict[str, str]] = {
+    "de": {"print_hint": "A4-Druckansicht · Strg + P druckt die Dokumentation oder speichert sie als PDF. Zum Ergänzen der markierten Stellen den Word-Export verwenden.", "page": "Seite", "of": "von"},
+    "en": {"print_hint": "A4 print view · Ctrl + P prints the documentation or saves it as PDF. Use the Word export to fill in the marked fields.", "page": "Page", "of": "of"},
+    "es": {"print_hint": "Vista de impresión A4 · Ctrl + P imprime la documentación o la guarda como PDF. Para completar los campos marcados, use la exportación a Word.", "page": "Página", "of": "de"},
+}
+
+
 def render_html(doc: dict[str, Any], *, lang: str = "de") -> str:
     lang = doc.get("lang", lang)
     ui = _PD_UI.get(lang, _PD_UI["de"])
+    lt = _PD_LAYOUT.get(lang, _PD_LAYOUT["de"])
     todo_token = doc.get("todo", ui["todo"])
     parts: list[str] = []
     for section in doc["sections"]:
-        parts.append(f"<h2>{_e(section['number'])}. {_e(section['title'])}</h2>")
+        parts.append(f"<h2><span class=\"no\">{_e(section['number'])}</span>{_e(section['title'])}</h2>")
         for block in section["blocks"]:
             parts.append(f"<h3>{_e(block['heading'])}</h3>")
             if "table" in block:
@@ -984,9 +998,13 @@ def render_html(doc: dict[str, Any], *, lang: str = "de") -> str:
                 parts.append(f"<p>{_todo(block['text'], todo_token)}</p>")
 
     annex = doc.get("annex")
+    document_name = ""
+    annex_sheet = ""
+    running = f'<div class="running"><span>{_e(APP_TITLE)} · {_e(doc["title"])}</span><span>{{name}}</span></div>'
     if annex:
+        document_name = str(annex["rows"][0][1]) if annex.get("rows") else ""
         facts = "".join(
-            f"<tr><th>{_e(key)}</th><td{' class=mono' if key == 'SHA-256' else ''}>{_e(value)}</td></tr>"
+            f"<dt>{_e(key)}</dt><dd{' class=mono' if key == 'SHA-256' else ''}>{_e(value)}</dd>"
             for key, value in annex["rows"]
         )
         ledger = "".join(
@@ -995,51 +1013,44 @@ def render_html(doc: dict[str, Any], *, lang: str = "de") -> str:
             f"<td class='mono'>{_e(e['entry_hash'][:16])}…</td><td>{'Ed25519' if e['signed'] else '–'}</td></tr>"
             for e in annex["ledger"]
         ) or f"<tr><td colspan='7'>{_e(ui['no_ledger'])}</td></tr>"
-        parts.append(
-            f"<h2 class='annex'>{_e(annex['title'])}</h2><table class='facts'><tbody>{facts}</tbody></table>"
+        annex_sheet = (
+            f"<section class=\"sheet\">{running.replace('{name}', _e(document_name))}"
+            f"<h2 class='annex'>{_e(annex['title'])}</h2><dl class='facts'>{facts}</dl>"
             f"<table><thead><tr><th class='num'>Seq</th><th>{_e(ui['col_event'])}</th><th>{_e(ui['col_time'])}</th><th>{_e(ui['col_actor'])}</th>"
             f"<th class='num'>Score</th><th>{_e(ui['col_hash'])}</th><th>{_e(ui['col_sig'])}</th></tr></thead><tbody>{ledger}</tbody></table>"
+            f"<footer class='legal'>{_e(ui['footer'])}</footer></section>"
         )
 
+    stand = f"{ui['stand']} {_fmt_ts(doc['generated_at'])}"
+    rules = page_rules(
+        top_left=f"{APP_TITLE} · {doc['title']}",
+        top_right=document_name,
+        bottom_left=f"{stand} · {ui['ruleset']} {doc['ruleset_version']}",
+        page_label=lt["page"],
+        of_label=lt["of"],
+    )
     return f"""<!doctype html>
 <html lang="{_e(lang)}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{_e(doc['title'])}</title>
 <style>
-@page {{ size: A4; margin: 16mm 14mm; }}
-* {{ box-sizing: border-box; }}
-body {{ font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; color: #0f172a; background: #f1f5f9; margin: 0; font-size: 10.5pt; line-height: 1.5; }}
-.page {{ background: #fff; max-width: 210mm; margin: 12px auto; padding: 18mm 16mm; border: 1px solid #e2e8f0; }}
-h1 {{ font-size: 18pt; margin: 0; }}
-h2 {{ font-size: 12pt; margin: 22px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }}
-h3 {{ font-size: 10.5pt; margin: 14px 0 4px; }}
-p, li {{ max-width: 75ch; }}
-.kicker {{ font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #475569; }}
-.meta {{ margin-top: 10px; font-size: 9pt; color: #334155; }}
-.note {{ margin-top: 12px; padding: 8px 12px; border: 1px dashed #94a3b8; border-radius: 8px; font-size: 9pt; color: #334155; }}
-.todo {{ background: #fffbeb; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; padding: 0 4px; white-space: nowrap; }}
-table {{ width: 100%; border-collapse: collapse; margin-top: 4px; }}
-th, td {{ text-align: left; padding: 5px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }}
-th {{ font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #475569; }}
-.facts th {{ width: 28%; text-transform: none; letter-spacing: 0; font-size: 9pt; }}
-.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
-.mono {{ font-family: "JetBrains Mono", Consolas, monospace; font-size: 8.5pt; }}
-footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
-@media print {{
-  body {{ background: #fff; }}
-  .page {{ border: 0; margin: 0; padding: 0; max-width: none; }}
-  h2, h3 {{ break-after: avoid; }}
-  tr, .note {{ break-inside: avoid; }}
-  thead {{ display: table-header-group; }}
-  h2.annex {{ break-before: page; }}
-}}
+{rules}
+{BASE_CSS}
+.todo {{ background: #fffbeb; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; padding: 0 4px; }}
+td .todo {{ white-space: normal; }}
+h2.annex {{ margin-top: 0; }}
 </style></head>
-<body><main class="page">
+<body>
+<p class="hint">{_e(lt['print_hint'])}</p>
+<section class="sheet">
+{running.replace('{name}', _e(document_name))}
 <div class="kicker">GoBD Rz. 151 ff. · § 147 AO · VO (EU) 2024/1689</div>
 <h1>{_e(doc['title'])}</h1>
-<div class="meta">{_e(doc['subtitle'])}<br>{_e(ui['stand'])} {_e(_fmt_ts(doc['generated_at']))} · {_e(APP_TITLE)} v{_e(doc['version'])} · {_e(ui['ruleset'])} {_e(doc['ruleset_version'])}</div>
-<div class="note"><strong>{_e(doc['status'])}</strong><br>{_e(doc['retention'])}</div>
-<p class="meta">{_e(doc['basis'])}</p>
+<p class="lead">{_e(doc['subtitle'])}<br>{_e(stand)} · {_e(APP_TITLE)} v{_e(doc['version'])} · {_e(ui['ruleset'])} {_e(doc['ruleset_version'])}</p>
+<div class="note keep"><strong>{_e(doc['status'])}</strong><br>{_e(doc['retention'])}</div>
+<p class="small">{_e(doc['basis'])}</p>
 {''.join(parts)}
-<footer>{_e(ui['footer'])}</footer>
-</main></body></html>"""
+<footer class="legal">{_e(ui['footer'])}</footer>
+</section>
+{annex_sheet}
+</body></html>"""

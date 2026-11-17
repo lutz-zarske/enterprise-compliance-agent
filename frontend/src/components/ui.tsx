@@ -152,7 +152,10 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
 }) {
   const { tr: tl } = useI18n();
   const listRef = useRef<HTMLDivElement>(null);
-  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+  const [indicator, setIndicator] = useState<{ left: number; width: number; animate: boolean } | null>(null);
+  // Zuletzt sichtbar angezeigte Auswahl: Nur ein echter Wechsel gleitet, ein Wieder-Einblenden
+  // (Keep-Alive-Ansichten, Modale) oder eine Größenänderung setzt den Indikator still.
+  const shownValue = useRef<T | null>(null);
   const radio = role === "radiogroup";
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -180,13 +183,19 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
   };
 
   useLayoutEffect(() => {
-    const measure = () => {
+    const measure = (valueChanged: boolean) => {
       const button = listRef.current?.querySelector<HTMLButtonElement>('[data-active="true"]');
       if (!button) return setIndicator(null);
-      setIndicator({ left: button.offsetLeft, width: button.offsetWidth });
+      // Verborgene Ansicht (display: none): letzten Stand behalten statt auf 0 zu springen.
+      if (button.offsetWidth === 0) return;
+      const left = button.offsetLeft;
+      const width = button.offsetWidth;
+      const animate = valueChanged && shownValue.current !== null && shownValue.current !== value;
+      shownValue.current = value;
+      setIndicator((prev) => (prev && prev.left === left && prev.width === width ? prev : { left, width, animate }));
     };
-    measure();
-    const observer = new ResizeObserver(measure);
+    measure(true);
+    const observer = new ResizeObserver(() => measure(false));
     if (listRef.current) observer.observe(listRef.current);
     return () => observer.disconnect();
   }, [value, items.length]);
@@ -216,7 +225,11 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
         <span
           className="pill-indikator"
           aria-hidden="true"
-          style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
+          style={{
+            width: indicator.width,
+            transform: `translateX(${indicator.left}px)`,
+            transition: indicator.animate ? undefined : "none",
+          }}
         />
       )}
       {items.map((item) => {
@@ -769,12 +782,14 @@ export function CopyValue({ value, label, display, className, mono = false }: {
  * Gekuerzter Hash im Monospace-Badge mit Verifikationsstatus und Kopierbutton.
  * ``verified``: true = nachgerechnet/Signatur gueltig, false = Befund, null = nicht geprueft.
  */
-export function HashBadge({ value, label = "SHA-256", verified = null, verifiedLabel, className }: {
+export function HashBadge({ value, label = "SHA-256", verified = null, verifiedLabel, className, statusIcon = true }: {
   value: string;
   label?: string;
   verified?: boolean | null;
   verifiedLabel?: string;
   className?: string;
+  /** Schild im Chip; aus, wenn daneben schon ein eigenes Symbol steht. */
+  statusIcon?: boolean;
 }) {
   const { tr: tl } = useI18n();
   const short = value.length > 20 ? `${value.slice(0, 10)}…${value.slice(-6)}` : value;
@@ -791,8 +806,8 @@ export function HashBadge({ value, label = "SHA-256", verified = null, verifiedL
         className={cx("chip min-w-0 font-mono text-xs tabular-nums", TONE_CLASSES[tone])}
         title={`${label} ${value}`}
       >
-        {verified === true && <ShieldCheck size={11} aria-hidden="true" />}
-        {verified === false && <ShieldAlert size={11} aria-hidden="true" />}
+        {statusIcon && verified === true && <ShieldCheck size={11} aria-hidden="true" />}
+        {statusIcon && verified === false && <ShieldAlert size={11} aria-hidden="true" />}
         <span className="opacity-70">{label}</span> {short}
         {status && <span className="font-sans opacity-80">· {status}</span>}
       </span>

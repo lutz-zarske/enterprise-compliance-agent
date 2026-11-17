@@ -3,6 +3,33 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.6.3 – 17.11.2026
+
+**Prüfzertifikat und Verfahrensdokumentation**
+
+- Prüfzertifikat als A4-Druckvorlage neu gesetzt: Seite 1 zeigt Score, Freigabeempfehlung, Kurzbefunde je Bereich (§ 14 UStG, Rechenprüfung, EU AI Act, DSGVO), das Siegel der Prüfperson und die Prüfkette; ab Seite 2 folgen die nummerierten Abschnitte. Beim Drucken bzw. „Als PDF speichern“ tragen alle Seiten Kopf- und Fußzeile mit „Seite x von y“; am Bildschirm erscheinen A4-Blätter. Hinweise ohne Punktabzug zählen nicht als Mangel.
+- Verfahrensdokumentation im selben Layout, der Anhang zum Beleg auf eigener Seite.
+- Neu: Verfahrensdokumentation als Word-Datei (`format=docx`) – Platzhalter „[vom Unternehmen zu ergänzen]“ gelb markiert und in Word direkt ausfüllbar, Fußzeile mit Seitenzahlen. Ohne zusätzliche Abhängigkeit erzeugt.
+- Downloads tragen Beleg und Datum im Namen (z. B. `Pruefdatenpaket_<Beleg>_2026-11-17.zip`); „Als PDF speichern“ schlägt `Pruefzertifikat_<Beleg>_<Prüfdatum>` vor.
+
+**Einstellungen**
+
+- Cloud-Tageslimit direkt in den Einstellungen wählbar (ohne Limit bis 5 Mio. Tokens). Setzt der Server `CLOUD_DAILY_TOKEN_LIMIT`, ist das die Obergrenze; höhere Werte lehnt die API ab.
+- Ausweich-Schlüssel in der Reihenfolge Anbieter → API-Key → Modell; das Modell kommt aus der Modell-Liste des Anbieters statt aus einem Freitextfeld.
+- Modell-Listen werden beim Start vorgeladen – die KI-Einrichtung öffnet ohne Ladezustand.
+- „Über“ erklärt Zweck, Einsatz und Methodik (Lesen, Schützen, Prüfen, Bewerten, Belegen) und nennt Entwickler, Lizenz und Quellcode.
+
+**Oberfläche**
+
+- Start über den Starter öffnet immer „Prüfung“; die Ansicht gilt nur noch je Browser-Tab.
+- Segmentschalter gleiten nur noch bei einem echten Wechsel – beim Umschalten der Ansichten steht die Auswahl sofort.
+- KPI-Leiste in den Spalten der Workbench; der Ø-Score ist als Durchschnitt aller Belege erklärt.
+- Copilot-Eingabe mit integriertem Sendeknopf; Kopf-Hash im Protokoll mit eigenem Symbol.
+
+**Updater**
+
+- Der Neustart nach einem Update läuft unsichtbar: Unter Windows 11 übernahm Windows Terminal die Konsole, `-WindowStyle Hidden` griff dort nicht. Jetzt startet der Prozess mit `SW_HIDE`.
+
 ## v2.6.2 – 17.11.2026
 
 **KI-Einrichtung**

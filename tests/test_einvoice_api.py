@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import zipfile
 from decimal import Decimal
 
@@ -164,7 +165,7 @@ def test_paket_hybride_rechnung(client: TestClient) -> None:
     response = client.get(f"/api/documents/{document_id}/export/gobd")
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "application/zip"
-    assert 'filename="Pruefdatenpaket_hybrid.zip"' in response.headers["content-disposition"]
+    assert re.search(r'filename="Pruefdatenpaket_hybrid_\d{4}-\d{2}-\d{2}\.zip"', response.headers["content-disposition"])
 
     archive = _zip(response.content)
     assert archive.namelist() == [
@@ -200,7 +201,7 @@ def test_paket_reine_pdf_ohne_xml(client: TestClient, fake_ollama: FakeOllama) -
         "verfahrensdokumentation.html", "manifest.json",
     ]
     # Umlaut im Dateinamen: ASCII-Fallback plus RFC 5987
-    assert "filename*=UTF-8''Pruefdatenpaket_Rechnung_M%C3%A4rz.zip" in response.headers["content-disposition"]
+    assert re.search(r"filename\*=UTF-8''Pruefdatenpaket_Rechnung_M%C3%A4rz_\d{4}-\d{2}-\d{2}\.zip", response.headers["content-disposition"])
 
 
 def test_manipuliertes_paket_wird_erkannt(client: TestClient) -> None:

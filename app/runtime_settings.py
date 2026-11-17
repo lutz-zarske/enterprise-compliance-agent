@@ -243,6 +243,8 @@ class RuntimeSettingsStore:
         self._engine = engine
         self._fernet = _load_fernet(settings)
         self._lock = threading.Lock()
+        # Ein Tageslimit aus der Serverkonfiguration ist die Obergrenze für den Wert aus der Oberfläche.
+        self._server_token_limit = settings.cloud_daily_token_limit
         self._state: dict[str, Any] = {
             "inference_mode": self._coerce_mode(settings.inference_mode),
             "models": {
@@ -257,6 +259,8 @@ class RuntimeSettingsStore:
             "fallbacks": (),
             "ausweich_modelle": {provider.value: "" for provider in CLOUD_PROVIDERS},
             "ausweich_schluessel": (),
+            # Voreinstellung aus CLOUD_DAILY_TOKEN_LIMIT; in den Einstellungen änderbar (-1 = ohne Limit).
+            "cloud_daily_token_limit": settings.cloud_daily_token_limit,
             "keys": {
                 "gemini": settings.gemini_api_key,
                 "anthropic": settings.anthropic_api_key,
@@ -283,6 +287,8 @@ class RuntimeSettingsStore:
                     self._state["models"].update(loaded_models)
                 elif key in {"enforce_ustg_check", "ai_act_escalation"}:
                     self._state[key] = json.loads(value)
+                elif key == "cloud_daily_token_limit":
+                    self._state[key] = self._cap_token_limit(int(json.loads(value)))
                 elif key == "inference_mode":
                     self._state[key] = self._coerce_mode(value)
                 elif key == "pii_strictness":
@@ -343,6 +349,24 @@ class RuntimeSettingsStore:
         except ValueError:
             return PIIStrictness.STANDARD
 
+    def _cap_token_limit(self, value: int) -> int:
+        """Gespeicherter Wert, höchstens die Server-Vorgabe (``-1`` = ohne Limit)."""
+        ceiling = self._server_token_limit
+        if ceiling >= 0 and (value < 0 or value > ceiling):
+            return ceiling
+        return max(-1, value)
+
+    @property
+    def cloud_daily_token_limit(self) -> int:
+        """Tageslimit für Cloud-Tokens (-1 = ohne Limit)."""
+        with self._lock:
+            return int(self._state["cloud_daily_token_limit"])
+
+    @property
+    def cloud_daily_token_limit_max(self) -> int | None:
+        """Obergrenze aus der Serverkonfiguration; ``None`` = frei wählbar."""
+        return self._server_token_limit if self._server_token_limit >= 0 else None
+
     def snapshot(self) -> RuntimeSnapshot:
         with self._lock:
             return RuntimeSnapshot(
@@ -384,6 +408,13 @@ class RuntimeSettingsStore:
         return tuple(merged)
 
     def _update(self, changes: dict[str, Any]) -> RuntimeSnapshot:
+        # Erst prüfen, dann ändern: Eine abgelehnte Eingabe lässt den Stand unverändert.
+        ceiling = self._server_token_limit
+        wanted = changes.get("cloud_daily_token_limit")
+        if wanted is not None and ceiling >= 0 and (int(wanted) < 0 or int(wanted) > ceiling):
+            raise SettingsError(
+                f"Das Tageslimit darf höchstens {ceiling:,} Tokens betragen (Vorgabe des Servers).".replace(",", ".")
+            )
         persisted: dict[str, str | None] = {}
         with self._lock:
             if changes.get("inference_mode") is not None:
@@ -395,6 +426,9 @@ class RuntimeSettingsStore:
             if changes.get("fallbacks") is not None:
                 self._state["fallbacks"] = self._coerce_fallbacks(changes["fallbacks"])
                 persisted["fallbacks"] = json.dumps([mode.value for mode in self._state["fallbacks"]])
+            if changes.get("cloud_daily_token_limit") is not None:
+                self._state["cloud_daily_token_limit"] = max(-1, int(changes["cloud_daily_token_limit"]))
+                persisted["cloud_daily_token_limit"] = json.dumps(self._state["cloud_daily_token_limit"])
             for flag in ("enforce_ustg_check", "ai_act_escalation"):
                 if changes.get(flag) is not None:
                     self._state[flag] = bool(changes[flag])

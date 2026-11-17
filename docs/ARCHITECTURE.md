@@ -108,9 +108,10 @@ flowchart TB
   primär ist: Eine lokal eingestellte Prüfung geht nie automatisch in die Cloud.
 * Abgelehnte Schlüssel (401/403) und Schemafehler lösen bewusst weder
   Wiederholung noch Wechsel aus – eine Fehlkonfiguration soll auffallen.
-* Ein optionales Tagesbudget (`CLOUD_DAILY_TOKEN_LIMIT`) überspringt alle
-  Cloud-Stufen, sobald es erreicht ist; lokale Stufen und das Regelwerk
-  übernehmen.
+* Ein optionales Tagesbudget überspringt alle Cloud-Stufen, sobald es
+  erreicht ist; lokale Stufen und das Regelwerk übernehmen. Eingestellt wird
+  es in der Oberfläche; `CLOUD_DAILY_TOKEN_LIMIT` ist Voreinstellung und – wenn
+  gesetzt – Obergrenze.
 * Modellwechsel sind nie still: Neuere Modelle werden aus der Modell-Liste des
   Anbieters nur *vorgeschlagen*; die Übernahme schreibt einen signierten
   `model_change`-Eintrag.
@@ -144,7 +145,7 @@ Fehler sichtbar.
 
 ```
 frontend/src/
-  app/page.tsx            Orchestrierung: drei Ansichten mit Keep-Alive, Jobs, Toasts
+  app/page.tsx            Orchestrierung: drei Ansichten mit Keep-Alive (Ansicht je Tab), Jobs, Toasts
   app/error.tsx           Ruhige Fehlergrenze mit „Neu laden“
   components/Header       Logo-Popover, Bereiche (PillTabs), Job-Monitor, Hinweise, Offline
   components/JobMonitor   Kopfzeilen-Pille, Phasen, Restzeit, zweistufiger Abbruch, 12-s-Nachlauf
@@ -184,7 +185,9 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
   8 Jahre (§ 147 Abs. 1 Nr. 4, Abs. 3 AO i. d. F. BEG IV), Kredit- und
   Wertpapierinstitute sowie Versicherungen 10 Jahre; Handelsbücher und
   Verfahrensdokumentation 10 Jahre. Die Verfahrensdokumentation
-  (`app/procedural_doc.py`) gliedert nach GoBD Rz. 153.
+  (`app/procedural_doc.py`) gliedert nach GoBD Rz. 153; `app/docx_export.py`
+  erzeugt daraus eine Word-Datei zum Ergänzen, `app/print_layout.py` das
+  gemeinsame A4-Drucklayout (CSS Paged Media) beider Berichte.
 * **Pseudonymisierung im Backend** vor jeder Übergabe an einen Cloud-Anbieter
   (`VaultedClient`); das Mapping bleibt flüchtig im Speicher, alle Cloud-Stufen
   der Kaskade teilen denselben Vault.
@@ -270,7 +273,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (332 Tests, Stand v2.6.2) deckt die Kette vom HTTP-Request bis zur
+`pytest` (337 Tests, Stand v2.6.3) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die

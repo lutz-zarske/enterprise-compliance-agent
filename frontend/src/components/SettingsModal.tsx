@@ -22,11 +22,16 @@ import {
   Bot,
   Check,
   CheckCircle,
+  ExternalLink,
   Eye,
   EyeOff,
+  FileCode,
+  FileText,
   Info,
   KeyRound,
   Lock,
+  MessageSquare,
+  Package,
   Palette,
   Play,
   Plus,
@@ -71,20 +76,48 @@ interface Props {
 const hasKey = (settings: RuntimeSettings | null, mode: InferenceMode) =>
   mode === "local" || Boolean(settings?.[`has_${mode}_key` as keyof RuntimeSettings]);
 
+/** Geladene Kataloge je Anbieter und Key-Stand: Die Einstellungen öffnen ohne Ladezustand. */
+const catalogCache = new Map<string, { at: number; catalog: ModelCatalog }>();
+const CATALOG_TTL_MS = 5 * 60_000;
+const catalogKey = (provider: InferenceMode, keyStored: boolean) => `${provider}|${keyStored ? "key" : "-"}`;
+
+function loadCatalog(provider: InferenceMode, keyStored: boolean): Promise<ModelCatalog> {
+  return api.models(provider).then((catalog) => {
+    catalogCache.set(catalogKey(provider, keyStored), { at: Date.now(), catalog });
+    return catalog;
+  });
+}
+
+/** Lädt die Modell-Liste des eingestellten Anbieters im Hintergrund vor (beim Start der Oberfläche). */
+export function prefetchModelCatalog(settings: RuntimeSettings) {
+  const providers = new Set<InferenceMode>([settings.inference_mode]);
+  const cloud = initialProvider(settings);
+  if (cloud) providers.add(cloud);
+  for (const provider of providers) {
+    if (!hasKey(settings, provider)) continue;
+    const entry = catalogCache.get(catalogKey(provider, true));
+    if (entry && Date.now() - entry.at < CATALOG_TTL_MS) continue;
+    loadCatalog(provider, true).catch(() => undefined);
+  }
+}
+
 /** Modell-Katalog des Providers (neueste zuerst, live aus der API); ohne Key die Vorschlagsliste. */
 function useCatalog(provider: InferenceMode, enabled: boolean, settings: RuntimeSettings | null) {
-  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
+  const [, rerender] = useState(0);
   const keyStored = hasKey(settings, provider);
   useEffect(() => {
-    setCatalog(null);
     if (!enabled) return;
+    const entry = catalogCache.get(catalogKey(provider, keyStored));
+    if (entry && Date.now() - entry.at < CATALOG_TTL_MS) return;
     let alive = true;
-    api.models(provider).then((result) => alive && setCatalog(result)).catch(() => alive && setCatalog(null));
+    loadCatalog(provider, keyStored)
+      .then(() => alive && rerender((n) => n + 1))
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
   }, [provider, enabled, keyStored]);
-  return catalog;
+  return enabled ? catalogCache.get(catalogKey(provider, keyStored))?.catalog ?? null : null;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
@@ -126,9 +159,11 @@ function SectionTitle({ title, text, hint, quiet = false }: { title: string; tex
   );
 }
 
-function ModelSelect({ provider, value, onChange, catalog, label, allowOff, exclude, disabled = false }: {
+function ModelSelect({ provider, value, current, onChange, catalog, label, allowOff, exclude, disabled = false }: {
   provider: InferenceMode;
   value: string;
+  /** Gespeicherter Wert (Hinweis „aktuell eingestellt“). */
+  current?: string;
   onChange: (model: string) => void;
   catalog: ModelCatalog | null;
   label: string;
@@ -156,7 +191,7 @@ function ModelSelect({ provider, value, onChange, catalog, label, allowOff, excl
       hint:
         index === 0 && catalog?.source === "api" && !allowOff
           ? tr("neuestes verfügbares Modell", "latest available model", "último modelo disponible")
-          : name === catalog?.current
+          : name === (current ?? catalog?.current)
             ? tr("aktuell eingestellt", "currently selected", "seleccionado actualmente")
             : undefined,
     })),
@@ -532,12 +567,13 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
       {mode !== null && (
         <div className="space-y-2">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ModelSelect provider={mode} value={model} onChange={setModel} catalog={catalog} label={tr("Hauptmodell", "Primary model", "Modelo principal")} disabled={!modelsReady} />
+            <ModelSelect provider={mode} value={model} current={settings.models[mode]} onChange={setModel} catalog={catalog} label={tr("Hauptmodell", "Primary model", "Modelo principal")} disabled={!modelsReady} />
             {cloud && (
               <div>
                 <ModelSelect
                   provider={mode}
                   value={fallbackModel}
+                  current={savedFallback}
                   onChange={setFallbackModel}
                   catalog={catalog}
                   label={tr("Ausweichmodell bei Überlast", "Fallback model on overload", "Modelo alternativo por sobrecarga")}
@@ -630,6 +666,14 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
   );
 }
 
+/** Stufen des Cloud-Tageslimits; ein abweichender Wert (z. B. aus der Serverkonfiguration) bleibt wählbar. */
+const BUDGET_STEPS = [-1, 100_000, 250_000, 500_000, 1_000_000, 2_000_000, 5_000_000];
+/** Wählbare Stufen; gibt der Server ein Limit vor, ist es die Obergrenze (kein „Ohne Limit“). */
+function budgetOptions(current: number, max: number | null | undefined): number[] {
+  const steps = max == null ? BUDGET_STEPS : [...BUDGET_STEPS.filter((step) => step >= 0 && step < max), max];
+  return (steps.includes(current) ? steps : [...steps, current]).sort((a, b) => (a < 0 ? -1 : b < 0 ? 1 : a - b));
+}
+
 function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
   settings: RuntimeSettings;
   onSaved: (settings: RuntimeSettings) => void;
@@ -639,9 +683,13 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
   const { locale, tr } = useI18n();
   const { busy, save } = useSave(onSaved, notify);
   const [adding, setAdding] = useState(false);
-  const [provider, setProvider] = useState<CloudMode>("gemini");
+  const [provider, setProvider] = useState<CloudMode | "">("");
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
+  // Anbieter → Key → Modell: Die Modell-Liste kommt vom Anbieter (mit dessen Hauptschlüssel,
+  // sonst die Vorschlagsliste); auswählbar erst, wenn ein Key eingefügt ist.
+  const keyReady = key.trim().length >= 8;
+  const backupCatalog = useCatalog(provider || "gemini", adding && Boolean(provider) && keyReady, settings);
   const backups = settings.ausweich_schluessel ?? [];
   const fallbacks = settings.fallbacks ?? [];
   const localFallback = fallbacks.includes("local");
@@ -660,12 +708,14 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
   };
 
   async function addBackup() {
+    if (!provider) return;
     const ok = await save({
       ausweich_schluessel: [...existing(), { id: `k${Date.now().toString(36)}`, provider, model: model.trim() || undefined, api_key: key.trim() }],
     });
     if (ok) {
       setKey("");
       setModel("");
+      setProvider("");
       setAdding(false);
       notify("ok", tr("Ausweich-Schlüssel hinzugefügt", "Backup key added", "Clave de respaldo añadida"), tr("Verschlüsselt gespeichert.", "Stored encrypted.", "Guardada cifrada."));
     }
@@ -756,18 +806,62 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
           <div className="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label={tr("Anbieter", "Provider", "Proveedor")}>
-                <Select<CloudMode> value={provider} onChange={setProvider} options={CLOUD} ariaLabel={tr("Anbieter des Ausweich-Schlüssels", "Backup key provider", "Proveedor de clave de respaldo")} width={240} className="h-9 w-full justify-between" />
+                <Select<CloudMode | "">
+                  value={provider}
+                  onChange={(value) => {
+                    setProvider(value);
+                    setModel("");
+                  }}
+                  options={CLOUD}
+                  placeholder={tr("Anbieter wählen …", "Choose a provider …", "Elegir proveedor …")}
+                  ariaLabel={tr("Anbieter des Ausweich-Schlüssels", "Backup key provider", "Proveedor de clave de respaldo")}
+                  width={240}
+                  className="h-9 w-full justify-between"
+                />
               </Field>
-              <Field label={tr("Modell (optional)", "Model (optional)", "Modelo (opcional)")} hint={tr("Leer = Hauptmodell dieses Anbieters.", "Blank = primary model for this provider.", "Vacío = modelo principal del proveedor.")}>
-                <input className="input h-9" value={model} onChange={(event) => setModel(event.target.value)} placeholder={settings.models[provider]} name="backup-model" autoComplete="off" />
+              <Field label="API-Key" hint={tr("Auch ein zweiter Key desselben Anbieters, etwa aus einem anderen Projekt.", "A second key from the same provider works too, e.g. from another project.", "También sirve una segunda clave del mismo proveedor.")}>
+                <KeyInput
+                  value={key}
+                  onChange={setKey}
+                  name="backup-api-key"
+                  label="API-Key"
+                  disabled={!provider || busy}
+                  placeholder={provider ? tr("Key einfügen …", "Paste API key …", "Pegar clave API …") : tr("Zuerst Anbieter wählen", "Choose a provider first", "Elija primero un proveedor")}
+                />
               </Field>
             </div>
-            <Field label="API-Key">
-              <KeyInput value={key} onChange={setKey} name="backup-api-key" label="API-Key" placeholder={tr("Key einfügen – auch ein zweiter desselben Anbieters …", "Paste key – a second one from the same provider works too …", "Pegar clave; también una segunda del mismo proveedor …")} />
+            <Field label={tr("Modell", "Model", "Modelo")}>
+              <Select
+                value={model}
+                onChange={setModel}
+                disabled={!provider || !keyReady}
+                ariaLabel={tr("Modell des Ausweich-Schlüssels", "Backup key model", "Modelo de la clave de respaldo")}
+                width={320}
+                className="h-9 w-full justify-between"
+                placeholder={!provider || !keyReady ? tr("Zuerst Key einfügen", "Paste a key first", "Pegue primero una clave") : undefined}
+                options={
+                  provider && keyReady
+                    ? [
+                        { value: "", label: tr(`Hauptmodell (${settings.models[provider]})`, `Primary model (${settings.models[provider]})`, `Modelo principal (${settings.models[provider]})`) },
+                        ...(backupCatalog?.models ?? []).filter((name) => name !== settings.models[provider]).map((name) => ({ value: name, label: name })),
+                      ]
+                    : []
+                }
+              />
             </Field>
             <div className="flex justify-end gap-2">
-              <button className="btn" onClick={() => setAdding(false)}>{tr("Abbrechen", "Cancel", "Cancelar")}</button>
-              <button className="btn btn-primary" disabled={busy || key.trim().length < 8} onClick={() => void addBackup()}>
+              <button
+                className="btn"
+                onClick={() => {
+                  setAdding(false);
+                  setProvider("");
+                  setKey("");
+                  setModel("");
+                }}
+              >
+                {tr("Abbrechen", "Cancel", "Cancelar")}
+              </button>
+              <button className="btn btn-primary" disabled={busy || !provider || !keyReady} onClick={() => void addBackup()}>
                 {busy && <Spinner size={13} />} {tr("Zur Kaskade hinzufügen", "Add to cascade", "Añadir a la cascada")}
               </button>
             </div>
@@ -812,24 +906,39 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
 
       {settings.cloud_budget && (
         <section className="space-y-2 border-t border-line pt-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs">
             <span className="label-caps flex items-center gap-1.5">
-              {tr("Cloud-Verbrauch heute", "Cloud usage today", "Uso de la nube hoy")}
+              {tr("Cloud-Tageslimit", "Daily cloud limit", "Límite diario de la nube")}
               <Tooltip
                 content={tr(
-                  "Tokens aller Cloud-Aufrufe seit Mitternacht. Ein optionales Tageslimit in der Serverkonfiguration schützt vor unerwarteten Kosten – ist es erreicht, prüfen lokale Stufen bzw. das Regelwerk.",
-                  "Tokens of all cloud calls since midnight. An optional daily limit in the server configuration guards against unexpected costs – once reached, local stages or the ruleset take over.",
-                  "Tokens de todas las llamadas a la nube desde medianoche. Un límite diario opcional en la configuración del servidor evita costes inesperados.",
+                  "Schützt den eigenen API-Key vor unerwarteten Kosten. Gezählt werden die Tokens aller Cloud-Aufrufe seit Mitternacht (UTC); lokale Modelle zählen nicht. Ist das Limit erreicht, prüfen bis zum nächsten Tag lokale Stufen bzw. das Regelwerk – keine Prüfung bricht ab. Gibt der Server ein Limit vor, ist es die Obergrenze.",
+                  "Protects your own API key from unexpected costs. Counts the tokens of all cloud calls since midnight (UTC); local models do not count. Once reached, local stages or the ruleset take over until the next day – no audit is aborted. A limit set on the server is the maximum.",
+                  "Protege su clave API de costes inesperados. Cuenta los tokens de todas las llamadas a la nube desde medianoche (UTC); los modelos locales no cuentan. Al alcanzarlo, actúan los niveles locales o el motor de reglas hasta el día siguiente. Un límite del servidor es el máximo.",
                 )}
               >
                 <span tabIndex={0} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
               </Tooltip>
             </span>
-            <span className="tabular-nums text-muted">
-              <span className="font-medium text-fg">{settings.cloud_budget.tokens.toLocaleString(LOCALE_TAG[locale])}</span>
-              {settings.cloud_budget.enabled
-                ? ` / ${settings.cloud_budget.limit.toLocaleString(LOCALE_TAG[locale])} ${tr("Tokens", "tokens", "tokens")}`
-                : ` ${tr("Tokens · ohne Tageslimit", "tokens · no daily limit", "tokens · sin límite diario")}`}
+            <span className="flex items-center gap-3">
+              <span className="tabular-nums text-muted">
+                {tr("Heute", "Today", "Hoy")} <span className="font-medium text-fg">{settings.cloud_budget.tokens.toLocaleString(LOCALE_TAG[locale])}</span> {tr("Tokens", "tokens", "tokens")}
+              </span>
+              <Select<string>
+                value={String(settings.cloud_budget.enabled ? settings.cloud_budget.limit : -1)}
+                onChange={(value) => void save({ cloud_daily_token_limit: Number(value) })}
+                disabled={busy}
+                ariaLabel={tr("Cloud-Tageslimit", "Daily cloud limit", "Límite diario de la nube")}
+                width={200}
+                className="h-8 min-w-[9.5rem] justify-between"
+                options={budgetOptions(settings.cloud_budget.enabled ? settings.cloud_budget.limit : -1, settings.cloud_budget.max).map((limit) => ({
+                  value: String(limit),
+                  label: limit < 0 ? tr("Ohne Limit", "No limit", "Sin límite") : `${limit.toLocaleString(LOCALE_TAG[locale])} ${tr("Tokens", "tokens", "tokens")}`,
+                  hint:
+                    limit === settings.cloud_budget?.max
+                      ? tr("Obergrenze des Servers", "Server maximum", "Máximo del servidor")
+                      : undefined,
+                }))}
+              />
             </span>
           </div>
           {settings.cloud_budget.enabled && (
@@ -1107,17 +1216,102 @@ function AboutSection({ version, release, checking, notify }: {
   notify: Notify;
 }) {
   const { tr } = useI18n();
+  const uses: { icon: React.ReactNode; title: string; text: string }[] = [
+    {
+      icon: <FileText size={15} aria-hidden="true" />,
+      title: tr("Rechnungen vorprüfen", "Pre-check invoices", "Revisar facturas"),
+      text: tr("Pflichtangaben, Rechenwerte, Steuersatz, IBAN; USt-IdNr. auf Klick über VIES.", "Mandatory details, arithmetic, tax rate, IBAN; VAT ID via VIES on click.", "Datos obligatorios, cálculos, tipo impositivo, IBAN; NIF-IVA vía VIES con un clic."),
+    },
+    {
+      icon: <FileCode size={15} aria-hidden="true" />,
+      title: tr("E-Rechnungen lesen", "Read e-invoices", "Leer facturas electrónicas"),
+      text: tr("ZUGFeRD, Factur-X und XRechnung; bei hybriden Rechnungen gilt das XML.", "ZUGFeRD, Factur-X and XRechnung; for hybrid invoices the XML prevails.", "ZUGFeRD, Factur-X y XRechnung; en facturas híbridas prevalece el XML."),
+    },
+    {
+      icon: <Scale size={15} aria-hidden="true" />,
+      title: tr("Verträge einstufen", "Classify contracts", "Clasificar contratos"),
+      text: tr("Risikoklasse nach EU AI Act und sensible Daten nach DSGVO, mit Fundstellen.", "EU AI Act risk class and sensitive data under the GDPR, with evidence.", "Clase de riesgo del Reglamento IA y datos sensibles según el RGPD, con evidencias."),
+    },
+    {
+      icon: <MessageSquare size={15} aria-hidden="true" />,
+      title: tr("Fragen zum Beleg", "Ask about a document", "Preguntar sobre el documento"),
+      text: tr("Der Copilot antwortet aus dem Beleg und nennt die Stelle.", "The copilot answers from the document and cites the passage.", "El copiloto responde a partir del documento y cita el pasaje."),
+    },
+    {
+      icon: <Package size={15} aria-hidden="true" />,
+      title: tr("Prüfung nachweisen", "Prove the audit", "Acreditar la revisión"),
+      text: tr("Prüfbericht, signiertes GoBD-Prüfdatenpaket und Verfahrensdokumentation.", "Audit report, signed GoBD data package and procedural documentation.", "Informe, paquete de datos GoBD firmado y documentación del procedimiento."),
+    },
+    {
+      icon: <Lock size={15} aria-hidden="true" />,
+      title: tr("Texte schwärzen", "Redact text", "Anonimizar textos"),
+      text: tr("Andere Anwendungen schwärzen über die DLP-Schnittstelle, bevor sie eine Cloud-KI nutzen.", "Other applications redact via the DLP interface before using a cloud AI.", "Otras aplicaciones anonimizan mediante la interfaz DLP antes de usar una IA en la nube."),
+    },
+  ];
+  const steps: { title: string; text: string }[] = [
+    {
+      title: tr("Lesen", "Read", "Leer"),
+      text: tr("Textebene des PDFs bzw. XML der E-Rechnung.", "Text layer of the PDF or the e-invoice XML.", "Capa de texto del PDF o XML de la factura electrónica."),
+    },
+    {
+      title: tr("Schützen", "Protect", "Proteger"),
+      text: tr("Personenbezogene Daten werden erkannt und vor jedem Cloud-Aufruf pseudonymisiert.", "Personal data is detected and pseudonymized before every cloud call.", "Los datos personales se detectan y se seudonimizan antes de cada llamada a la nube."),
+    },
+    {
+      title: tr("Prüfen", "Check", "Comprobar"),
+      text: tr("Das Sprachmodell liefert Fundstellen; feste Regeln prüfen sie nach, Pflichtangaben zusätzlich direkt im Text.", "The language model supplies evidence; fixed rules verify it, mandatory details also directly in the text.", "El modelo aporta evidencias; reglas fijas las verifican, los datos obligatorios también en el texto."),
+    },
+    {
+      title: tr("Bewerten", "Score", "Puntuar"),
+      text: tr("Der Score startet bei 100, jeder Mangel kostet einen festen Abzug. Gleiche Eingabe, gleicher Score – die KI vergibt keine Punkte. Ab 85 grün, ab 60 gelb, darunter rot.", "The score starts at 100 and every defect costs a fixed deduction. Same input, same score – the AI awards no points. Green from 85, amber from 60, red below.", "La puntuación parte de 100 y cada defecto resta una cantidad fija. Misma entrada, misma puntuación: la IA no otorga puntos. Verde desde 85, ámbar desde 60, rojo por debajo."),
+    },
+    {
+      title: tr("Belegen", "Record", "Registrar"),
+      text: tr("Jeder Schritt steht hash-verkettet im Protokoll; die Prüfperson bestätigt mit einem signierten Siegel.", "Every step is hash-chained in the audit trail; the reviewer confirms with a signed seal.", "Cada paso queda encadenado por hash en el registro; el revisor confirma con un sello firmado."),
+    },
+  ];
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <SectionTitle
-        title={tr("Über", "About", "Acerca de")}
+        title="Enterprise Compliance Agent"
         text={tr(
-          "Enterprise Compliance Agent – Updates per Klick, vorher wird die Datenbank automatisch gesichert.",
-          "Enterprise Compliance Agent – one-click updates with an automatic database backup first.",
-          "Enterprise Compliance Agent: actualizaciones en un clic con copia de seguridad automática previa.",
+          "Prüft Rechnungen und Verträge vor, bevor sie gebucht oder unterschrieben werden – nach UStG, E-Rechnungs-Norm, DSGVO und EU AI Act. Jede Prüfung steht signiert im Protokoll und ist für Buchhaltung, Revision und Betriebsprüfung nachvollziehbar.",
+          "Pre-audits invoices and contracts before they are booked or signed – against German VAT law, the e-invoicing standard, the GDPR and the EU AI Act. Every audit is signed in the audit trail and traceable for accounting, internal audit and tax audits.",
+          "Revisa facturas y contratos antes de contabilizarlos o firmarlos, según la ley del IVA alemana, la norma de factura electrónica, el RGPD y el Reglamento de IA. Cada revisión queda firmada en el registro y es trazable.",
         )}
       />
       <ReleasePanel initial={release} installedVersion={version} externalChecking={checking} notify={notify} />
+
+      <section>
+        <p className="label-caps">{tr("Wofür", "What it does", "Para qué sirve")}</p>
+        <ul className="mt-2.5 grid grid-cols-1 gap-x-5 gap-y-3 sm:grid-cols-2">
+          {uses.map((use) => (
+            <li key={use.title} className="flex gap-2.5">
+              <span className="mt-0.5 shrink-0 text-subtle">{use.icon}</span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-fg">{use.title}</span>
+                <span className="block text-xs leading-relaxed text-muted">{use.text}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="border-t border-line pt-4">
+        <p className="label-caps">{tr("So entsteht das Ergebnis", "How the result comes about", "Cómo se obtiene el resultado")}</p>
+        <ol className="cascade-steps mt-2.5">
+          {steps.map((step, index) => (
+            <li key={step.title} className="cascade-step">
+              <span className="cascade-dot" aria-hidden="true">{index + 1}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-fg">{step.title}</span>
+                <span className="block max-w-[70ch] text-xs leading-relaxed text-muted">{step.text}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       <div className="border-t border-line pt-4">
         <p className="label-caps">{tr("Regulatorischer Stand", "Regulatory baseline", "Marco normativo")}</p>
         <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
@@ -1127,12 +1321,32 @@ function AboutSection({ version, release, checking, notify }: {
           <li>{tr("DSGVO Art. 4 Nr. 5, 25, 32 – Pseudonymisierung vor jedem Cloud-Aufruf; DLP-Gateway unter /api/v1/redact", "GDPR Art. 4(5), 25, 32 – Pseudonymization before cloud calls; DLP gateway at /api/v1/redact", "RGPD Art. 4(5), 25, 32 – Seudonimización previa a la nube; DLP Gateway en /api/v1/redact")}</li>
         </ul>
         <p className="mt-2 text-xs text-subtle">
-          {tr("Technische Vorprüfung – keine Rechts- oder Steuerberatung.", "Technical pre-audit – not legal or tax advice.", "Pre-auditoría técnica – no constituye asesoramiento legal ni fiscal.")}
+          {tr(
+            "Technische Vorprüfung – keine Rechts- oder Steuerberatung. Die Entscheidung trifft immer die Prüfperson.",
+            "Technical pre-audit – not legal or tax advice. The decision always rests with the reviewer.",
+            "Pre-auditoría técnica: no constituye asesoramiento legal ni fiscal. La decisión siempre es del revisor.",
+          )}
         </p>
       </div>
+
+      <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-4 text-xs text-subtle">
+        <span>
+          {tr("Entwickelt von", "Built by", "Desarrollado por")} <span className="font-medium text-fg">Lutz Zarske</span> · {tr("MIT-Lizenz", "MIT licence", "Licencia MIT")}
+        </span>
+        <a
+          href={SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 font-medium text-accent underline-offset-2 hover:underline"
+        >
+          {tr("Quellcode auf GitHub", "Source on GitHub", "Código en GitHub")} <ExternalLink size={12} aria-hidden="true" />
+        </a>
+      </footer>
     </div>
   );
 }
+
+const SOURCE_URL = "https://github.com/lutz-zarske/enterprise-compliance-agent";
 
 /** Einstellungen: Kategorien links, ruhige Formulare rechts; feste Hoehe, Inhalte scrollen im Panel. */
 export function SettingsModal({ open, settings, health, version, onClose, onSaved, onAccessChanged, notify }: Props) {

@@ -1261,6 +1261,12 @@ class SettingsUpdate(ApiModel):
     pii_strictness: Literal["strict", "standard", "audit_only"] | None = None
     enforce_ustg_check: bool | None = None
     ai_act_escalation: bool | None = None
+    cloud_daily_token_limit: int | None = Field(
+        default=None,
+        ge=-1,
+        le=1_000_000_000,
+        description="Tageslimit für Cloud-Tokens (-1 = ohne Limit); überschreibt CLOUD_DAILY_TOKEN_LIMIT.",
+    )
     fallbacks: list[InferenceModeLiteral] | None = Field(
         default=None,
         max_length=3,
@@ -1459,6 +1465,6 @@ class RedactResponse(ApiModel):
 class ReleaseApplyRequest(ApiModel):
     """Bestätigung eines Release-Wechsels durch die Administration."""
 
-    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.6.2'.")
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.6.3'.")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(default="System", min_length=2, max_length=120, description="Wer das Update auslöst.")

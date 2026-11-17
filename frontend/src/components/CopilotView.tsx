@@ -7,9 +7,9 @@ import { cx, formatElapsed, formatModel } from "../lib/format";
 import { type Locale, useI18n } from "../lib/i18n";
 import { Markdown } from "../lib/markdown";
 import type { CopilotTurn, DocumentDetail, DocumentSummary, ThinkingLevel } from "../types/api";
-import { AlertTriangle, Download, FileText, Mail, MessageSquare, Send, Square } from "./icons";
+import { AlertTriangle, ArrowUp, Download, FileText, Mail, MessageSquare, Square } from "./icons";
 import { Select } from "./Select";
-import { AutoTextarea, CopyButton, EmptyState, Segmented, Spinner } from "./ui";
+import { AutoTextarea, CopyButton, EmptyState, Kbd, Segmented, Spinner } from "./ui";
 
 const QUESTIONS: Record<Locale, {
   fields: string;
@@ -386,7 +386,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
                           className="group flex w-full items-center gap-3 rounded-lg border border-line px-3.5 py-2.5 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-hover"
                         >
                           <span className="min-w-0 flex-1">{suggestion.label}</span>
-                          <Send size={13} aria-hidden="true" className="shrink-0 text-subtle transition-colors duration-150 group-hover:text-accent" />
+                          <ArrowUp size={13} aria-hidden="true" className="shrink-0 text-subtle transition-colors duration-150 group-hover:text-accent" />
                         </button>
                       </li>
                     ))}
@@ -470,10 +470,10 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
             void ask(input);
           }}
         >
-          <div className="flex items-end gap-2">
+          <div className="composer">
             <AutoTextarea
               ref={inputRef}
-              className="flex-1"
+              className="px-3 pb-1 pt-2.5"
               minRows={1}
               maxRows={6}
               value={input}
@@ -490,27 +490,32 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
                 }
               }}
             />
-            {busy ? (
-              <button
-                className="btn btn-primary h-[38px] w-[38px] shrink-0 rounded-full p-0"
-                type="button"
-                onClick={stop}
-                aria-label={tr("Antwort stoppen", "Stop answer", "Detener respuesta")}
-                title={tr("Antwort stoppen (Esc)", "Stop answer (Esc)", "Detener respuesta (Esc)")}
-              >
-                <Square size={13} fill="currentColor" aria-hidden="true" />
-              </button>
-            ) : (
-              <button className="btn btn-primary h-[38px] w-[38px] shrink-0 rounded-full p-0" type="submit" disabled={input.trim().length < 2} aria-label={tr("Senden", "Send", "Enviar")}>
-                <Send size={15} aria-hidden="true" />
-              </button>
-            )}
+            <div className="flex items-center gap-3 px-2.5 pb-2">
+              <span className="hidden min-w-0 truncate pl-0.5 text-xs text-subtle sm:inline">
+                <Kbd>Enter</Kbd> {tr("senden", "send", "enviar")} · <Kbd>{tr("Umschalt", "Shift", "Mayús")}</Kbd> + <Kbd>Enter</Kbd> {tr("neue Zeile", "new line", "nueva línea")}
+              </span>
+              {busy ? (
+                <button
+                  className="composer-send ml-auto"
+                  type="button"
+                  onClick={stop}
+                  aria-label={tr("Antwort stoppen", "Stop answer", "Detener respuesta")}
+                  title={tr("Antwort stoppen (Esc)", "Stop answer (Esc)", "Detener respuesta (Esc)")}
+                >
+                  <Square size={11} fill="currentColor" aria-hidden="true" />
+                </button>
+              ) : (
+                <button className="composer-send ml-auto" type="submit" disabled={input.trim().length < 2} aria-label={tr("Senden", "Send", "Enviar")} title={tr("Senden (Enter)", "Send (Enter)", "Enviar (Enter)")}>
+                  <ArrowUp size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </div>
           <p className="mt-1.5 text-xs text-subtle">
             {tr(
-              "Enter sendet, Umschalt + Enter für eine neue Zeile. Keine Rechts- oder Steuerberatung; Cloud-Modelle erhalten den Text nur pseudonymisiert.",
-              "Enter sends, Shift + Enter adds a newline. Not legal or tax advice; cloud models only receive pseudonymized text.",
-              "Enter envía, Mayús + Enter añade línea. No constituye asesoramiento legal ni fiscal; los modelos en la nube solo reciben texto seudonimizado.",
+              "Keine Rechts- oder Steuerberatung; Cloud-Modelle erhalten den Text nur pseudonymisiert.",
+              "Not legal or tax advice; cloud models only receive pseudonymized text.",
+              "No constituye asesoramiento legal ni fiscal; los modelos en la nube solo reciben texto seudonimizado.",
             )}
           </p>
         </form>

@@ -5,7 +5,7 @@ import { api, ApiError, downloadBlob } from "../lib/api";
 import { cx, formatDate, formatModel, providerLabel, TONE_TEXT, toneForScore } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import type { DocumentDetail, DocumentSummary, LedgerEntry, LedgerVerification } from "../types/api";
-import { BookOpen, Download, Fingerprint, Layers, Lock, Package, RefreshCw, Scale, ShieldAlert, ShieldCheck } from "./icons";
+import { BookOpen, Download, Fingerprint, Layers, Link, Lock, Package, RefreshCw, Scale, ShieldAlert, ShieldCheck } from "./icons";
 import { Chip, EmptyState, HashBadge, PillTabs, Skeleton, Spinner, Tooltip } from "./ui";
 
 type Filter = "all" | "document" | "system";
@@ -52,12 +52,24 @@ function IntegrityStrip({ ledger, fingerprint, onRefresh, refreshing }: {
         </div>
       </div>
       {ledger && ledger.entries > 0 && (
-        <HashBadge
-          value={ledger.head_hash}
-          label={tr("Kopf-Hash", "Head hash", "Hash raíz")}
-          verified={ledger.valid}
-          verifiedLabel={tr("intakt", "intact", "intacto")}
-        />
+        <Tooltip
+          content={tr(
+            "Hash des jüngsten Eintrags – er fasst die ganze Kette zusammen. Wer ihn notiert, kann später jede nachträgliche Änderung nachweisen.",
+            "Hash of the latest entry – it summarizes the whole chain. Note it down to prove any later change.",
+            "Hash de la última entrada: resume toda la cadena. Anótelo para demostrar cualquier cambio posterior.",
+          )}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Link size={13} className="text-subtle" aria-hidden="true" />
+            <HashBadge
+              value={ledger.head_hash}
+              label={tr("Kopf-Hash", "Head hash", "Hash raíz")}
+              verified={ledger.valid}
+              verifiedLabel={tr("intakt", "intact", "intacto")}
+              statusIcon={false}
+            />
+          </span>
+        </Tooltip>
       )}
       {fingerprint && (
         <Tooltip
@@ -326,16 +338,17 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
                 onClick={() =>
                   document &&
                   run("vd", async () => {
+                    const { blob, filename } = await api.proceduralDoc(document.id, "docx");
                     downloadBlob(
-                      await api.proceduralDoc(document.id),
-                      tr(`Verfahrensdokumentation_${stem}.html`, `ProceduralDocumentation_${stem}.html`, `DocumentacionProcedimientos_${stem}.html`),
-                      "text/html;charset=utf-8",
+                      blob,
+                      filename ?? tr(`Verfahrensdokumentation_${stem}.docx`, `ProceduralDocumentation_${stem}.docx`, `DocumentacionProcedimientos_${stem}.docx`),
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     );
-                    notify("ok", tr("Verfahrensdokumentation erstellt", "Procedural documentation created", "Documentación de procedimientos creada"), tr("Markierte Stellen ergänzt das Unternehmen vor der Freigabe.", "Fill in marked placeholders prior to sign-off.", "Complete los marcadores antes de la aprobación."));
+                    notify("ok", tr("Verfahrensdokumentation erstellt", "Procedural documentation created", "Documentación de procedimientos creada"), tr("Gelb markierte Stellen in Word ergänzen, dann freigeben.", "Fill in the yellow placeholders in Word, then sign off.", "Complete en Word los campos marcados en amarillo y apruébela."));
                   })
                 }
               >
-                {busy === "vd" ? <Spinner size={13} /> : <BookOpen size={14} aria-hidden="true" />} {tr("Verfahrensdokumentation (GoBD Rz. 153)", "Procedural Docs (GoBD Rz. 153)", "Documentación (GoBD Rz. 153)")}
+                {busy === "vd" ? <Spinner size={13} /> : <BookOpen size={14} aria-hidden="true" />} {tr("Verfahrensdokumentation (Word)", "Procedural Docs (Word)", "Documentación (Word)")}
               </button>
               <button className="btn w-full justify-start" disabled={!document} onClick={onOpenExport}>
                 <Download size={14} aria-hidden="true" /> {tr("Zertifikat, JSON, Memo & Siegel …", "Certificate, JSON, Memo & Seal …", "Certificado, JSON, Memo y Sello …")}

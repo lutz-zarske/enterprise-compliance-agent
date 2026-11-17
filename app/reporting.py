@@ -18,6 +18,7 @@ from typing import Any
 from app.audit_ledger import AuditEventType, ChainVerification, LedgerEntry
 from app.config import APP_TITLE, APP_VERSION
 from app.db import DocumentRecord, utcnow
+from app.print_layout import BASE_CSS, page_rules
 from app.redaction import mask_value
 from app.schemas import ANNEX_III_LABELS, AnnexIIICategory
 from app.services import (
@@ -753,6 +754,43 @@ _SEAL_SVG = """<svg class="seal" viewBox="0 0 120 120" aria-hidden="true">
 </svg>"""
 
 
+def _plural(template: str, count: int) -> str:
+    """„Einzahl|Mehrzahl“ - passende Form zur Anzahl."""
+    one, _, many = template.partition("|")
+    return one if count == 1 else (many or one)
+
+
+_LAYOUT_TEXT: dict[str, dict[str, str]] = {
+    "de": {
+        "print_hint": "A4-Druckansicht · Strg + P druckt den Bericht oder speichert ihn als PDF.",
+        "page": "Seite", "of": "von", "of_100": "von 100",
+        "passed_of": "{passed} von {total} erfüllt", "not_applicable": "nicht anwendbar",
+        "passed_notes": "{passed} erfüllt · {notes} Hinweis|{passed} erfüllt · {notes} Hinweise",
+        "failed_of": "{failed} Mangel von {total}|{failed} Mängel von {total}",
+        "math_short": "Rechenprüfung", "gdpr_short": "DSGVO",
+        "pii_count": "{n} Fundstelle, maskiert|{n} Fundstellen, maskiert", "pii_none": "keine Fundstellen",
+    },
+    "en": {
+        "print_hint": "A4 print view · Ctrl + P prints the report or saves it as PDF.",
+        "page": "Page", "of": "of", "of_100": "of 100",
+        "passed_of": "{passed} of {total} passed", "not_applicable": "not applicable",
+        "passed_notes": "{passed} passed · {notes} note|{passed} passed · {notes} notes",
+        "failed_of": "{failed} defect of {total}|{failed} defects of {total}",
+        "math_short": "Arithmetic", "gdpr_short": "GDPR",
+        "pii_count": "{n} finding, masked|{n} findings, masked", "pii_none": "no findings",
+    },
+    "es": {
+        "print_hint": "Vista de impresión A4 · Ctrl + P imprime el informe o lo guarda como PDF.",
+        "page": "Página", "of": "de", "of_100": "de 100",
+        "passed_of": "{passed} de {total} cumplidos", "not_applicable": "no aplicable",
+        "passed_notes": "{passed} cumplidos · {notes} aviso|{passed} cumplidos · {notes} avisos",
+        "failed_of": "{failed} defecto de {total}|{failed} defectos de {total}",
+        "math_short": "Cálculos", "gdpr_short": "RGPD",
+        "pii_count": "{n} hallazgo, enmascarado|{n} hallazgos, enmascarados", "pii_none": "sin hallazgos",
+    },
+}
+
+
 def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
     lang = lang or str(report.get("lang") or "de")
     t = _rt(lang)
@@ -767,6 +805,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
     sign = report["sign_off"]
     approved = bool(sign and sign["status"] == "SEALED_APPROVED")
     ai = report["ai_act"]
+    lt = _LAYOUT_TEXT.get(lang, _LAYOUT_TEXT["de"])
 
     def rows(checks: list[dict[str, Any]]) -> str:
         return "".join(
@@ -780,7 +819,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
 
     findings = "".join(
         f"<tr><td>{_e(f['category'])}</td><td class='mono'>{_e(f['masked_value'])}</td>"
-        f"<td>{_e(source_labels.get(f['source'], f['source']))}</td><td>{f['confidence'] * 100:.0f} %</td></tr>"
+        f"<td>{_e(source_labels.get(f['source'], f['source']))}</td><td class='num'>{f['confidence'] * 100:.0f} %</td></tr>"
         for f in report["gdpr"]["findings"][:25]
     ) or f"<tr><td colspan='4'>{_e(t['no_pii'])}</td></tr>"
 
@@ -801,8 +840,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
         container = (
             f"{_e(t['embedded_as'])} {_e(einvoice['attachment_name'])}" if einvoice["source"] == "embedded" else _e(t["pure_xml"])
         )
-        einvoice_block = f"""<h2>{_e(t['einvoice_h'])}</h2>
-<p><strong>{_e(einvoice['profile'])}</strong> · Syntax {_e(einvoice['syntax'])} · {container}</p>
+        einvoice_block = f"""<p><strong>{_e(einvoice['profile'])}</strong> · Syntax {_e(einvoice['syntax'])} · {container}</p>
 <div class="grid small"><div>{_e(t['sha_xml'])}</div><div class="mono">{_e(einvoice['xml_sha256'])}</div>
 <div>{_e(t['spec_bt24'])}</div><div class="mono">{_e(einvoice['specification_id'])}</div></div>
 <table><thead><tr><th style="width:12%">BT</th><th style="width:38%">Business Term</th><th>{_e(t['bt_val'])}</th></tr></thead><tbody>{terms}</tbody></table>
@@ -811,8 +849,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
     override = report.get("human_override")
     override_block = ""
     if override:
-        override_block = f"""<h2>{_e(t['override_h'])}</h2>
-<div class="milestone">
+        override_block = f"""<div class="milestone keep">
 <div class="grid small">
 <div>{_e(t['auditor'])}</div><div><strong>{_e(override['auditor_name'])}</strong> · {_e(_fmt_ts(override['overridden_at']))}</div>
 <div>{_e(t['ai_level'])}</div><div>{_e(override['previous_risk_level'])} → <strong>{_e(override['new_risk_level'])}</strong></div>
@@ -833,121 +870,189 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
 
     retention = report.get("retention")
     retention_row = (
-        f"<div>{_e(t['retention'])}</div><div>{_e(retention['years'])} {_e(t['years'])}, {_e(t['until_at_least'])} "
+        f"<dt>{_e(t['retention'])}</dt><dd>{_e(retention['years'])} {_e(t['years'])}, {_e(t['until_at_least'])} "
         f"{_e(_fmt_date(retention['until']))} ({_e(retention['basis'])}); {_e(t['fin_sector'])} "
-        f"{_e(_fmt_date(retention['financial_sector_until']))}</div>"
+        f"{_e(_fmt_date(retention['financial_sector_until']))}</dd>"
         if retention
         else ""
     )
 
     seal_block = (
-        f"""<div class="sealbox {'ok' if approved else 'bad'}">{_SEAL_SVG}
-        <div><div class="sealtitle">{_e(t['seal_approved'] if approved else t['seal_rejected'])}</div>
-        <div>{_e(t['auditor_lbl'])}: <strong>{_e(sign['auditor_name'])}</strong></div>
-        <div>{_e(t['sealed_lbl'])}: {_e(_fmt_ts(sign['sealed_at']))}</div>
-        <div class="mono small">{_e(t['seal_hash'])} {_e(sign['ledger_entry_hash'])}</div>
-        {f"<div class='small'>{_e(t['note'])}: {_e(sign['note'])}</div>" if sign.get('note') else ''}</div></div>"""
+        f"""<div class="sealbox keep {'ok' if approved else 'bad'}">{_SEAL_SVG}
+<div><div class="sealtitle">{_e(t['seal_approved'] if approved else t['seal_rejected'])}</div>
+<div>{_e(t['auditor_lbl'])}: <strong>{_e(sign['auditor_name'])}</strong> · {_e(t['sealed_lbl'])}: {_e(_fmt_ts(sign['sealed_at']))}</div>
+{f"<div class='small'>{_e(t['note'])}: {_e(sign['note'])}</div>" if sign.get('note') else ''}
+<div class="mono small">{_e(t['seal_hash'])} {_e(sign['ledger_entry_hash'])} · Ed25519</div></div></div>"""
         if sign
-        else f'<div class="draft">{_e(t["draft_banner"])}</div>'
+        else f'<div class="draft keep">{_e(t["draft_banner"])}</div>'
     )
 
+    def tally(items: list[dict[str, Any]]) -> tuple[str, str]:
+        relevant = [c for c in items if c.get("status") != "not_applicable"]
+        if not relevant:
+            return "neutral", lt["not_applicable"]
+        passed = sum(1 for c in relevant if c.get("status") == "pass")
+        # Mangel = Verstoß oder Hinweis mit Punktabzug; ein Hinweis ohne Abzug ist nur ein Vermerk.
+        defects = [c for c in relevant if c.get("status") == "fail" or (c.get("deduction") or 0) > 0]
+        notes = sum(1 for c in relevant if c.get("status") == "warn" and not (c.get("deduction") or 0))
+        if defects:
+            tone = "fail" if any(c.get("status") == "fail" for c in defects) else "warn"
+            return tone, _plural(lt["failed_of"], len(defects)).format(failed=len(defects), total=len(relevant))
+        if notes:
+            return "pass", _plural(lt["passed_notes"], notes).format(passed=passed, notes=notes)
+        return "pass", lt["passed_of"].format(passed=passed, total=len(relevant))
+
+    ai_tone = {"unacceptable": "fail", "high": "warn", "limited": "warn"}.get(ai.get("risk_level") or "", "pass")
+    pii_count = len(report["gdpr"]["findings"])
+    pii_tone = "warn" if report["gdpr"].get("contains_special_categories") else "pass"
+    tiles = [
+        ("§ 14 UStG", *tally(report["ustg_matrix"])),
+        (lt["math_short"], *tally(report["math_checks"])),
+        ("EU AI Act", ai_tone, ai["risk_label"]),
+        (lt["gdpr_short"], pii_tone, _plural(lt["pii_count"], pii_count).format(n=pii_count) if pii_count else lt["pii_none"]),
+    ]
+    glance = "".join(
+        f'<div class="tile t-{tone}"><span>{_e(label)}</span><b>{_e(value)}</b></div>' for label, tone, value in tiles
+    )
+
+    sections: list[tuple[str, str]] = []
+    sections.append((
+        t["ustg_h"],
+        f"""<table><thead><tr><th style="width:30%">{_e(t['col_item'])}</th><th style="width:24%">{_e(t['col_norm'])}</th><th style="width:12%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['ustg_matrix'])}</tbody></table>""",
+    ))
+    if einvoice_block:
+        sections.append((t["einvoice_h"], einvoice_block))
+    ai_body = (
+        f"<p><strong>{_e(ai['risk_label'])}</strong>{(' · ' + _e(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}</p>"
+        f"<p class='small'>{_e(ai['reasoning'])}</p>"
+        + (f"<p class='small'>{_e(t['articles_html'])}: {_e(', '.join(ai['article_references']))}</p>" if ai["article_references"] else "")
+        + "".join(f"<p class='small'>{_e(c['note'])}</p>" for c in ai["checks"] if c.get("note"))
+        + "".join(f"<p class='risk'>{_e(c['risk_note'])}</p>" for c in ai["checks"] if c.get("risk_note"))
+    )
+    sections.append((t["ai_h"], ai_body))
+    sections.append((
+        t["math_h"],
+        f"""<table><thead><tr><th style="width:30%">{_e(t['col_check'])}</th><th style="width:24%">{_e(t['col_norm'])}</th><th style="width:12%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['math_checks'])}</tbody></table>""",
+    ))
+    sections.append((
+        t["gdpr_html"],
+        f"""<table><thead><tr><th>{_e(t['col_cat'])}</th><th>{_e(t['col_val'])}</th><th>{_e(t['col_src'])}</th><th class="num">{_e(t['col_conf'])}</th></tr></thead><tbody>{findings}</tbody></table>""",
+    ))
+    if override_block:
+        sections.append((t["override_h"], override_block))
+    sections.append((
+        t["ledger_h"],
+        f"""<table><thead><tr><th class="num" style="width:6%">{_e(t['col_seq'])}</th><th style="width:25%">{_e(t['col_event'])}</th><th style="width:19%">{_e(t['col_time'])}</th><th>{_e(t['col_person'])}</th><th class="num" style="width:8%">Score</th><th style="width:19%">{_e(t['col_ehash'])}</th><th style="width:9%">{_e(t['col_sig'])}</th></tr></thead><tbody>{history}</tbody></table>""",
+    ))
+    details = "".join(
+        f'<h2><span class="no">{index}</span>{_e(title)}</h2>\n{body}\n' for index, (title, body) in enumerate(sections, start=1)
+    )
+
+    audited = report["inference"].get("audited_at") or report["ledger"].get("timestamp_utc")
+    running = f'<div class="running"><span>{_e(APP_TITLE)} · {_e(t["report_type"])}</span><span>{_e(doc["filename"])}</span></div>'
+    rules = page_rules(
+        top_left=f"{APP_TITLE} · {t['report_type']}",
+        top_right=str(doc["filename"]),
+        bottom_left=f"Audit-ID {str(report['audit_id'] or '–')[:8]} · {t['generated']} {_fmt_date(report['generated_at'])}",
+        page_label=lt["page"],
+        of_label=lt["of"],
+    )
     return f"""<!doctype html>
 <html lang="{_e(lang)}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{_e(t['title_prefix'])} {_e(doc['filename'])}</title>
+<title>{_e(report_title(report, lang))}</title>
 <style>
-@page {{ size: A4; margin: 16mm 14mm; }}
-* {{ box-sizing: border-box; }}
-body {{ font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; color: #0f172a; background: #f1f5f9; margin: 0; font-size: 10.5pt; line-height: 1.45; }}
-.page {{ background: #fff; max-width: 210mm; margin: 12px auto; padding: 18mm 16mm; border: 1px solid #e2e8f0; }}
-h1 {{ font-size: 18pt; margin: 0; letter-spacing: -0.01em; }}
-h2 {{ font-size: 11.5pt; margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }}
-.mono {{ font-family: "JetBrains Mono", Consolas, monospace; font-size: 8.5pt; word-break: break-all; }}
-.small {{ font-size: 8.5pt; color: #475569; }}
-.head {{ display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }}
-.kicker {{ font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #475569; }}
-.score {{ text-align: center; border: 2px solid; border-radius: 12px; padding: 8px 14px; min-width: 120px; }}
-.score b {{ font-size: 26pt; display: block; line-height: 1; }}
-.green {{ color: #047857; border-color: #059669; }} .amber {{ color: #b45309; border-color: #d97706; }} .red {{ color: #be123c; border-color: #e11d48; }}
-.verdict {{ margin: 14px 0; padding: 10px 12px; border-radius: 8px; font-weight: 600; }}
-.risk {{ margin-top: 3px; color: #9f1239; font-size: 8.5pt; }}
-.refnote {{ margin-top: 12px; padding: 8px 12px; border: 1px dashed #94a3b8; border-radius: 8px; font-size: 9pt; color: #334155; }}
+{rules}
+{BASE_CSS}
+.result {{ display: grid; grid-template-columns: 40mm minmax(0, 1fr); gap: 16px; margin-top: 20px; }}
+.score {{ display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 12px 8px; border: 1.5px solid; border-radius: 12px; }}
+.score b {{ font-size: 32pt; line-height: 1; font-weight: 700; }}
+.score .of {{ margin-top: 2px; font-size: 9pt; opacity: .75; }}
+.score .band {{ margin-top: 8px; font-size: 8pt; font-weight: 600; line-height: 1.3; }}
+.green {{ color: #047857; border-color: #34d399; background: #f0fdf4; }}
+.amber {{ color: #b45309; border-color: #fbbf24; background: #fffbeb; }}
+.red {{ color: #be123c; border-color: #fb7185; background: #fff1f2; }}
+.verdict {{ padding: 10px 12px; border-radius: 10px; font-weight: 600; font-size: 10.5pt; }}
 .verdict.ok {{ background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }}
 .verdict.bad {{ background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }}
-table {{ width: 100%; border-collapse: collapse; margin-top: 4px; }}
-th, td {{ text-align: left; padding: 5px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }}
-th {{ font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #475569; }}
-.st {{ display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 8pt; font-weight: 600; white-space: nowrap; }}
+.glance {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }}
+.tile {{ padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }}
+.tile span {{ display: block; font-size: 7pt; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); }}
+.tile b {{ display: block; margin-top: 3px; font-size: 9pt; font-weight: 600; line-height: 1.3; }}
+.t-pass b {{ color: #047857; }} .t-warn b {{ color: #b45309; }} .t-fail b {{ color: #be123c; }} .t-neutral b {{ color: var(--muted); }}
+.refnote {{ margin-top: 14px; padding: 8px 12px; border: 1px dashed #94a3b8; border-radius: 8px; font-size: 8.5pt; color: #334155; }}
+.risk {{ margin-top: 3px; color: #9f1239; font-size: 8.5pt; }}
+.st {{ display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 7.5pt; font-weight: 600; white-space: nowrap; }}
 .st-pass {{ background: #ecfdf5; color: #047857; }} .st-warn {{ background: #fffbeb; color: #b45309; }}
 .st-fail {{ background: #fff1f2; color: #be123c; }} .st-not_applicable {{ background: #f1f5f9; color: #475569; }}
-.grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }}
-.sealbox {{ display: flex; gap: 14px; align-items: center; margin-top: 18px; padding: 12px; border: 2px solid; border-radius: 12px; }}
-.sealbox.ok {{ color: #047857; border-color: #059669; background: #f0fdf4; }}
-.sealbox.bad {{ color: #be123c; border-color: #e11d48; background: #fff1f2; }}
-.sealbox div {{ color: #0f172a; }}
-.seal {{ width: 84px; height: 84px; flex: none; }}
-.sealtitle {{ font-weight: 800; letter-spacing: .08em; color: inherit !important; }}
-.sealbox.ok .sealtitle {{ color: #047857 !important; }} .sealbox.bad .sealtitle {{ color: #be123c !important; }}
-.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+.sealbox {{ display: flex; gap: 16px; align-items: center; margin-top: 18px; padding: 14px 16px; border: 1.5px solid; border-radius: 12px; font-size: 9pt; }}
+.sealbox.ok {{ color: #047857; border-color: #34d399; background: #f0fdf4; }}
+.sealbox.bad {{ color: #be123c; border-color: #fb7185; background: #fff1f2; }}
+.sealbox div {{ color: var(--ink); }}
+.sealbox .mono {{ margin-top: 4px; color: var(--muted); }}
+.seal {{ width: 64px; height: 64px; flex: none; }}
+.sealtitle {{ margin-bottom: 2px; font-size: 9.5pt; font-weight: 800; letter-spacing: .08em; }}
+.sealbox.ok .sealtitle {{ color: #047857; }} .sealbox.bad .sealtitle {{ color: #be123c; }}
+.draft {{ margin-top: 18px; padding: 12px; border: 1px dashed #94a3b8; border-radius: 10px; color: var(--muted); text-align: center; font-size: 9pt; }}
 .milestone {{ padding: 10px 12px; border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 8px; }}
+.grid {{ display: grid; grid-template-columns: 38mm minmax(0, 1fr); gap: 4px 14px; }}
 tr.ms td {{ background: #f5f7ff; }}
-.draft {{ margin-top: 18px; padding: 10px; border: 1px dashed #94a3b8; color: #475569; text-align: center; border-radius: 8px; }}
-footer {{ margin-top: 18px; font-size: 8pt; color: #64748b; }}
-@media print {{
-  body {{ background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-  .page {{ border: 0; margin: 0; padding: 0; max-width: none; }}
-  h2 {{ break-after: avoid; }}
-  tr, .sealbox, .verdict, .refnote, .grid, .milestone {{ break-inside: avoid; }}
-  thead {{ display: table-header-group; }}
+@media screen and (max-width: 820px) {{
+  .result {{ grid-template-columns: 1fr; }}
+  .glance {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
 }}
 </style></head>
-<body><main class="page">
-<div class="head">
-  <div><div class="kicker">{_e(t['kicker'])}</div>
-  <h1>{_e(doc['filename'])}</h1>
-  <div class="small">Audit-ID <span class="mono">{_e(report['audit_id'])}</span></div></div>
-  <div class="score {_e(band)}"><b>{_e(score.get('score', '–'))}</b>/100<div class="small">{_e(score.get('band_label'))}</div></div>
-</div>
+<body>
+<p class="hint">{_e(lt['print_hint'])}</p>
+<section class="sheet">
+{running}
+<div class="kicker">{_e(t['kicker'])}</div>
+<h1>{_e(doc['filename'])}</h1>
+<p class="lead">Audit-ID <span class="mono">{_e(report['audit_id'])}</span> · {_e(t['audit_time'])} {_e(_fmt_ts(audited))}</p>
 {f'<div class="refnote">{_e(ref_note)}</div>' if report['inference'].get('reference_audit') else ''}
 {f'<div class="refnote">{_e(struct_note)}</div>' if report['inference'].get('structured') else ''}
-<div class="verdict {'bad' if report['release_blocked'] else 'ok'}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
+<div class="result keep">
+  <div class="score {_e(band)}"><b>{_e(score.get('score', '–'))}</b><span class="of">{_e(lt['of_100'])}</span><span class="band">{_e(score.get('band_label'))}</span></div>
+  <div>
+    <div class="label">{_e(t['rec'])}</div>
+    <div class="verdict {'bad' if report['release_blocked'] else 'ok'}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
+    <div class="glance">{glance}</div>
+  </div>
+</div>
+{seal_block}
 
 <h2>{_e(t['chain_section'])}</h2>
-<div class="grid small">
-<div>{_e(t['sha_doc'])}</div><div class="mono">{_e(doc['sha256'])}</div>
-<div>{_e(t['ledger_entry'])}</div><div class="mono">{_e(report['ledger']['entry_hash'])}</div>
-<div>{_e(t['prev_hash'])}</div><div class="mono">{_e(report['ledger']['previous_hash'])}</div>
-<div>{_e(t['prompt_hash'])}</div><div class="mono">{_e(report['ledger']['prompt_hash'])}</div>
-<div>{_e(t['audit_time'])}</div><div>{_e(_fmt_ts(report['ledger']['timestamp_utc']))}</div>
-<div>{_e(t['hash_chain_lbl'])}</div><div>{_e(t['intact'] if report['ledger']['chain_valid'] else t['broken'])} ({_e(report['ledger']['chain_entries'])} {_e(t['entries'])})</div>
-<div>{_e(t['model_provider'])}</div><div>{_e(report['inference']['model'])} / {_e(report['inference']['provider'])}</div>
-<div>{_e(t['ruleset'])}</div><div>{_e(score.get('ruleset_version'))}</div>
+<dl class="facts">
+<dt>{_e(t['sha_doc'])}</dt><dd class="mono">{_e(doc['sha256'])}</dd>
+<dt>{_e(t['ledger_entry'])}</dt><dd class="mono">{_e(report['ledger']['entry_hash'])}</dd>
+<dt>{_e(t['prev_hash'])}</dt><dd class="mono">{_e(report['ledger']['previous_hash'])}</dd>
+<dt>{_e(t['prompt_hash'])}</dt><dd class="mono">{_e(report['ledger']['prompt_hash'])}</dd>
+<dt>{_e(t['hash_chain_lbl'])}</dt><dd>{_e(t['intact'] if report['ledger']['chain_valid'] else t['broken'])} ({_e(report['ledger']['chain_entries'])} {_e(t['entries'])})</dd>
+<dt>{_e(t['model_provider'])}</dt><dd>{_e(report['inference']['model'])} / {_e(report['inference']['provider'])}</dd>
+<dt>{_e(t['ruleset'])}</dt><dd>{_e(score.get('ruleset_version'))}</dd>
 {retention_row}
-</div>
+</dl>
+</section>
 
-{einvoice_block}
+<section class="sheet">
+{running}
+{details}
+<footer class="legal">{_e(report['disclaimer'])}<br>{_e(t['generated'])} {_e(_fmt_ts(report['generated_at']))} · {_e(report['generator'])}</footer>
+</section>
+</body></html>"""
 
-<h2>{_e(t['ustg_h'])}</h2>
-<table><thead><tr><th style="width:30%">{_e(t['col_item'])}</th><th style="width:24%">{_e(t['col_norm'])}</th><th style="width:11%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['ustg_matrix'])}</tbody></table>
 
-<h2>{_e(t['ai_h'])}</h2>
-<p><strong>{_e(ai['risk_label'])}</strong>{(' · ' + _e(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}</p>
-<p class="small">{_e(ai['reasoning'])}</p>
-{f"<p class='small'>{_e(t['articles_html'])}: {_e(', '.join(ai['article_references']))}</p>" if ai['article_references'] else ''}
-{''.join(f"<p class='small'>{_e(c['note'])}</p>" for c in ai['checks'] if c.get('note'))}
-{''.join(f"<p class='risk'>{_e(c['risk_note'])}</p>" for c in ai['checks'] if c.get('risk_note'))}
+def export_stem(filename: str) -> str:
+    """Dateiname ohne Endung, für Downloads entschärft (keine Pfad- oder Steuerzeichen)."""
+    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+    cleaned = "".join("_" if ch in '<>:"/\\|?*' or ord(ch) < 32 else ch for ch in stem).strip(" .")
+    return cleaned[:80] or "Beleg"
 
-<h2>{_e(t['math_h'])}</h2>
-<table><thead><tr><th style="width:30%">{_e(t['col_check'])}</th><th style="width:24%">{_e(t['col_norm'])}</th><th style="width:11%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['math_checks'])}</tbody></table>
 
-<h2>{_e(t['gdpr_html'])}</h2>
-<table><thead><tr><th>{_e(t['col_cat'])}</th><th>{_e(t['col_val'])}</th><th>{_e(t['col_src'])}</th><th>{_e(t['col_conf'])}</th></tr></thead><tbody>{findings}</tbody></table>
+def report_title(report: dict[str, Any], lang: str = "de") -> str:
+    """Titel bzw. vorgeschlagener PDF-Dateiname: Prefix_Beleg_JJJJ-MM-TT (Datum der Prüfung)."""
+    audited = report["inference"].get("audited_at") or report["ledger"].get("timestamp_utc") or report["generated_at"]
+    return f"{_ASCII_PREFIX.get(lang, 'Pruefzertifikat')}_{export_stem(report['document']['filename'])}_{str(audited)[:10]}"
 
-{override_block}
 
-<h2>{_e(t['ledger_h'])}</h2>
-<table><thead><tr><th class="num" style="width:6%">{_e(t['col_seq'])}</th><th style="width:26%">{_e(t['col_event'])}</th><th style="width:20%">{_e(t['col_time'])}</th><th>{_e(t['col_person'])}</th><th class="num" style="width:8%">Score</th><th style="width:18%">{_e(t['col_ehash'])}</th><th style="width:9%">{_e(t['col_sig'])}</th></tr></thead><tbody>{history}</tbody></table>
-
-{seal_block}
-<footer>{_e(report['disclaimer'])}<br>{_e(t['generated'])} {_e(_fmt_ts(report['generated_at']))} · {_e(report['generator'])}</footer>
-</main></body></html>"""
+_ASCII_PREFIX = {"de": "Pruefzertifikat", "en": "AuditCertificate", "es": "CertificadoAuditoria"}

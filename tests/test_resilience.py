@@ -17,6 +17,7 @@ from app.config import Settings, normalize_loopback
 from app.heuristics import heuristic_audit, heuristic_extraction
 from app.jobs import JobManager
 from app.llm import suggest_local_model
+from app.runtime_settings import RuntimeSettingsStore
 from tests.conftest import (
     DEFAULT_COMPLIANCE,
     DEFAULT_EXTRACTION,
@@ -275,6 +276,41 @@ def test_erschoepftes_budget_weicht_lokal_aus(
     assert body["compliance"]["failover"][0]["reason_code"] == "cloud_budget_exceeded"
     assert fake_gemini.calls == []  # kein einziger Cloud-Aufruf ueber dem Limit
     assert client.get("/api/settings").json()["cloud_budget"]["enabled"] is True
+
+
+def test_tageslimit_in_den_einstellungen_aenderbar(
+    make_full_client: Callable[..., TestClient], fake_gemini: FakeGemini, invoice_pdf: bytes
+) -> None:
+    client = _gemini_client(make_full_client, fake_gemini)
+    # Ohne Server-Vorgabe frei wählbar; 0 sperrt die Cloud sofort, -1 hebt das Limit wieder auf.
+    assert client.post("/api/settings", json={"cloud_daily_token_limit": 0}).json()["cloud_budget"]["max"] is None
+    document_id = uploaded_document_id(client, invoice_pdf)
+    client.post(f"/documents/{document_id}/extract?wait=true")
+    assert fake_gemini.calls == []
+    budget = client.post("/api/settings", json={"cloud_daily_token_limit": -1}).json()["cloud_budget"]
+    assert budget["enabled"] is False and budget["limit"] == -1
+    body = client.post(f"/documents/{document_id}/extract?wait=true").json()
+    assert body["provider"] == "gemini" and len(fake_gemini.calls) >= 1
+
+    assert client.post("/api/settings", json={"cloud_daily_token_limit": 250_000}).json()["cloud_budget"]["limit"] == 250_000
+    assert client.post("/api/settings", json={"cloud_daily_token_limit": -2}).status_code == 422
+    # Persistiert: Ein neuer Store auf derselben Datenbank liest den Wert wieder.
+    state = client.app.state  # type: ignore[attr-defined]
+    assert RuntimeSettingsStore(state.settings, state.engine).cloud_daily_token_limit == 250_000
+    # Server-Vorgabe 100.000: Sie ist die Obergrenze, auch für einen höher gespeicherten Wert.
+    capped = RuntimeSettingsStore(state.settings.model_copy(update={"cloud_daily_token_limit": 100_000}), state.engine)
+    assert capped.cloud_daily_token_limit == 100_000 and capped.cloud_daily_token_limit_max == 100_000
+
+
+def test_server_tageslimit_ist_obergrenze(make_full_client: Callable[..., TestClient], fake_gemini: FakeGemini) -> None:
+    client = _gemini_client(make_full_client, fake_gemini, cloud_daily_token_limit=300_000)
+    assert client.get("/api/settings").json()["cloud_budget"]["max"] == 300_000
+    for too_much in (-1, 500_000):
+        response = client.post("/api/settings", json={"cloud_daily_token_limit": too_much, "pii_strictness": "strict"})
+        assert response.status_code == 422 and "300.000" in response.json()["error"]["message"]
+    view = client.get("/api/settings").json()
+    assert view["pii_strictness"] != "strict"  # abgelehnte Anfrage ändert nichts
+    assert client.post("/api/settings", json={"cloud_daily_token_limit": 250_000}).json()["cloud_budget"]["limit"] == 250_000
 
 
 # --- Hintergrund-Jobs ------------------------------------------------------------------------

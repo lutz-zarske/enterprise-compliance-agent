@@ -182,9 +182,13 @@ class ReleaseManager:
         )
         encoded = base64.b64encode(inner.encode("utf-16-le")).decode("ascii")
         target_cmd = f"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {encoded}"
+        # ShowWindow = 0 (SW_HIDE): Ohne diese Startinfo übergibt Windows 11 die Konsole an
+        # Windows Terminal, und -WindowStyle Hidden greift dort nicht – es bliebe ein Fenster offen.
         wmi_launcher = (
+            "$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }; "
             "$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "
-            f"-Arguments @{{ CommandLine = '{target_cmd}'; CurrentDirectory = '{str(self.repo_dir).replace(chr(39), chr(39) * 2)}' }}; "
+            f"-Arguments @{{ CommandLine = '{target_cmd}'; CurrentDirectory = '{str(self.repo_dir).replace(chr(39), chr(39) * 2)}'; "
+            "ProcessStartupInformation = $si }; "
             "if ($r.ReturnValue -ne 0) { exit 1 }"
         )
         try:
@@ -194,6 +198,7 @@ class ReleaseManager:
                 capture_output=True,
                 timeout=8,
                 check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             return res.returncode == 0
         except (OSError, subprocess.SubprocessError):

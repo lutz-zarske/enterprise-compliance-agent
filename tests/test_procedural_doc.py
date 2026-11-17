@@ -136,7 +136,8 @@ def test_endpunkt_markdown(full_client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/markdown")
-    assert "Verfahrensdokumentation_Rechnung_ZUGFeRD_Hybrid.md" in response.headers["content-disposition"]
+    assert "Verfahrensdokumentation_Rechnung_ZUGFeRD_Hybrid_" in response.headers["content-disposition"]
+    assert '.md"' in response.headers["content-disposition"]
     assert "## 3. Technische Systemdokumentation" in response.text
     assert "XML-Pfad (EN 16931, deterministisch, ohne KI)" in response.text
 
@@ -177,3 +178,41 @@ def test_pruefdatenpaket_enthaelt_verfahrensdokumentation(full_client: TestClien
     entry = next(item for item in manifest["files"] if item["path"] == "verfahrensdokumentation.html")
     assert "10 Jahre" in entry["description"]
     assert "Verfahrensdokumentation nach GoBD" in archive.read("verfahrensdokumentation.html").decode()
+
+
+def test_word_export_zum_ergaenzen(full_client: TestClient) -> None:
+    import re
+    from xml.etree import ElementTree
+
+    document_id = _seed(full_client)["Rechnung_Gueltig_14UStG.pdf"]
+    response = full_client.get(f"/api/documents/{document_id}/export/procedural-doc", params={"format": "docx"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.wordprocessingml")
+    # Dateiname: Prefix_Beleg_JJJJ-MM-TT.docx
+    assert re.search(r'filename="Verfahrensdokumentation_Rechnung_Gueltig_14UStG_\d{4}-\d{2}-\d{2}\.docx"',
+                     response.headers["content-disposition"])
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    for name in archive.namelist():  # jedes Teil ist wohlgeformtes XML
+        ElementTree.fromstring(archive.read(name))
+    body = archive.read("word/document.xml").decode("utf-8")
+    assert "Verfahrensdokumentation nach GoBD" in body and "Anhang A" in body
+    assert body.count('<w:highlight w:val="yellow"/>') >= 5 and ZU_ERGAENZEN in body
+    assert 'w:instr=" NUMPAGES ' in archive.read("word/footer1.xml").decode("utf-8")
+
+
+def test_html_ist_a4_druckvorlage(settings, tmp_path) -> None:
+    html = render_html(_doc(settings, tmp_path))
+    assert "@page" in html and "counter(pages)" in html and 'class="sheet"' in html
+
+
+def test_dateinamen_mit_datum(full_client: TestClient) -> None:
+    import re
+
+    document_id = _seed(full_client)["Rechnung_Gueltig_14UStG.pdf"]
+    package = full_client.get(f"/api/documents/{document_id}/export/gobd")
+    assert re.search(r'filename="Pruefdatenpaket_Rechnung_Gueltig_14UStG_\d{4}-\d{2}-\d{2}\.zip"',
+                     package.headers["content-disposition"])
+    report = full_client.get(f"/documents/{document_id}/report", params={"format": "json"})
+    assert re.search(r"Pruefzertifikat_Rechnung_Gueltig_14UStG_\d{4}-\d{2}-\d{2}\.json", report.headers["content-disposition"])
+    html = full_client.get(f"/documents/{document_id}/report").text
+    assert re.search(r"<title>Pruefzertifikat_Rechnung_Gueltig_14UStG_\d{4}-\d{2}-\d{2}</title>", html)

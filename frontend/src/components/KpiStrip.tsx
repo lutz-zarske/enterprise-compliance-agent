@@ -70,8 +70,10 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
   const hasQuota = Boolean(kpis && kpis.documents_analyzed > 0);
   const quote = kpis && kpis.documents_total > 0 ? (kpis.documents_analyzed / kpis.documents_total) * 100 : null;
 
+  // Ab xl in den Spalten der Workbench darunter: die erste Kachel so breit wie die Belegliste,
+  // die drei übrigen teilen sich die Inspektor-Spalte (gleiche Abstände).
   return (
-    <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:gap-4" aria-label={tr("Portfolio-Kennzahlen", "Portfolio KPIs", "Métricas de cartera")}>
+    <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:gap-4 xl:grid-cols-[340px_repeat(3,minmax(0,1fr))] 2xl:grid-cols-[400px_repeat(3,minmax(0,1fr))] 2xl:gap-5" aria-label={tr("Portfolio-Kennzahlen", "Portfolio KPIs", "Métricas de cartera")}>
       <Kpi
         loading={showSkeleton}
         label={tr("Geprüfte Dokumente", "Audited Documents", "Documentos auditados")}
@@ -103,11 +105,20 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         edge={EDGE_FOR_TONE[avgTone]}
         info={
           <>
-            {tr(
-              "Deterministisches Regelwerk nach § 14 UStG & ZUGFeRD EN 16931",
-              "Deterministic rule engine under German VAT Act (§ 14 UStG) & EN 16931",
-              "Motor de reglas determinista según § 14 UStG y ZUGFeRD EN 16931",
-            )}
+            <span className="block">
+              {tr(
+                "Durchschnitt aller geprüften Belege. Den Score des ausgewählten Belegs zeigt der Kreis im Inspektor.",
+                "Average across all audited documents. The selected document's score is shown in the inspector ring.",
+                "Media de todos los documentos auditados. La puntuación del documento seleccionado aparece en el inspector.",
+              )}
+            </span>
+            <span className="mt-1 block text-subtle">
+              {tr(
+                "Feste Regeln nach § 14 UStG, EN 16931, DSGVO und EU AI Act – die KI vergibt keine Punkte.",
+                "Fixed rules under § 14 UStG, EN 16931, the GDPR and the EU AI Act – the AI awards no points.",
+                "Reglas fijas según § 14 UStG, EN 16931, RGPD y Reglamento de IA: la IA no otorga puntos.",
+              )}
+            </span>
             {kpis?.ruleset_version && <span className="mt-1 block tabular-nums text-subtle">{tr("Regelwerk", "Ruleset", "Reglamento")} {kpis.ruleset_version}</span>}
           </>
         }
