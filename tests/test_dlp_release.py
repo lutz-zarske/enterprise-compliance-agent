@@ -95,7 +95,8 @@ def release_repo(tmp_path: Path) -> tuple[Path, str]:
     _git(repo, "commit", "-q", "-m", "Release aktuell")
     _git(repo, "tag", "-a", f"v{APP_VERSION}", "-m", "laufende Version")
     (repo / "app.txt").write_text("stand 2\n")
-    _git(repo, "commit", "-q", "-am", "fix: Neuerung")
+    _git(repo, "commit", "-q", "-am", "fix: Neuerung",
+         "-m", "- Prüfzertifikat neu gesetzt,\n  mit Folgezeile\n- Zweiter Punkt → mit Pfeil")
     _git(repo, "tag", "-a", "v99.0.0", "-m", "v99.0.0: Testrelease")
     commit = _git(repo, "rev-parse", "v99.0.0^{commit}")
     _git(repo, "reset", "-q", "--hard", f"v{APP_VERSION}")
@@ -110,6 +111,9 @@ def test_release_status_ohne_netz(make_full_client: Callable[..., TestClient], r
     latest = status["latest"]
     assert (latest["tag"], latest["commit"], latest["signature"]) == ("v99.0.0", commit, "unsigned")
     assert latest["fast_forward"] is True and latest["changelog"][0].endswith("fix: Neuerung")
+    # Stichpunkte aus dem Commit-Text, UTF-8 auch unter Windows (kein „PrÃ¼f…“), Folgezeilen angehängt.
+    assert latest["title"] == "Neuerung"
+    assert latest["notes"] == ["Prüfzertifikat neu gesetzt, mit Folgezeile", "Zweiter Punkt → mit Pfeil"]
 
 
 def test_release_nur_lokal(make_full_client: Callable[..., TestClient], release_repo: tuple[Path, str]) -> None:

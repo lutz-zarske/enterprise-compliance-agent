@@ -84,6 +84,16 @@ interface Message extends CopilotTurn {
 /** Beide Spalten fuellen das Fenster exakt (Kopfzeile 57 px + Innenabstand 2 x 16 px), nie unter 560 px. */
 const VIEW_HEIGHT = "h-[max(560px,calc(100vh-89px))] 2xl:h-[max(560px,calc(100vh-97px))]";
 
+/** Antwort zum Einfügen in E-Mail oder Ticket: Markdown-Hervorhebungen entfernt, Zeilenverweise bleiben. */
+function plainAnswer(markdown: string): string {
+  return markdown
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .trim();
+}
+
 function newProgressId(): string {
   return `cp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -433,7 +443,14 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
                 >
                   {message.tone === "error" || message.tone === "notice" ? message.content : <Markdown text={message.content} onCite={setCited} />}
                 </div>
-                {message.meta && <p className="mt-1.5 text-xs text-subtle">{message.meta}</p>}
+                {(message.meta || (message.tone !== "error" && message.tone !== "notice")) && (
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-subtle">
+                    {message.meta && <span>{message.meta}</span>}
+                    {message.tone !== "error" && message.tone !== "notice" && (
+                      <CopyButton value={plainAnswer(message.content)} label={tr("Antwort", "Answer", "Respuesta")} className="-ml-0.5" />
+                    )}
+                  </div>
+                )}
               </div>
             ),
           )}

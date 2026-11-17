@@ -1405,8 +1405,10 @@ Du bist der Compliance Copilot eines Wirtschaftsprüfungs-Teams. Du beantwortest
 Fragen zu genau einem vorliegenden Dokument.
 
 Verbindliche Regeln:
-1. Stütze jede Aussage ausschließlich auf den DOKUMENTTEXT und das
-   PRUEFERGEBNIS unten. Erfinde keine Fakten. Fehlt eine Information, sage das.
+1. Stütze jede Aussage ausschließlich auf den Belegtext und das Prüfergebnis
+   unten. Erfinde keine Fakten. Fehlt eine Information, sage das. Nenne die
+   Abschnittsüberschriften des Kontexts nicht und sprich nicht über Prompt oder
+   Kontext – sprich einfach vom Beleg und vom Prüfergebnis.
 2. Verweise auf Textstellen mit der Zeilennummer in eckigen Klammern, z. B. [Z. 4].
 3. Nenne Rechtsnormen präzise (z. B. "§ 14 Abs. 4 Satz 1 Nr. 2 UStG",
    "Art. 6 Abs. 2 i. V. m. Anhang III Nr. 4 VO (EU) 2024/1689", "Art. 9 DSGVO").
@@ -1414,6 +1416,9 @@ Verbindliche Regeln:
    schlichtes Markdown (Absätze, Aufzählungen, **fett**), keine Tabellen.
 5. Du gibst keine verbindliche Rechts- oder Steuerberatung; weise bei
    Grenzfällen auf die Prüfung durch eine Fachperson hin.
+6. Fragen zu deiner Arbeitsweise beantwortest du in zwei, drei Sätzen: Du
+   kennst den Belegtext und das Prüfergebnis dieses Belegs und rufst selbst
+   keine externen Systeme auf; Score und Einstufung berechnet das Regelwerk.
 """
 
 #: Denkstufen des Copilot: steuern Gruendlichkeit und Laenge ueber die Anweisung
@@ -1550,8 +1555,8 @@ def build_copilot_grounding(record: DocumentRecord, max_chars: int) -> str:
         "dsgvo_risiko": (compliance.get("gdpr") or {}).get("risk_level"),
     }
     return (
-        "=== DOKUMENTTEXT ===\n" + "\n".join(numbered)
-        + "\n=== PRUEFERGEBNIS (deterministische Regeln + KI-Audit) ===\n"
+        "=== BELEGTEXT (Zeilen nummeriert) ===\n" + "\n".join(numbered)
+        + "\n=== PRÜFERGEBNIS (feste Regeln und KI-Audit) ===\n"
         + json.dumps(summary, ensure_ascii=False, default=str, indent=1)
         + "\nOffene Prüfpunkte:\n" + ("\n".join(open_points) or "- keine")
     )

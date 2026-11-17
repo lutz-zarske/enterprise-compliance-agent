@@ -571,6 +571,10 @@ export interface ReleaseInfo {
   commit: string;
   signature: "valid" | "invalid" | "unsigned";
   message: string;
+  /** Kurztitel des neuesten Release-Commits (ohne Commit-Typ und Versionsangabe). */
+  title?: string;
+  /** Alle Änderungen bis zum Release als Stichpunkte. */
+  notes?: string[];
   changelog: string[];
   fast_forward: boolean;
 }

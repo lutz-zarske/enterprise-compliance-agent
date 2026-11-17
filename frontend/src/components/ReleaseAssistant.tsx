@@ -87,6 +87,8 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
 
   const latest = status?.latest;
   const blocked = Boolean(status?.dirty || (latest && latest.signature === "invalid"));
+  // Stichpunkte aus den Commit-Texten; ältere Backends liefern nur die Betreffzeilen.
+  const notes = latest?.notes ?? latest?.changelog.map((line) => line.replace(/^[0-9a-f]{7,}\s+/, "")) ?? [];
   const signatureMap: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
     valid: { label: tr("Tag-Signatur gültig", "Valid tag signature", "Firma válida"), tone: "border-ok-line bg-ok-soft text-ok", icon: <ShieldCheck size={12} aria-hidden="true" /> },
     invalid: { label: tr("Tag-Signatur ungültig", "Invalid tag signature", "Firma inválida"), tone: "border-bad-line bg-bad-soft text-bad", icon: <ShieldAlert size={12} aria-hidden="true" /> },
@@ -124,18 +126,17 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
             </span>
             {signature && <span className={cx("chip", signature.tone)}>{signature.icon}{signature.label}</span>}
           </div>
-          {latest.message && <p className="text-xs text-muted">{td(latest.message)}</p>}
-          <HashBadge value={latest.commit} label="Commit" />
-          {latest.changelog.length > 0 && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-subtle hover:text-fg">
-                {tr("Änderungen", "Changelog", "Cambios")} ({latest.changelog.length})
-              </summary>
-              <ul className="scroll-area mt-2 max-h-40 space-y-1 pr-2 font-mono text-subtle">
-                {latest.changelog.map((line) => <li key={line} className="[overflow-wrap:anywhere]">{line}</li>)}
-              </ul>
-            </details>
+          {latest.title ? (
+            <p className="text-sm text-fg">{latest.title}</p>
+          ) : (
+            latest.message && latest.message !== latest.tag && <p className="text-xs text-muted">{td(latest.message)}</p>
           )}
+          {notes.length > 0 && (
+            <ul className="scroll-area max-h-56 list-disc space-y-1.5 pl-4 pr-2 text-xs leading-relaxed text-muted marker:text-subtle" aria-label={tr("Änderungen", "Changes", "Cambios")}>
+              {notes.map((line, index) => <li key={`${index}-${line}`} className="[overflow-wrap:anywhere]">{line}</li>)}
+            </ul>
+          )}
+          <HashBadge value={latest.commit} label="Commit" />
           {status?.dirty && (
             <p className="text-xs text-bad">
               {tr(

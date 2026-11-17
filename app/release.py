@@ -28,6 +28,49 @@ from typing import Any
 
 _SEMVER_TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 _GIT_TIMEOUT = 45
+_COMMIT_TYPE = re.compile(r"^(?:feat|fix|chore|docs|refactor|perf|test|build|ci|style)(?:\([^)]*\))?!?:\s*", re.I)
+_VERSION_SUFFIX = re.compile(r"\s*\(v\d+\.\d+\.\d+\)\s*$")
+_MAX_NOTES = 40
+
+
+def _entries(log: str) -> list[tuple[str, str]]:
+    """``git log --format=%s%x1f%b%x1e`` in (Betreff, Text) zerlegen, neueste zuerst."""
+    out = []
+    for record in log.split("\x1e"):
+        if not record.strip():
+            continue
+        subject, _, body = record.partition("\x1f")
+        out.append((subject.strip(), body))
+    return out
+
+
+def _clean_subject(subject: str) -> str:
+    return _VERSION_SUFFIX.sub("", _COMMIT_TYPE.sub("", subject)).strip()
+
+
+def _release_title(log: str) -> str:
+    """Kurztitel des neuesten Release-Commits, ohne Commit-Typ und Versionsangabe."""
+    entries = _entries(log)
+    return _clean_subject(entries[0][0]) if entries else ""
+
+
+def release_notes(log: str) -> list[str]:
+    """Stichpunkte aller Commits bis zum Release-Tag.
+
+    Aufzählungen im Commit-Text (``- …``, Folgezeilen eingerückt) werden zu je einem
+    Punkt zusammengefügt; Commits ohne Aufzählung erscheinen mit ihrem Betreff.
+    """
+    notes: list[str] = []
+    for subject, body in _entries(log):
+        bullets: list[str] = []
+        for line in body.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("- ", "* ")):
+                bullets.append(stripped[2:].strip())
+            elif stripped and bullets and line[:1].isspace():
+                bullets[-1] = f"{bullets[-1]} {stripped}"
+        notes.extend(bullets or [_clean_subject(subject)])
+    return [note for note in notes if note][:_MAX_NOTES]
 
 
 class ReleaseError(Exception):
@@ -52,9 +95,12 @@ class ReleaseManager:
 
     def _git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
+        # Git schreibt UTF-8; ohne explizite Kodierung läse Python unter Windows cp1252
+        # (aus „Prüfzertifikat“ würde „PrÃ¼fzertifikat“).
         result = subprocess.run(  # noqa: S603 - feste Argumentliste, keine Shell
             ["git", "-C", str(self.repo_dir), *args],
-            capture_output=True, text=True, timeout=_GIT_TIMEOUT, env=env, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=_GIT_TIMEOUT, env=env, check=False,
         )
         if check and result.returncode != 0:
             raise ReleaseError("git_failed", f"git {args[0]} fehlgeschlagen: {result.stderr.strip()[:300]}")
@@ -85,12 +131,15 @@ class ReleaseManager:
         tag = max(tags, key=lambda name: semver(name) or (0, 0, 0))
         commit = self._git("rev-list", "-n", "1", tag).stdout.strip()
         changelog = self._git("log", "--format=%h %s", "--max-count=30", f"HEAD..{tag}").stdout.splitlines()
+        bodies = self._git("log", "--format=%s%x1f%b%x1e", "--max-count=30", f"HEAD..{tag}").stdout
         return {
             "tag": tag,
             "version": tag.removeprefix("v"),
             "commit": commit,
             "signature": self._signature(tag),
             "message": self._git("tag", "--list", "--format=%(contents:subject)", tag).stdout.strip(),
+            "title": _release_title(bodies),
+            "notes": release_notes(bodies),
             "changelog": changelog,
             "fast_forward": self._git("merge-base", "--is-ancestor", "HEAD", tag, check=False).returncode == 0,
         }

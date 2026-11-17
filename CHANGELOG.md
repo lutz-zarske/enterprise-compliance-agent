@@ -3,6 +3,12 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.6.4 – 18.11.2026
+
+- **Update-Hinweis:** Die Änderungen stehen vollständig als Stichpunkte im Update-Dialog (aus den Commit-Texten bis zum neuen Release) statt als aufklappbare Commit-Liste. Git-Ausgaben werden als UTF-8 gelesen – unter Windows erschienen Umlaute vorher verfälscht.
+- **Copilot:** Kopierknopf unter jeder Antwort (ohne Markdown-Sternchen, Zeilenverweise bleiben). Die Abschnitte des Kontexts heißen „Belegtext“ und „Prüfergebnis“ mit Umlauten; das Modell nennt sie nicht mehr wörtlich und beantwortet Fragen zur eigenen Arbeitsweise knapp und zutreffend.
+- **Updater:** Ab dieser Version startet auch ein `npm install` beim Neustart unsichtbar (geprüft). Beim Update *auf* v2.6.3 lief der Neustart noch mit dem alten Code der vorherigen Version.
+
 ## v2.6.3 – 17.11.2026
 
 **Prüfzertifikat und Verfahrensdokumentation**

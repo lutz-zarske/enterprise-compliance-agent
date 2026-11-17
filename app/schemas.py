@@ -1465,6 +1465,6 @@ class RedactResponse(ApiModel):
 class ReleaseApplyRequest(ApiModel):
     """Bestätigung eines Release-Wechsels durch die Administration."""
 
-    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.6.3'.")
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.6.4'.")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(default="System", min_length=2, max_length=120, description="Wer das Update auslöst.")

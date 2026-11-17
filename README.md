@@ -424,7 +424,7 @@ cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-337 Tests (Stand v2.6.3) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+337 Tests (Stand v2.6.4) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.

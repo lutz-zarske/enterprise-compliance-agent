@@ -262,7 +262,7 @@ def test_copilot_antwortet_geerdet(full_client: TestClient, fake_ollama: FakeOll
     assert "format" not in call  # Freitext, kein JSON-Zwang
     prompt = call["messages"][-1]["content"]
     assert "[Z. 3] RECHNUNG Nr. RE-2024-0815" in prompt
-    assert "PRUEFERGEBNIS" in prompt and "compliance_score" in prompt
+    assert "PRÜFERGEBNIS" in prompt and "BELEGTEXT" in prompt and "compliance_score" in prompt
     assert [m["role"] for m in call["messages"]] == ["system", "user", "assistant", "user"]
 
 
