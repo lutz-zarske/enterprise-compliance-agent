@@ -1329,6 +1329,9 @@ class CopilotRequest(ApiModel):
     thinking: Literal["low", "medium", "high"] = Field(
         default="medium", description="Denkstufe: Gründlichkeit und Länge der Antwort."
     )
+    lang: Literal["de", "en", "es"] = Field(
+        default="de", description="Antwortsprache für den Compliance Copilot (de | en | es)."
+    )
     progress_id: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9_-]{6,64}$",
@@ -1456,6 +1459,6 @@ class RedactResponse(ApiModel):
 class ReleaseApplyRequest(ApiModel):
     """Bestätigung eines Release-Wechsels durch die Administration."""
 
-    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.4.1'.")
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.6.0'.")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(default="System", min_length=2, max_length=120, description="Wer das Update auslöst.")

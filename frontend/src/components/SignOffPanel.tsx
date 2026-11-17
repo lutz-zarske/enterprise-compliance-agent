@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { DocumentDetail, SignOffDecision } from "../types/api";
 import { cx, formatDate } from "../lib/format";
+import { useI18n } from "../lib/i18n";
 import { Check, Stamp } from "./icons";
 import { AutoTextarea, HashBadge, isModEnter, Kbd, Modal, Spinner, useModifierLabel } from "./ui";
 
@@ -24,6 +25,7 @@ interface PanelProps {
  * Ed25519-signierter Eintrag in die Hash-Kette geschrieben.
  */
 export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoFocus }: PanelProps) {
+  const { tr } = useI18n();
   const [auditor, setAuditor] = useState("");
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<SignOffDecision>("SEALED_APPROVED");
@@ -63,15 +65,23 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
       const reference = updated.extraction?.document_number ?? updated.filename;
       notify(
         "ok",
-        `Dokument ${reference} erfolgreich Ed25519-versiegelt & im Ledger verankert`,
-        `${decision === "SEALED_APPROVED" ? "Freigabe" : "Ablehnung"} durch ${auditor.trim()}`,
+        tr(
+          `Dokument ${reference} erfolgreich Ed25519-versiegelt & im Ledger verankert`,
+          `Document ${reference} Ed25519-sealed & anchored in ledger`,
+          `Documento ${reference} sellado con Ed25519 y anclado en el registro`,
+        ),
+        tr(
+          `${decision === "SEALED_APPROVED" ? "Freigabe" : "Ablehnung"} durch ${auditor.trim()}`,
+          `${decision === "SEALED_APPROVED" ? "Approved" : "Rejected"} by ${auditor.trim()}`,
+          `${decision === "SEALED_APPROVED" ? "Aprobado" : "Rechazado"} por ${auditor.trim()}`,
+        ),
       );
     } catch (err) {
-      notify("bad", "Siegel fehlgeschlagen", err instanceof ApiError ? err.message : String(err));
+      notify("bad", tr("Siegel fehlgeschlagen", "Seal failed", "Error al sellar"), err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [ready, document.id, auditor, note, decision, onSealed, notify]);
+  }, [ready, document.id, auditor, note, decision, onSealed, notify, tr]);
 
   useEffect(() => {
     if (!shortcutActive) return;
@@ -96,15 +106,24 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
           )}
         >
           <p className="font-semibold">
-            {existing.status === "SEALED_APPROVED" ? "Freigegeben" : "Freigabe verweigert"} durch {existing.auditor_name} am{" "}
+            {existing.status === "SEALED_APPROVED"
+              ? tr("Freigegeben", "Approved", "Aprobado")
+              : tr("Freigabe verweigert", "Approval denied", "Aprobación denegada")}{" "}
+            {tr("durch", "by", "por")} {existing.auditor_name} {tr("am", "on", "el")}{" "}
             <span className="tabular-nums">{formatDate(existing.sealed_at, true)}</span>
           </p>
-          <HashBadge className="mt-2" value={existing.ledger_entry_hash} label="Siegel" verified verifiedLabel="Ed25519-signiert" />
+          <HashBadge
+            className="mt-2"
+            value={existing.ledger_entry_hash}
+            label={tr("Siegel", "Seal", "Sello")}
+            verified
+            verifiedLabel={tr("Ed25519-signiert", "Ed25519-signed", "Firmado con Ed25519")}
+          />
         </div>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="label-caps">Name der Prüfperson</span>
+          <span className="label-caps">{tr("Name der Prüfperson", "Auditor Name", "Nombre del auditor")}</span>
           <input
             ref={nameRef}
             className="input mt-1"
@@ -112,12 +131,12 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
             autoComplete="name"
             value={auditor}
             onChange={(e) => setAuditor(e.target.value)}
-            placeholder="Prüferkürzel oder Name eingeben…"
+            placeholder={tr("Prüferkürzel oder Name eingeben…", "Enter auditor initials or name…", "Introducir iniciales o nombre…")}
           />
         </label>
         <div>
-          <span className="label-caps">Entscheidung</span>
-          <div className="mt-1 flex gap-2" role="radiogroup" aria-label="Entscheidung">
+          <span className="label-caps">{tr("Entscheidung", "Decision", "Decisión")}</span>
+          <div className="mt-1 flex gap-2" role="radiogroup" aria-label={tr("Entscheidung", "Decision", "Decisión")}>
             {(["SEALED_APPROVED", "SEALED_REJECTED"] as const).map((value) => (
               <button
                 key={value}
@@ -131,7 +150,7 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
                 )}
               >
                 {decision === value && <Check size={13} aria-hidden="true" />}
-                {value === "SEALED_APPROVED" ? "Freigeben" : "Ablehnen"}
+                {value === "SEALED_APPROVED" ? tr("Freigeben", "Approve", "Aprobar") : tr("Ablehnen", "Reject", "Rechazar")}
               </button>
             ))}
           </div>
@@ -139,11 +158,15 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
       </div>
       {blocked && decision === "SEALED_APPROVED" && (
         <p className="mt-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs leading-relaxed text-warn">
-          Freigabe entgegen der Sperrempfehlung des Regelwerks – die Begründung gehört in die Prüfungsnotiz.
+          {tr(
+            "Freigabe entgegen der Sperrempfehlung des Regelwerks – die Begründung gehört in die Prüfungsnotiz.",
+            "Approval overrides the rule engine's block recommendation – enter justification in the audit note.",
+            "Aprobación contraria al bloqueo recomendado por el reglamento; justifíquelo en la nota.",
+          )}
         </p>
       )}
       <label className="mt-3 block">
-        <span className="label-caps">Prüfungsnotiz</span>
+        <span className="label-caps">{tr("Prüfungsnotiz", "Audit Note", "Nota de auditoría")}</span>
         <AutoTextarea
           ref={noteRef}
           className="mt-1 leading-relaxed"
@@ -152,17 +175,20 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
           value={note}
           onChange={(e) => setNote(e.target.value)}
           name="audit-note"
-          placeholder="Optionale Prüfungsnotiz eingeben…"
+          placeholder={tr("Optionale Prüfungsnotiz eingeben…", "Enter optional audit note…", "Introducir nota de auditoría opcional…")}
         />
       </label>
       <p className="mt-2 text-xs leading-relaxed text-subtle">
-        Das Siegel wird als eigener, Ed25519-signierter Eintrag in die Hash-Kette geschrieben. Eine erneute Analyse hebt es auf;
-        die Historie bleibt erhalten.
+        {tr(
+          "Das Siegel wird als eigener, Ed25519-signierter Eintrag in die Hash-Kette geschrieben. Eine erneute Analyse hebt es auf; die Historie bleibt erhalten.",
+          "The seal is recorded as a dedicated Ed25519-signed entry in the hash chain. Re-analyzing voids it, while preserving history.",
+          "El sello se registra como una entrada firmada con Ed25519 en la cadena de hash. Reanalizarlo anula el sello pero conserva el historial.",
+        )}
       </p>
       <div className="mt-3 flex justify-end">
         <button type="button" className="btn btn-primary" disabled={!ready} onClick={() => void seal()}>
           {busy ? <Spinner size={13} /> : <Stamp size={14} aria-hidden="true" />}
-          Digital versiegeln
+          {tr("Digital versiegeln", "Seal digitally", "Sellar digitalmente")}
           <Kbd>{mod} ↵</Kbd>
         </button>
       </div>
@@ -178,17 +204,18 @@ export function SealModal({ document, open, onClose, onSealed, notify }: {
   onSealed: (document: DocumentDetail) => void;
   notify: (tone: "ok" | "bad", title: string, message?: string) => void;
 }) {
+  const { tr, td } = useI18n();
   if (!document) return null;
   const card = document.scorecard;
   return (
-    <Modal open={open} onClose={onClose} title="Beleg siegeln" subtitle={document.filename} width="max-w-xl">
+    <Modal open={open} onClose={onClose} title={tr("Beleg siegeln", "Seal document", "Sellar documento")} subtitle={document.filename} width="max-w-xl">
       {card && (
         <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
           <span className="text-subtle">
             Score <span className="font-semibold tabular-nums text-fg">{card.score}</span>
             <span className="tabular-nums"> / 100</span>
           </span>
-          <span className={card.release_blocked ? "text-bad" : "text-ok"}>{card.release_recommendation}</span>
+          <span className={card.release_blocked ? "text-bad" : "text-ok"}>{td(card.release_recommendation)}</span>
         </div>
       )}
       <SignOffPanel

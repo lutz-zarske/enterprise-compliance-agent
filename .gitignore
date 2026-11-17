@@ -24,6 +24,7 @@ data/uploads/*
 data/.settings.key
 # Ed25519-Schluessel der System-Signatur (Pruefdatenpakete) - niemals committen!
 data/.signing.key
+*.key
 # SQLite-Sicherungen des Release-Assistenten (vollstaendige Datenbank inkl. PII)
 data/backups/
 # Tageszaehler des Cloud-Budgets (Laufzeitdaten)
@@ -33,6 +34,7 @@ data/ai_usage.json
 # IDE / OS
 .idea/
 .vscode/
+.claude/
 .DS_Store
 Thumbs.db
 
@@ -43,3 +45,7 @@ frontend/out/
 
 # Lokale Starter-Laufzeitdateien und Logs
 .run/
+
+# Lokale Agent- und Design-Richtlinien (nicht oeffentlich)
+DESIGN.md
+CLAUDE.md

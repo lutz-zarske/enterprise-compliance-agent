@@ -11,8 +11,8 @@ erwartete Auswirkung.
 
 | Version | Sicherheitskorrekturen |
 |---|---|
-| 2.5.x | ja |
-| < 2.5 | nein |
+| 2.6.x | ja |
+| < 2.6 | nein |
 
 ## Hinweise für den Betrieb
 
@@ -25,4 +25,4 @@ erwartete Auswirkung.
   Daten bleiben personenbezogen.
 
 Das System ist eine technische Vorprüfung und kein zertifiziertes
-Archivsystem; siehe [„Bekannte Grenzen“](README.md#bekannte-grenzen).
+Archivsystem; siehe [„Abgrenzung und Architektur-Scope“](README.md#abgrenzung-und-architektur-scope).

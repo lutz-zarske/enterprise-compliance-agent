@@ -191,8 +191,55 @@ def heuristic_audit(text: str) -> ComplianceAuditPayload:
     })
 
 
-def heuristic_copilot_answer(record: Any, question: str, reason: str) -> str:
+_HEURISTIC_COPY: dict[str, dict[str, str]] = {
+    "de": {
+        "heading": HEURISTIC_LABEL,
+        "intro": (
+            "Alle Stufen der Ausweich-Kaskade sind gerade nicht verfügbar ({reason}). "
+            "Diese Antwort stützt sich ausschließlich auf das gespeicherte Prüfergebnis – ohne Sprachmodell."
+        ),
+        "pending": "Der Beleg ist noch nicht geprüft. Bitte zuerst die Prüfung starten.",
+        "summary": "**Einordnung:** Score {score}/100 · {rec}",
+        "open_title": "**Offene Prüfpunkte:**",
+        "fallback_detail": "siehe Scorecard",
+        "no_open": "Keine offenen Prüfpunkte – alle Kriterien der Scorecard sind erfüllt.",
+        "doc_no": "Beleg-Nr. {number}.",
+        "retry": "Für eine KI-gestützte Antwort auf die konkrete Frage bitte in Kürze erneut senden.",
+    },
+    "en": {
+        "heading": "Rule-Based Reference Audit – AI Unavailable",
+        "intro": (
+            "All stages of the failover cascade are currently unavailable ({reason}). "
+            "This response relies solely on the stored audit result — without a language model."
+        ),
+        "pending": "The document has not been audited yet. Please start the audit first.",
+        "summary": "**Assessment:** Score {score}/100 · {rec}",
+        "open_title": "**Open checks:**",
+        "fallback_detail": "see scorecard",
+        "no_open": "No open checks — all scorecard criteria are met.",
+        "doc_no": "Document No. {number}.",
+        "retry": "Please resend shortly for an AI-assisted answer to your specific question.",
+    },
+    "es": {
+        "heading": "Auditoría de referencia basada en reglas – IA no disponible",
+        "intro": (
+            "Todas las etapas de la cascada de respaldo no están disponibles en este momento ({reason}). "
+            "Esta respuesta se basa únicamente en el resultado de auditoría almacenado, sin modelo de lenguaje."
+        ),
+        "pending": "El documento aún no se ha auditado. Inicie primero la auditoría.",
+        "summary": "**Valoración:** Puntuación {score}/100 · {rec}",
+        "open_title": "**Puntos abiertos:**",
+        "fallback_detail": "ver tabla de puntuación",
+        "no_open": "Sin puntos abiertos: se cumplen todos los criterios de la tabla de puntuación.",
+        "doc_no": "Documento n.º {number}.",
+        "retry": "Reenvíe en breve para obtener una respuesta asistida por IA a su pregunta.",
+    },
+}
+
+
+def heuristic_copilot_answer(record: Any, question: str, reason: str, *, lang: str = "de") -> str:
     """Deterministische Antwort aus Pruefergebnis und Belegtext (Copilot-Rueckfall)."""
+    c = _HEURISTIC_COPY.get(lang, _HEURISTIC_COPY["de"])
     scorecard = record.scorecard or {}
     extraction = record.extraction or {}
     open_points = [
@@ -202,26 +249,28 @@ def heuristic_copilot_answer(record: Any, question: str, reason: str) -> str:
         if check.get("status") in {"fail", "warn"}
     ]
     parts = [
-        f"**{HEURISTIC_LABEL}.** Alle Stufen der Ausweich-Kaskade sind gerade nicht verfügbar ({reason}). "
-        "Diese Antwort stützt sich ausschließlich auf das gespeicherte Prüfergebnis – ohne Sprachmodell.",
+        f"**{c['heading']}.** {c['intro'].format(reason=reason)}",
     ]
     if not scorecard:
-        parts.append("Der Beleg ist noch nicht geprüft. Bitte zuerst die Prüfung starten.")
+        parts.append(c["pending"])
     else:
         parts.append(
-            f"**Einordnung:** Score {scorecard.get('score', '–')}/100 · {scorecard.get('release_recommendation', '')}"
+            c["summary"].format(
+                score=scorecard.get("score", "–"),
+                rec=scorecard.get("release_recommendation", ""),
+            )
         )
         if open_points:
-            parts.append("**Offene Prüfpunkte:**")
+            parts.append(c["open_title"])
             parts.extend(
-                f"- {check.get('label')}: {check.get('detail') or 'siehe Scorecard'}"
+                f"- {check.get('label')}: {check.get('detail') or c['fallback_detail']}"
                 f"{f' ({ref})' if (ref := check.get('legal_reference')) else ''}"
                 for check in open_points[:8]
             )
         else:
-            parts.append("Keine offenen Prüfpunkte – alle Kriterien der Scorecard sind erfüllt.")
+            parts.append(c["no_open"])
     number = extraction.get("document_number")
     if number:
-        parts.append(f"Beleg-Nr. {number}.")
-    parts.append("Für eine KI-gestützte Antwort auf die konkrete Frage bitte in Kürze erneut senden.")
+        parts.append(c["doc_no"].format(number=number))
+    parts.append(c["retry"])
     return "\n\n".join(parts[:2]) + "\n\n" + "\n".join(parts[2:])

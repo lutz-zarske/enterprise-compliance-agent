@@ -1,5 +1,6 @@
 import type { DocumentDetail, ScoreCheck } from "../types/api";
 import { formatDate, formatMoney } from "./format";
+import { getActiveLocale, translateDynamic } from "./i18n";
 
 /** Maengel, die der Lieferant beheben kann: formelle Pflichtangaben und Rechenfehler. */
 export function correctionDefects(document: DocumentDetail | null): ScoreCheck[] {
@@ -12,19 +13,73 @@ export function correctionDefects(document: DocumentDetail | null): ScoreCheck[]
 
 /**
  * Entwurf einer Korrekturanforderung an den Lieferanten - deterministisch aus
- * dem Pruefergebnis, ohne Sprachmodell. Die Pruefperson bearbeitet und
- * versendet ihn selbst (menschliche Aufsicht, Art. 14 VO (EU) 2024/1689).
+ * dem Pruefergebnis, ohne Sprachmodell.
  */
 export function buildCorrectionRequest(document: DocumentDetail): string {
+  const loc = getActiveLocale();
   const ex = document.extraction;
-  const number = ex?.document_number ? `Nr. ${ex.document_number}` : `„${document.filename}“`;
-  const date = ex?.document_date ? ` vom ${formatDate(ex.document_date)}` : "";
-  const amount = ex?.total_amount != null ? ` über ${formatMoney(ex.total_amount, ex.currency)}` : "";
+  const num = ex?.document_number;
+  const rawDate = ex?.document_date ? formatDate(ex.document_date) : "";
+  const rawAmount = ex?.total_amount != null ? formatMoney(ex.total_amount, ex.currency) : "";
+
   const defects = correctionDefects(document).map((check, index) => {
-    const reason = check.risk_note ?? check.detail ?? "";
-    const norm = check.legal_reference && !check.label.includes(check.legal_reference) ? ` (${check.legal_reference})` : "";
-    return `${index + 1}. ${check.label}${norm}${reason ? `\n   ${reason}` : ""}`;
+    const label = translateDynamic(check.label, loc);
+    const reason = translateDynamic(check.risk_note ?? check.detail ?? "", loc);
+    const norm = check.legal_reference && !label.includes(check.legal_reference) ? ` (${check.legal_reference})` : "";
+    return `${index + 1}. ${label}${norm}${reason ? `\n   ${reason}` : ""}`;
   });
+
+  if (loc === "en") {
+    const number = num ? `No. ${num}` : `"${document.filename}"`;
+    const date = rawDate ? ` dated ${rawDate}` : "";
+    const amount = rawAmount ? ` in the amount of ${rawAmount}` : "";
+    return [
+      `Subject: Request for corrected invoice – Invoice ${number}${date}`,
+      "",
+      `To: ${ex?.sender ?? "[Supplier]"}`,
+      "",
+      "Dear Sir or Madam,",
+      "",
+      `During compliance verification of your invoice ${number}${date}${amount}, we identified the following issues that require correction or clarification prior to payment:`,
+      "",
+      ...defects,
+      "",
+      "Please send us a corrected invoice (§ 31 (5) UStDV / § 14 (4) German VAT Act). Payment is temporarily on hold until receipt, as input VAT deduction (§ 15 UStG) requires all mandatory disclosures. Bank details are verified via an established contact channel before payout.",
+      "",
+      "Please let us know if you have any questions.",
+      "",
+      "Kind regards,",
+      "[Name, Department]",
+    ].join("\n");
+  }
+
+  if (loc === "es") {
+    const number = num ? `N.º ${num}` : `"${document.filename}"`;
+    const date = rawDate ? ` de fecha ${rawDate}` : "";
+    const amount = rawAmount ? ` por importe de ${rawAmount}` : "";
+    return [
+      `Asunto: Solicitud de factura rectificativa – Factura ${number}${date}`,
+      "",
+      `Para: ${ex?.sender ?? "[Proveedor]"}`,
+      "",
+      "Estimados señores:",
+      "",
+      `Durante la verificación formal de su factura ${number}${date}${amount}, hemos detectado los siguientes puntos que deben subsanarse antes del pago:`,
+      "",
+      ...defects,
+      "",
+      "Les rogamos que nos remitan una factura rectificativa (§ 31 (5) UStDV / § 14 (4) UStG). Hasta su recepción suspenderemos el pago, ya que la deducción del IVA soportado (§ 15 UStG) exige todos los requisitos legales. Los datos bancarios se verifican por un canal contrastado antes de autorizar pagos.",
+      "",
+      "Quedamos a su disposición para cualquier aclaración.",
+      "",
+      "Atentamente,",
+      "[Nombre, Departamento]",
+    ].join("\n");
+  }
+
+  const number = num ? `Nr. ${num}` : `„${document.filename}“`;
+  const date = rawDate ? ` vom ${rawDate}` : "";
+  const amount = rawAmount ? ` über ${rawAmount}` : "";
   return [
     `Betreff: Bitte um berichtigte Rechnung – Rechnung ${number}${date}`,
     "",

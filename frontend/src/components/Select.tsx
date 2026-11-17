@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "../lib/format";
+import { useI18n } from "../lib/i18n";
 import { popoverStyle, usePopoverExclusive } from "../lib/popover";
 import { Check, ChevronDown } from "./icons";
 
@@ -28,6 +29,7 @@ export function Select<T extends string = string>({ value, options, onChange, ar
   className?: string;
   width?: number;
 }) {
+  const { tr } = useI18n();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [style, setStyle] = useState<React.CSSProperties>({ position: "fixed", visibility: "hidden" });
@@ -120,7 +122,7 @@ export function Select<T extends string = string>({ value, options, onChange, ar
           className,
         )}
       >
-        <span className="truncate">{selected?.label ?? "Bitte wählen"}</span>
+        <span className="truncate">{selected?.label ?? tr("Bitte wählen", "Please select", "Seleccionar")}</span>
         <ChevronDown
           size={13}
           aria-hidden="true"

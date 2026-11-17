@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import { useI18n } from "./i18n";
 
 /**
  * Schlankes, sicheres Markdown fuer Copilot-Antworten - ohne Abhaengigkeit und ohne
@@ -10,7 +13,12 @@ export type CiteHandler = (line: number) => void;
 
 const INLINE = /(\[Z\.\s?\d+(?:\s?[-–]\s?\d+)?\]|\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
 
-function inline(text: string, onCite: CiteHandler | undefined, keyBase: string): React.ReactNode[] {
+function inline(
+  text: string,
+  onCite: CiteHandler | undefined,
+  keyBase: string,
+  citeTitle: (line: number) => string,
+): React.ReactNode[] {
   return text.split(INLINE).filter(Boolean).map((part, index) => {
     const key = `${keyBase}-${index}`;
     const cite = /^\[Z\.\s?(\d+)(?:\s?[-–]\s?(\d+))?\]$/.exec(part);
@@ -22,7 +30,7 @@ function inline(text: string, onCite: CiteHandler | undefined, keyBase: string):
           key={key}
           type="button"
           onClick={() => onCite(line)}
-          title={`Zeile ${line} im Beleg anzeigen`}
+          title={citeTitle(line)}
           className="mx-0.5 inline-flex items-center rounded border border-accent-line bg-accent-soft px-1 text-xs font-medium tabular-nums text-accent transition-colors duration-150 hover:border-accent"
         >
           {label}
@@ -39,6 +47,13 @@ function inline(text: string, onCite: CiteHandler | undefined, keyBase: string):
 }
 
 export function Markdown({ text, onCite }: { text: string; onCite?: CiteHandler }) {
+  const { tr } = useI18n();
+  const citeTitle = (line: number) =>
+    tr(
+      `Zeile ${line} im Beleg anzeigen`,
+      `Show line ${line} in document`,
+      `Mostrar línea ${line} en el documento`,
+    );
   const blocks: React.ReactNode[] = [];
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   let list: { ordered: boolean; items: string[] } | null = null;
@@ -47,13 +62,13 @@ export function Markdown({ text, onCite }: { text: string; onCite?: CiteHandler 
   const flushParagraph = () => {
     if (!paragraph.length) return;
     const key = `p${blocks.length}`;
-    blocks.push(<p key={key}>{inline(paragraph.join(" "), onCite, key)}</p>);
+    blocks.push(<p key={key}>{inline(paragraph.join(" "), onCite, key, citeTitle)}</p>);
     paragraph = [];
   };
   const flushList = () => {
     if (!list) return;
     const key = `l${blocks.length}`;
-    const items = list.items.map((item, index) => <li key={`${key}-${index}`}>{inline(item, onCite, `${key}-${index}`)}</li>);
+    const items = list.items.map((item, index) => <li key={`${key}-${index}`}>{inline(item, onCite, `${key}-${index}`, citeTitle)}</li>);
     blocks.push(list.ordered ? <ol key={key}>{items}</ol> : <ul key={key}>{items}</ul>);
     list = null;
   };
@@ -70,7 +85,7 @@ export function Markdown({ text, onCite }: { text: string; onCite?: CiteHandler 
       flushParagraph();
       flushList();
       const key = `h${blocks.length}`;
-      blocks.push(<h4 key={key}>{inline(heading[1], onCite, key)}</h4>);
+      blocks.push(<h3 key={key}>{inline(heading[1], onCite, key, citeTitle)}</h3>);
     } else if (bullet || numbered) {
       flushParagraph();
       const ordered = Boolean(numbered);

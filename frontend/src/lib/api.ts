@@ -34,6 +34,7 @@ import type {
   ThinkingLevel,
   VatVerification,
 } from "../types/api";
+import { getActiveLocale, tr } from "./i18n";
 
 export class ApiError extends Error {
   constructor(
@@ -82,6 +83,16 @@ export function getApiBase(): string {
   return activeBase;
 }
 
+export function hasCachedApiBase(): boolean {
+  if (configuredBase()) return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return Boolean(window.localStorage.getItem(BASE_STORAGE));
+  } catch {
+    return false;
+  }
+}
+
 export function getAccessKey(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -116,7 +127,11 @@ async function toApiError(response: Response): Promise<ApiError> {
   } catch {
     /* kein JSON */
   }
-  return new ApiError(`Anfrage fehlgeschlagen (HTTP ${response.status}).`, response.status, "http_error");
+  return new ApiError(
+    tr(`Anfrage fehlgeschlagen (HTTP ${response.status}).`, `Request failed (HTTP ${response.status}).`, `Solicitud fallida (HTTP ${response.status}).`),
+    response.status,
+    "http_error",
+  );
 }
 
 function portOf(base: string): string {
@@ -127,10 +142,14 @@ function portOf(base: string): string {
 function offlineError(base: string): ApiError {
   const port = portOf(base);
   return new ApiError(
-    `Backend nicht erreichbar (Port ${port}).`,
+    tr(`Backend nicht erreichbar (Port ${port}).`, `Backend unreachable (port ${port}).`, `Backend inaccesible (puerto ${port}).`),
     0,
     "network",
-    `Start_Compliance_Agent.bat ausführen bzw. „uvicorn app.main:app --port ${port}“ starten – die Verbindung wird automatisch neu geprüft.`,
+    tr(
+      `Start_Compliance_Agent.bat ausführen bzw. „uvicorn app.main:app --port ${port}“ starten – die Verbindung wird automatisch neu geprüft.`,
+      `Run Start_Compliance_Agent.bat or launch "uvicorn app.main:app --port ${port}" — connection will retry automatically.`,
+      `Ejecute Start_Compliance_Agent.bat o inicie "uvicorn app.main:app --port ${port}" — la conexión se reintentará automáticamente.`,
+    ),
   );
 }
 
@@ -140,7 +159,7 @@ async function request<T>(path: string, init: RequestInit = {}, base = activeBas
     response = await fetch(`${base}${path}`, { cache: "no-store", ...init, headers: headers(init.headers) });
   } catch (err) {
     if (init.signal?.aborted || (err instanceof Error && err.name === "AbortError")) {
-      throw new ApiError("Anfrage abgebrochen.", 0, "aborted");
+      throw new ApiError(tr("Anfrage abgebrochen.", "Request cancelled.", "Solicitud cancelada."), 0, "aborted");
     }
     throw offlineError(base);
   }
@@ -231,9 +250,9 @@ export const api = {
     request<DocumentDetail>(`/documents/${id}/archive`, json({ archived }, "PUT")),
   signOff: (id: string, auditor_name: string, note: string, decision: SignOffDecision) =>
     request<DocumentDetail>(`/documents/${id}/sign-off`, json({ auditor_name, note, decision })),
-  reportJson: (id: string) => request<Record<string, unknown>>(`/documents/${id}/report?format=json`),
-  reportMarkdown: (id: string) => requestText(`/documents/${id}/report?format=markdown`),
-  reportHtml: (id: string) => requestText(`/documents/${id}/report?format=html`),
+  reportJson: (id: string) => request<Record<string, unknown>>(`/documents/${id}/report?format=json&lang=${getActiveLocale()}`),
+  reportMarkdown: (id: string) => requestText(`/documents/${id}/report?format=markdown&lang=${getActiveLocale()}`),
+  reportHtml: (id: string) => requestText(`/documents/${id}/report?format=html&lang=${getActiveLocale()}`),
   copilot: (
     id: string,
     question: string,
@@ -244,7 +263,7 @@ export const api = {
   ) =>
     request<CopilotResponse>(
       `/documents/${id}/copilot`,
-      { ...json({ question, history, thinking, ...(progressId ? { progress_id: progressId } : {}) }), signal },
+      { ...json({ question, history, thinking, lang: getActiveLocale(), ...(progressId ? { progress_id: progressId } : {}) }), signal },
     ),
   copilotProgress: (progressId: string) =>
     request<CopilotProgress>(`/api/v1/copilot/progress/${encodeURIComponent(progressId)}`),
@@ -257,8 +276,8 @@ export const api = {
   startOllama: () => request<LocalAiResult>("/api/v1/ai/start-ollama", { method: "POST" }),
   stopLocalAi: () => request<LocalAiResult>("/api/v1/ai/stop-local", { method: "POST" }),
   redact: (text: string) => request<RedactResult>("/api/v1/redact", json({ text })),
-  gobdPackage: (id: string) => requestBlob(`/api/documents/${id}/export/gobd`),
-  proceduralDoc: (id: string) => requestText(`/api/documents/${id}/export/procedural-doc?format=html`),
+  gobdPackage: (id: string) => requestBlob(`/api/documents/${id}/export/gobd?lang=${getActiveLocale()}`),
+  proceduralDoc: (id: string) => requestText(`/api/documents/${id}/export/procedural-doc?format=html&lang=${getActiveLocale()}`),
   override: (id: string, body: OverrideRequest) =>
     request<DocumentDetail>(`/api/documents/${id}/override`, json(body)),
   trail: (id: string) =>

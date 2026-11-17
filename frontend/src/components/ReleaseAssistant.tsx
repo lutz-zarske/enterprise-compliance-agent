@@ -3,14 +3,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, ApiError, fetchHealth } from "../lib/api";
 import { cx } from "../lib/format";
+import { useI18n } from "../lib/i18n";
 import type { ReleaseApplyResult, ReleaseStatus } from "../types/api";
 import { ArrowUpCircle, CheckCircle, RefreshCw, ShieldAlert, ShieldCheck } from "./icons";
 import { HashBadge, Modal, Spinner } from "./ui";
-
-const SIGNATURE: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
-  valid: { label: "Tag-Signatur gültig", tone: "border-ok-line bg-ok-soft text-ok", icon: <ShieldCheck size={12} aria-hidden="true" /> },
-  invalid: { label: "Tag-Signatur ungültig", tone: "border-bad-line bg-bad-soft text-bad", icon: <ShieldAlert size={12} aria-hidden="true" /> },
-};
 
 /**
  * Release pruefen und per Klick einspielen. Das Backend prueft laufende Analysen,
@@ -22,6 +18,7 @@ export function ReleasePanel({ initial, onApplied, notify }: {
   onApplied?: (result: ReleaseApplyResult) => void;
   notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 }) {
+  const { tr, td } = useI18n();
   const [status, setStatus] = useState<ReleaseStatus | null>(initial ?? null);
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -32,11 +29,11 @@ export function ReleasePanel({ initial, onApplied, notify }: {
     try {
       setStatus(await api.release(true));
     } catch (err) {
-      notify("bad", "Update-Prüfung fehlgeschlagen", err instanceof ApiError ? err.message : String(err));
+      notify("bad", tr("Update-Prüfung fehlgeschlagen", "Update check failed", "Error al buscar actualizaciones"), err instanceof ApiError ? td(err.message) : String(err));
     } finally {
       setChecking(false);
     }
-  }, [notify]);
+  }, [notify, td, tr]);
 
   useEffect(() => {
     if (!initial) void check();
@@ -49,7 +46,7 @@ export function ReleasePanel({ initial, onApplied, notify }: {
     try {
       const result = await api.applyRelease(latest.tag, latest.commit, "System");
       setDone(result);
-      notify("ok", `Release ${result.to_tag} installiert`, result.message);
+      notify("ok", tr(`Release ${result.to_tag} installiert`, `Release ${result.to_tag} installed`, `Versión ${result.to_tag} instalada`), td(result.message));
       onApplied?.(result);
       if (!result.restart_required) {
         window.setTimeout(() => {
@@ -63,7 +60,7 @@ export function ReleasePanel({ initial, onApplied, notify }: {
       }
     } catch (err) {
       const error = err instanceof ApiError ? err : null;
-      notify("bad", "Update fehlgeschlagen", error ? `${error.message}` : String(err));
+      notify("bad", tr("Update fehlgeschlagen", "Update failed", "Error al actualizar"), error ? td(error.message) : String(err));
     } finally {
       setBusy(false);
     }
@@ -71,47 +68,71 @@ export function ReleasePanel({ initial, onApplied, notify }: {
 
   const latest = status?.latest;
   const blocked = Boolean(status?.dirty || (latest && latest.signature === "invalid"));
-  const signature = latest ? SIGNATURE[latest.signature] : null;
+  const signatureMap: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
+    valid: { label: tr("Tag-Signatur gültig", "Valid tag signature", "Firma válida"), tone: "border-ok-line bg-ok-soft text-ok", icon: <ShieldCheck size={12} aria-hidden="true" /> },
+    invalid: { label: tr("Tag-Signatur ungültig", "Invalid tag signature", "Firma inválida"), tone: "border-bad-line bg-bad-soft text-bad", icon: <ShieldAlert size={12} aria-hidden="true" /> },
+  };
+  const signature = latest ? signatureMap[latest.signature] : null;
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-fg">
-          Installiert: <span className="tabular-nums">v{status?.current_version ?? "…"}</span>
+          {tr("Installiert:", "Installed:", "Instalado:")} <span className="tabular-nums">v{status?.current_version ?? "…"}</span>
           {status?.current_commit && <span className="ml-2 text-xs tabular-nums text-subtle">{status.current_commit.slice(0, 10)}</span>}
         </p>
         <button className="btn" onClick={() => void check()} disabled={checking || busy}>
-          {checking ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />} Nach Updates suchen
+          {checking ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />} {tr("Nach Updates suchen", "Check for updates", "Buscar actualizaciones")}
         </button>
       </div>
 
-      {status?.message && <p className="text-xs text-subtle">{status.message}</p>}
-      {status && status.git && !latest && <p className="flex items-center gap-2 text-xs text-ok"><CheckCircle size={14} aria-hidden="true" /> Aktuellste Version installiert.</p>}
+      {status?.message && <p className="text-xs text-subtle">{td(status.message)}</p>}
+      {status && status.git && !latest && (
+        <p className="flex items-center gap-2 text-xs text-ok">
+          <CheckCircle size={14} aria-hidden="true" /> {tr("Aktuellste Version installiert.", "Latest version is installed.", "Última versión instalada.")}
+        </p>
+      )}
 
       {latest && !done && (
         <div className="space-y-3 rounded-lg border border-line p-3">
           <div className="flex flex-wrap items-center gap-2">
             <ArrowUpCircle size={16} aria-hidden="true" className="text-ok" />
-            <span className="text-sm font-semibold text-fg">Release {latest.tag} verfügbar</span>
+            <span className="text-sm font-semibold text-fg">
+              {tr(`Release ${latest.tag} verfügbar`, `Release ${latest.tag} available`, `Versión ${latest.tag} disponible`)}
+            </span>
             {signature && <span className={cx("chip", signature.tone)}>{signature.icon}{signature.label}</span>}
           </div>
-          {latest.message && <p className="text-xs text-muted">{latest.message}</p>}
+          {latest.message && <p className="text-xs text-muted">{td(latest.message)}</p>}
           <HashBadge value={latest.commit} label="Commit" />
           {latest.changelog.length > 0 && (
             <details className="text-xs">
-              <summary className="cursor-pointer text-subtle hover:text-fg">Änderungen ({latest.changelog.length})</summary>
+              <summary className="cursor-pointer text-subtle hover:text-fg">
+                {tr("Änderungen", "Changelog", "Cambios")} ({latest.changelog.length})
+              </summary>
               <ul className="scroll-area mt-2 max-h-40 space-y-1 pr-2 font-mono text-subtle">
                 {latest.changelog.map((line) => <li key={line} className="[overflow-wrap:anywhere]">{line}</li>)}
               </ul>
             </details>
           )}
-          {status?.dirty && <p className="text-xs text-bad">Lokale Code-Änderungen im Arbeitsverzeichnis – bitte vor dem Update sichern oder zurücksetzen.</p>}
+          {status?.dirty && (
+            <p className="text-xs text-bad">
+              {tr(
+                "Lokale Code-Änderungen im Arbeitsverzeichnis – bitte vor dem Update sichern oder zurücksetzen.",
+                "Local code modifications in working tree – commit or reset before updating.",
+                "Cambios locales en el árbol de trabajo; guárdelos o revértalos antes de actualizar.",
+              )}
+            </p>
+          )}
           <p className="text-xs leading-relaxed text-muted">
-            Lokale Daten, Einstellungen, API-Keys und geprüfte Belege (<span className="font-mono">data/agent.db</span>, <span className="font-mono">.env</span>) bleiben vollständig erhalten. Vor dem Update legt das System automatisch eine Sicherungskopie unter <span className="font-mono">data/backups/</span> an.
+            {tr(
+              "Lokale Daten, Einstellungen, API-Keys und geprüfte Belege (data/agent.db, .env) bleiben vollständig erhalten. Vor dem Update legt das System automatisch eine Sicherungskopie unter data/backups/ an.",
+              "Local data, settings, API keys and audited documents (data/agent.db, .env) are preserved. A backup is automatically created in data/backups/ before updating.",
+              "Los datos locales, ajustes, claves API y documentos (data/agent.db, .env) se conservan. Se crea una copia en data/backups/ automáticamente.",
+            )}
           </p>
           <div className="flex justify-end">
             <button className="btn btn-primary" onClick={() => void apply()} disabled={busy || blocked}>
-              {busy && <Spinner size={13} />} Update installieren
+              {busy && <Spinner size={13} />} {tr("Update installieren", "Install update", "Instalar actualización")}
             </button>
           </div>
         </div>
@@ -119,8 +140,11 @@ export function ReleasePanel({ initial, onApplied, notify }: {
 
       {done && (
         <div className="rounded-lg border border-ok-line bg-ok-soft p-3 text-xs text-ok">
-          <p className="font-semibold">{done.to_tag} installiert{done.database_backup ? ` · Sicherung ${done.database_backup}` : ""}</p>
-          <p className="mt-1 text-fg">{done.message}</p>
+          <p className="font-semibold">
+            {tr(`${done.to_tag} installiert`, `${done.to_tag} installed`, `${done.to_tag} instalado`)}
+            {done.database_backup ? ` · ${tr("Sicherung", "Backup", "Copia")} ${done.database_backup}` : ""}
+          </p>
+          <p className="mt-1 text-fg">{td(done.message)}</p>
         </div>
       )}
     </div>
@@ -132,6 +156,7 @@ export function GitSyncButton({ online, notify }: {
   online: boolean;
   notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 }) {
+  const { tr } = useI18n();
   const [status, setStatus] = useState<ReleaseStatus | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -150,14 +175,23 @@ export function GitSyncButton({ online, notify }: {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="Neue Version verfügbar – Änderungen prüfen und installieren"
+        title={tr("Neue Version verfügbar – Änderungen prüfen und installieren", "New version available – review changes and install", "Nueva versión disponible – revisar e instalar")}
         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-ok-line bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok transition-colors duration-150 hover:border-ok"
       >
         <ArrowUpCircle size={13} aria-hidden="true" />
-        <span className="tabular-nums">Release {status.latest.tag} verfügbar</span>
-        <span className="hidden text-subtle xl:inline">(Update verfügbar)</span>
+        <span className="tabular-nums">{tr(`Release ${status.latest.tag} verfügbar`, `Release ${status.latest.tag} available`, `Versión ${status.latest.tag} disponible`)}</span>
+        <span className="hidden text-subtle xl:inline">{tr("(Update verfügbar)", "(Update available)", "(Actualización disponible)")}</span>
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Update verfügbar" subtitle="Automatische Datenbanksicherung · Lokale Daten & Einstellungen bleiben erhalten">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={tr("Update verfügbar", "Update available", "Actualización disponible")}
+        subtitle={tr(
+          "Automatische Datenbanksicherung · Lokale Daten & Einstellungen bleiben erhalten",
+          "Automatic database backup · Local data & settings preserved",
+          "Copia de seguridad automática · Datos y ajustes locales conservados",
+        )}
+      >
         <ReleasePanel initial={status} notify={notify} />
       </Modal>
     </>

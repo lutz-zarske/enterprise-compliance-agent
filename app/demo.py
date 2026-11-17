@@ -639,12 +639,107 @@ REFERENCE_ANSWERS[HYBRID_FILENAME] = (
 )
 
 
+STANDARD_QUESTIONS_EN = (
+    "Which mandatory fields are missing from this invoice?",
+    "Why does the system classify this PDF as Annex III No. 4?",
+    "How must the invoice be corrected to qualify for input VAT deduction?",
+)
+
+STANDARD_QUESTIONS_ES = (
+    "¿Qué datos obligatorios faltan en esta factura?",
+    "¿Por qué clasifica el sistema este PDF como Anexo III n.º 4?",
+    "¿Cómo debe corregirse la factura para poder deducir el IVA soportado?",
+)
+
+REFERENCE_ANSWERS_EN: dict[str, tuple[str, str, str]] = {
+    "Rechnung_Gueltig_14UStG.pdf": (
+        "None. All mandatory fields under § 14(4) sent. 1 UStG are present:\n"
+        "- Supplier name and address [Z. 2] [Z. 3] and recipient [Z. 5] [Z. 6] (No. 1)\n"
+        "- Tax number and VAT ID [Z. 4] (No. 2)\n"
+        "- Issue date [Z. 8] and invoice number [Z. 7] (Nos. 3 & 4)\n"
+        "- Scope and type of services [Z. 10] [Z. 11] and service period [Z. 9] (Nos. 5 & 6)\n"
+        "- Net amount, VAT rate and VAT amount [Z. 12] [Z. 13] (Nos. 7 & 8)\n"
+        "Note: This is a plain visual PDF ('other invoice' in domestic B2B since 01 Jan 2025, only permissible under transitional rules).",
+        "Not at all. The document is an IT security services invoice and describes no AI system under Art. 3(1) Regulation (EU) 2024/1689.",
+        "No correction required. The invoice meets § 14(4) UStG, VAT of 1,140.00 EUR matches 19% of net [Z. 12] [Z. 13], and IBAN passes MOD-97 [Z. 16]. Input VAT deduction under § 15(1) UStG is formally valid.",
+    ),
+    "Rechnung_Fehlerhaft_Steuerfalle.pdf": (
+        "Two mandatory elements are missing:\n"
+        "- Supplier tax number or VAT ID – missing from header [Z. 2] [Z. 3] (§ 14(4) sent. 1 No. 2 UStG)\n"
+        "- Delivery/service date or period – only invoice issue date [Z. 7] is stated (§ 14(4) sent. 1 No. 6 UStG)\n"
+        "Additional defects: VAT rate 16% [Z. 10] is invalid since 01 Jan 2021 (§ 12(1) UStG), and IBAN [Z. 12] fails the MOD-97 check digit.",
+        "Not at all. It is an office furniture goods invoice [Z. 8] describing no AI system; Annex III No. 4 does not apply.",
+        "The supplier must issue a corrected invoice:\n"
+        "1. Add tax number or VAT ID (§ 14(4) sent. 1 No. 2 UStG).\n"
+        "2. Add supply/service date (No. 6).\n"
+        "3. Apply the standard 19% VAT rate (§ 12(1) UStG).\n"
+        "4. Fix the bank details – IBAN [Z. 12] is invalid; verify out-of-band before payment.\n"
+        "Until corrected, input VAT deduction (§ 15(1) UStG) is at risk. Not binding tax/legal advice.",
+    ),
+    "KI_Recruiting_Dienstleistervertrag.pdf": (
+        "This document is a contract, not an invoice [Z. 2]. § 14(4) UStG invoice elements therefore do not apply directly, though a subsequent invoice must state invoice number, issue date, tax/VAT ID, net amount, tax rate and tax amount ('45000 EUR' [Z. 5] is insufficient).",
+        "Because TalentAI evaluates job applicants automatically [Z. 4]. This falls under Annex III No. 4(a) Regulation (EU) 2024/1689 (recruitment/selection of natural persons) and is High-Risk under Art. 6(2); Art. 6(3) derogation does not apply to profiling.\n"
+        "Deployer obligations (Art. 26): human oversight, ≥6 months log retention, inform worker representatives. Require EU conformity assessment (Art. 43) and CE mark (Art. 48) from provider. Annex III obligations apply from 02 Dec 2027 (Reg. (EU) 2026/1744).",
+        "This is not an invoice; input VAT deduction requires a proper subsequent invoice stating all § 14(4) UStG items with net, tax rate and VAT separated ('45000 EUR' [Z. 5] leaves tax status open).",
+    ),
+}
+
+REFERENCE_ANSWERS_ES: dict[str, tuple[str, str, str]] = {
+    "Rechnung_Gueltig_14UStG.pdf": (
+        "Ninguno. Todos los requisitos obligatorios del § 14(4) frase 1 UStG están presentes:\n"
+        "- Nombre y dirección del emisor [Z. 2] [Z. 3] y destinatario [Z. 5] [Z. 6] (n.º 1)\n"
+        "- NIF e ID de IVA [Z. 4] (n.º 2)\n"
+        "- Fecha de emisión [Z. 8] y número de factura [Z. 7] (n.os 3 y 4)\n"
+        "- Alcance y tipo de servicios [Z. 10] [Z. 11] y período [Z. 9] (n.os 5 y 6)\n"
+        "- Base imponible, tipo e importe de IVA [Z. 12] [Z. 13] (n.os 7 y 8)\n"
+        "Nota: Es un PDF visual simple (admisible solo en período transitorio B2B en Alemania desde 01/01/2025).",
+        "De ningún modo. El documento es una factura de seguridad TI y no describe ningún sistema de IA según el art. 3(1) del Reglamento (UE) 2024/1689.",
+        "No requiere corrección. Cumple el § 14(4) UStG, el IVA de 1.140,00 EUR corresponde al 19 % neto [Z. 12] [Z. 13] y el IBAN supera la verificación MOD-97 [Z. 16].",
+    ),
+    "Rechnung_Fehlerhaft_Steuerfalle.pdf": (
+        "Faltan dos datos obligatorios:\n"
+        "- NIF o ID de IVA del emisor – ausente en la cabecera [Z. 2] [Z. 3] (§ 14(4) n.º 2 UStG)\n"
+        "- Fecha o período de entrega/prestación – solo consta fecha de emisión [Z. 7] (§ 14(4) n.º 6 UStG)\n"
+        "Defectos adicionales: tipo de IVA 16 % [Z. 10] inválido desde 01/01/2021 (§ 12(1) UStG) e IBAN [Z. 12] con dígito de control MOD-97 erróneo.",
+        "De ningún modo. Es una factura de mobiliario [Z. 8] sin ningún sistema de IA.",
+        "El proveedor debe emitir factura rectificada: 1) Añadir NIF/IVA; 2) Añadir fecha de entrega; 3) Aplicar 19 % de IVA; 4) Corregir y verificar el IBAN [Z. 12] antes de pagar. Deducción de IVA en riesgo (§ 15(1) UStG). Sin carácter de asesoría fiscal.",
+    ),
+    "KI_Recruiting_Dienstleistervertrag.pdf": (
+        "El documento es un contrato, no una factura [Z. 2]. Para facturar posteriormente deberá incluirse número, fecha, NIF/IVA, período, base imponible, tipo y cuota de IVA ('45000 EUR' [Z. 5] es insuficiente).",
+        "Porque TalentAI evalúa candidatos de forma automatizada [Z. 4] (Anexo III n.º 4(a) del Reglamento (UE) 2024/1689: selección de personal; alto riesgo art. 6(2), sin excepción art. 6(3) al elaborar perfiles).\n"
+        "Obligaciones del responsable (art. 26): supervisión humana, registros ≥6 meses, informar a representantes laborales y exigir evaluación de conformidad (art. 43) y marcado CE (art. 48). Obligaciones aplicables desde 02/12/2027.",
+        "No es una factura; la deducción de IVA soportado requiere una factura formal conforme al § 14(4) UStG con desglose de neto e IVA.",
+    ),
+}
+
+REFERENCE_ANSWERS_EN[HYBRID_FILENAME] = (
+    "None. The embedded XML dataset factur-x.xml prevails [Z. 18] (BMF 15 Oct 2024, para. 36) and contains all mandatory § 14(4) sent. 1 UStG fields, matching the visual PDF across all eight core values, plus a valid B2G Leitweg-ID [Z. 7].",
+    "Not at all. The invoice covers hosting and operational support [Z. 11] [Z. 12] with no AI system; verified deterministically from XML without an LLM.",
+    "No correction required. Sums reconcile (4,800.00 + 912.00 = 5,712.00 EUR [Z. 13]–[Z. 15]), IBAN passes MOD-97 [Z. 16], and XML matches PDF. Archive the received file including embedded XML (§ 14b UStG, § 147 AO).",
+)
+
+REFERENCE_ANSWERS_ES[HYBRID_FILENAME] = (
+    "Ninguno. El XML incrustado factur-x.xml prevalece [Z. 18] (BMF 15/10/2024) e incluye todos los campos del § 14(4) UStG en consonancia con el PDF visual, además de una Leitweg-ID válida [Z. 7].",
+    "De ningún modo. Factura por alojamiento y soporte operativo [Z. 11] [Z. 12] sin sistema de IA; verificada de forma determinista mediante XML.",
+    "No requiere corrección. Los importes cuadran (4.800,00 + 912,00 = 5.712,00 EUR [Z. 13]–[Z. 15]) y el IBAN supera MOD-97 [Z. 16]. Conservar el archivo íntegro con su XML (§ 14b UStG, § 147 AO).",
+)
+
+
 def normalize_question(question: str) -> str:
     """Toleranter Vergleich: Gross-/Kleinschreibung, Leerzeichen und Satzzeichen egal."""
     return "".join(char for char in question.casefold() if char.isalnum())
 
 
-_STANDARD_KEYS = {normalize_question(question): index for index, question in enumerate(STANDARD_QUESTIONS)}
+_STANDARD_KEYS: dict[str, int] = {}
+for _qs in (STANDARD_QUESTIONS, STANDARD_QUESTIONS_EN, STANDARD_QUESTIONS_ES):
+    for _idx, _q in enumerate(_qs):
+        _STANDARD_KEYS[normalize_question(_q)] = _idx
+
+_BY_LANG = {
+    "de": REFERENCE_ANSWERS,
+    "en": REFERENCE_ANSWERS_EN,
+    "es": REFERENCE_ANSWERS_ES,
+}
 
 
 @cache
@@ -653,10 +748,10 @@ def hybrid_demo_sha256() -> str:
     return hashlib.sha256(build_hybrid_pdf(HYBRID_INVOICE)).hexdigest()
 
 
-def reference_answer(filename: str, question: str) -> str | None:
+def reference_answer(filename: str, question: str, lang: str = "de") -> str | None:
     """Musterantwort fuer eine Standardfrage zu einem Musterdokument (sonst ``None``)."""
     index = _STANDARD_KEYS.get(normalize_question(question))
-    answers = REFERENCE_ANSWERS.get(filename)
+    answers = _BY_LANG.get(lang, REFERENCE_ANSWERS).get(filename) or REFERENCE_ANSWERS.get(filename)
     if index is None or answers is None:
         return None
     return answers[index]

@@ -11,8 +11,8 @@
 import { useEffect } from "react";
 
 const BEREIT_EREIGNIS = "eca:bereit";
-const SPLASH_MAX_MS = 2500;
-const SPLASH_MIN_MS = 250;
+const SPLASH_MAX_MS = 1800;
+const SPLASH_MIN_MS = 0;
 
 type BereitFenster = Window & { __ecaBereit?: boolean };
 
@@ -32,17 +32,14 @@ export function SplashAbbau() {
     const weg = () => {
       if (fertig) return;
       fertig = true;
-      // Zwei Frames warten: React hat die geladenen Daten dann sicher gezeichnet.
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          const rest = Math.max(0, SPLASH_MIN_MS - (performance.now() - start));
-          window.setTimeout(() => {
-            splash.classList.add("ist-weg");
-            // Nicht aus dem DOM nehmen (React verwaltet den Knoten) - nur ganz ausblenden.
-            window.setTimeout(() => splash.classList.add("ist-aus"), 400);
-          }, rest);
-        }),
-      );
+      requestAnimationFrame(() => {
+        const rest = Math.max(0, SPLASH_MIN_MS - (performance.now() - start));
+        window.setTimeout(() => {
+          splash.classList.add("ist-weg");
+          // Nicht aus dem DOM nehmen (React verwaltet den Knoten) - nur ganz ausblenden.
+          window.setTimeout(() => splash.classList.add("ist-aus"), 180);
+        }, rest);
+      });
     };
     if ((window as BereitFenster).__ecaBereit) weg();
     window.addEventListener(BEREIT_EREIGNIS, weg, { once: true });

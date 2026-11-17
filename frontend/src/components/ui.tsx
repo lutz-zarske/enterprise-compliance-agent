@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState
 import { createPortal } from "react-dom";
 import type { CheckStatus } from "../types/api";
 import { cx, formatEta, TONE_CLASSES, type Tone } from "../lib/format";
+import { tr, useI18n } from "../lib/i18n";
 import { AlertTriangle, Check, CheckCircle, Copy, Info, MinusCircle, ShieldAlert, ShieldCheck, X, XCircle } from "./icons";
 
 export function Chip({ tone = "neutral", children, className, title }: {
@@ -26,6 +27,63 @@ export function StatusIcon({ status, size = 16 }: { status: CheckStatus; size?: 
   return <MinusCircle size={size} className="text-subtle shrink-0" />;
 }
 
+const FOCUSABLE_SELECTOR =
+  'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Sperrt den Hintergrund (#eca-app-shell via inert), faengt Tab im Dialog,
+ * schliesst auf Escape und gibt beim Schliessen den Fokus zurueck.
+ */
+export function useModalFocusLock(
+  open: boolean,
+  panelRef: React.RefObject<HTMLElement | null>,
+  onClose: () => void,
+) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const shell = document.getElementById("eca-app-shell");
+    shell?.setAttribute("inert", "");
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeRef.current();
+        return;
+      }
+      if (event.key === "Tab" && panelRef.current) {
+        const focusables = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+          (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden",
+        );
+        if (!focusables.length) {
+          event.preventDefault();
+          panelRef.current.focus();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    // Ein Kind (z. B. das Namensfeld) darf den Fokus beim Oeffnen selbst setzen.
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      shell?.removeAttribute("inert");
+      if (previous && document.contains(previous)) previous.focus();
+    };
+  }, [open, panelRef]);
+}
+
 export function Modal({ open, onClose, title, subtitle, children, width = "max-w-2xl", padded = true }: {
   open: boolean;
   onClose: () => void;
@@ -37,19 +95,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
   padded?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  // onClose ist meist eine Inline-Funktion: ueber eine Ref gelesen, damit ein
-  // Neurendern der Seite den Fokus nicht aus einem Eingabefeld zurueckholt.
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && closeRef.current();
-    document.addEventListener("keydown", onKey);
-    // Ein Kind (z. B. das Namensfeld) darf den Fokus beim Oeffnen selbst setzen.
-    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  useModalFocusLock(open, panelRef, onClose);
 
   if (!open || typeof document === "undefined") return null;
   return createPortal(
@@ -68,7 +114,7 @@ export function Modal({ open, onClose, title, subtitle, children, width = "max-w
             <h2 className="text-base font-semibold text-fg">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-subtle">{subtitle}</p>}
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Schließen">
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label={tr("Schließen", "Close", "Cerrar")}>
             <X size={16} />
           </button>
         </div>
@@ -94,7 +140,7 @@ export interface PillTabItem<T extends string> {
  * wohin die Auswahl wandert).  Der Indikator wird am aktiven Tab ausgemessen - ohne
  * Animationsbibliothek; bei reduzierter Bewegung springt er.
  */
-export function PillTabs<T extends string>({ items, value, onChange, className, ariaLabel, size = "md", role = "tablist" }: {
+export function PillTabs<T extends string>({ items, value, onChange, className, ariaLabel, size = "md", role = "tablist", idPrefix }: {
   items: PillTabItem<T>[];
   value: T;
   onChange: (key: T) => void;
@@ -102,10 +148,36 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
   ariaLabel?: string;
   size?: "sm" | "md";
   role?: "tablist" | "radiogroup";
+  idPrefix?: string;
 }) {
+  const { tr: tl } = useI18n();
   const listRef = useRef<HTMLDivElement>(null);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
   const radio = role === "radiogroup";
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const enabled = items.filter((item) => !item.disabled);
+    if (enabled.length < 2) return;
+    let delta = 0;
+    if (event.key === "ArrowRight" || (radio && event.key === "ArrowDown")) delta = 1;
+    else if (event.key === "ArrowLeft" || (radio && event.key === "ArrowUp")) delta = -1;
+    else if (event.key === "Home") delta = -999;
+    else if (event.key === "End") delta = 999;
+    else return;
+    event.preventDefault();
+    const curIndex = Math.max(0, enabled.findIndex((item) => item.key === value));
+    const next =
+      delta === -999
+        ? enabled[0]
+        : delta === 999
+          ? enabled[enabled.length - 1]
+          : enabled[(curIndex + delta + enabled.length) % enabled.length];
+    onChange(next.key);
+    const buttons = listRef.current?.querySelectorAll<HTMLButtonElement>('[data-pill-key]');
+    buttons?.forEach((btn) => {
+      if (btn.dataset.pillKey === next.key) btn.focus();
+    });
+  };
 
   useLayoutEffect(() => {
     const measure = () => {
@@ -137,6 +209,7 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
       ref={listRef}
       role={role}
       aria-label={ariaLabel}
+      onKeyDown={handleKeyDown}
       className={cx("pill-tabs max-w-full overflow-x-auto [scrollbar-width:none]", size === "sm" && "pill-tabs-sm", className)}
     >
       {indicator && (
@@ -151,10 +224,14 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
         return (
           <button
             key={item.key}
+            id={idPrefix ? `${idPrefix}-tab-${item.key}` : undefined}
             type="button"
             role={radio ? "radio" : "tab"}
+            tabIndex={active ? 0 : -1}
             aria-selected={radio ? undefined : active}
             aria-checked={radio ? active : undefined}
+            aria-controls={idPrefix && !radio ? `${idPrefix}-panel-${item.key}` : undefined}
+            data-pill-key={item.key}
             data-active={active}
             title={item.title}
             disabled={item.disabled}
@@ -169,7 +246,7 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
               </span>
             )}
-            {item.dot === "warn" && <span className="h-1.5 w-1.5 rounded-full bg-warn" aria-label="Hinweis" />}
+            {item.dot === "warn" && <span className="h-1.5 w-1.5 rounded-full bg-warn" role="img" aria-label={tl("Hinweis", "Notice", "Aviso")} />}
           </button>
         );
       })}
@@ -177,13 +254,14 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
   );
 }
 
-export function Tabs<T extends string>({ tabs, active, onChange, className }: {
+export function Tabs<T extends string>({ tabs, active, onChange, className, idPrefix }: {
   tabs: { key: T; label: string; badge?: React.ReactNode; title?: string }[];
   active: T;
   onChange: (key: T) => void;
   className?: string;
+  idPrefix?: string;
 }) {
-  return <PillTabs items={tabs} value={active} onChange={onChange} className={className} />;
+  return <PillTabs items={tabs} value={active} onChange={onChange} className={className} idPrefix={idPrefix} />;
 }
 
 export function Segmented<T extends string>({ options, value, onChange, size = "md", ariaLabel }: {
@@ -449,7 +527,7 @@ export function Toaster({ toasts, onDismiss, onPause, onResume }: {
               <p className="text-sm font-medium text-fg">{toast.title}</p>
               {toast.message && <p className="mt-0.5 break-words text-xs text-muted">{toast.message}</p>}
             </div>
-            <button className="text-subtle transition-colors duration-150 hover:text-fg" onClick={() => onDismiss(toast.id)} aria-label="Ausblenden">
+            <button type="button" className="icon-target -mr-1 -mt-1 rounded-md text-subtle transition-colors duration-150 hover:text-fg" onClick={() => onDismiss(toast.id)} aria-label={tr("Ausblenden", "Dismiss", "Ocultar")}>
               <X size={14} aria-hidden="true" />
             </button>
           </div>
@@ -583,13 +661,14 @@ export function Tooltip({ content, children, align = "left", side = "top", class
   );
 }
 
-/** „⌘“ auf Apple-Geraeten, sonst „Strg“ (nach dem ersten Render, SSR-sicher). */
+/** „⌘“ auf Apple-Geraeten, sonst „Strg“ / „Ctrl“ (nach dem ersten Render, SSR-sicher). */
 export function useModifierLabel(): string {
-  const [label, setLabel] = useState("Strg");
+  const { tr: tl } = useI18n();
+  const [apple, setApple] = useState(false);
   useEffect(() => {
-    if (/Mac|iPhone|iPad/i.test(navigator.userAgent)) setLabel("⌘");
+    if (/Mac|iPhone|iPad/i.test(navigator.userAgent)) setApple(true);
   }, []);
-  return label;
+  return apple ? "⌘" : tl("Strg", "Ctrl", "Ctrl");
 }
 
 /** Strg+Enter bzw. ⌘+Enter. */
@@ -647,8 +726,8 @@ export function CopyButton({ value, label, className }: { value: string; label: 
         state === "copied" ? "text-ok" : state === "failed" ? "text-bad" : "text-subtle hover:bg-surface-2 hover:text-fg",
         className,
       )}
-      aria-label={state === "copied" ? `${label} kopiert` : `${label} kopieren`}
-      title={state === "failed" ? "Zwischenablage nicht verfügbar" : `${label} kopieren`}
+      aria-label={state === "copied" ? `${label} ${tr("kopiert", "copied", "copiado")}` : `${label} ${tr("kopieren", "copy", "copiar")}`}
+      title={state === "failed" ? tr("Zwischenablage nicht verfügbar", "Clipboard unavailable", "Portapapeles no disponible") : `${label} ${tr("kopieren", "copy", "copiar")}`}
     >
       <span className="relative inline-flex h-3.5 w-3.5">
         <Copy
@@ -663,7 +742,7 @@ export function CopyButton({ value, label, className }: { value: string; label: 
         />
       </span>
       <span aria-live="polite" className={cx("transition-opacity duration-150", state === "idle" ? "sr-only" : "")}>
-        {state === "copied" ? "Kopiert" : state === "failed" ? "Fehler" : ""}
+        {state === "copied" ? tr("Kopiert", "Copied", "Copiado") : state === "failed" ? tr("Fehler", "Error", "Error") : ""}
       </span>
     </button>
   );
@@ -697,9 +776,15 @@ export function HashBadge({ value, label = "SHA-256", verified = null, verifiedL
   verifiedLabel?: string;
   className?: string;
 }) {
+  const { tr: tl } = useI18n();
   const short = value.length > 20 ? `${value.slice(0, 10)}…${value.slice(-6)}` : value;
   const tone = verified === true ? "ok" : verified === false ? "bad" : "neutral";
-  const status = verified === true ? verifiedLabel ?? "verifiziert" : verified === false ? "Befund" : null;
+  const status =
+    verified === true
+      ? verifiedLabel ?? tl("verifiziert", "verified", "verificado")
+      : verified === false
+        ? tl("Befund", "Mismatch", "Anomalía")
+        : null;
   return (
     <span className={cx("inline-flex max-w-full items-center gap-1", className)}>
       <span

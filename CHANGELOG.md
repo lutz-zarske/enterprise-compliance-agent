@@ -3,6 +3,25 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.6.0 – 17.11.2026
+
+**Mehrsprachigkeit (DE / EN / ES)**
+
+- Vollständiger Sprachschalter (**Deutsch | English | Español**) unter **Einstellungen › Darstellung & Sprache**, vor dem ersten Bildaufbau aktiv (`localStorage` `eca-lang`, `<html lang>`).
+- Zentrales i18n-Wörterbuch (`frontend/src/lib/i18n.tsx`) für Navigation, Inspektor, KI-Einstellungen, Statusmeldungen, Fehlermeldungen, Tour, Tastaturkürzel, Datums-/Währungsformate und dynamische Regelwerk-/DSGVO-Hinweise.
+- Mehrsprachige Backend-Exports & Copilot (`?lang=de|en|es` mit Default `de`): Audit-Zertifikate (`HTML`, `Markdown`, `JSON`), GoBD-Verfahrensdokumentation (`HTML`, `Markdown`), GoBD-Prüfdatenpaket (`ZIP`) sowie lokalisierte Referenz- und Live-Copilot-Antworten.
+
+**UI-Feinschliff & Barrierefreiheit**
+
+- Modal-Dialoge mit Tab-Focus-Trap, Hintergrund-`inert` auf `#eca-app-shell` und Fokus-Rückgabe beim Schließen.
+- `@media (forced-colors: active)` High-Contrast-Regeln, `@media (pointer: coarse)` vergrößerte Touch-Ziele (`36 × 36 px`) sowie permanente Sichtbarkeit von Anpinnen/Archivieren auf Touch-Geräten (`@media (hover: none)`).
+- Eindeutige `<h1>`-Hierarchie pro Ansicht, einheitliche Schriftgrößen (`>= 12px`), mehrzeiliges Wrapping langer KPI-Labels (`min-h-16`) und dunkler Logo-Emblem-Container im Light Mode.
+
+**Performance & Windows-Schnellstart**
+
+- `Start_Compliance_Agent.ps1` verschlankt: SHA-256-gecachter Production-Build (`.run/frontend-build.sha256` -> `npm run start`), automatischer Stale-Check veralteter Backend-Versionen auf `:8001`, paralleler Start von Backend & Frontend mit 250-ms-Bereitschaftsprüfung ohne künstliche Wartezeit.
+- Schnellerer App-Start durch parallele Initialabfragen (`Promise.all` für Health, Dokumente, KPIs, Ledger, Einstellungen) und direkten Splash-Abbau (`SPLASH_MIN_MS = 0`).
+
 ## v2.5.1 – 14.11.2026
 
 - Compliance Copilot: Stoppknopf (und `Esc`) bricht laufende Anfragen sofort im Browser und serverseitig ab (`POST /api/v1/copilot/cancel/{id}`), inklusive „Erneut senden“ am abgebrochenen Turn.

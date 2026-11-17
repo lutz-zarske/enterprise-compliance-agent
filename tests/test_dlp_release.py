@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
+import re
 import subprocess
+import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,6 +13,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import APP_VERSION
+from app.demo import (
+    HYBRID_INVOICE,
+    REFERENCE_ANSWERS_EN,
+    REFERENCE_ANSWERS_ES,
+    build_hybrid_pdf,
+)
+from app.gobd_export import CERTIFICATE_FILE, PROCEDURAL_DOC_FILE, verify_package
+from app.heuristics import heuristic_copilot_answer
 from app.redact import CONFIDENTIAL, redact
 
 # --- DLP-Gateway ---------------------------------------------------------------
@@ -140,3 +151,81 @@ def test_release_ohne_git(make_full_client: Callable[..., TestClient], tmp_path:
     client = make_full_client(release_repo_dir=str(tmp_path / "kein-repo"))
     status = client.get("/api/system/release", params={"fetch": "false"}).json()
     assert status["git"] is False and status["update_available"] is False and "Git" in status["message"]
+
+
+def test_i18n_reports_procedural_doc_and_copilot(make_full_client: Callable[..., TestClient]) -> None:
+    """DE/EN/ES-Lokalisierung für Berichte, GoBD-Verfahrensdokumentation, ZIP und Referenz-Copilot."""
+    client = make_full_client()
+    seed = client.post("/api/demo/seed").json()
+    doc = next(item for item in seed["items"] if "Steuerfalle" in item["filename"])
+    doc_id = doc["id"]
+
+    # Default (de) unveraendert
+    r_de = client.get(f"/documents/{doc_id}/report", params={"format": "html"})
+    assert r_de.status_code == 200 and '<html lang="de">' in r_de.text and "Compliance-Prüfzertifikat" in r_de.text
+
+    # Englisch: JSON, HTML, Markdown
+    r_en_json = client.get(f"/documents/{doc_id}/report", params={"format": "json", "lang": "en"}).json()
+    assert r_en_json["lang"] == "en" and r_en_json["report_type"] == "Compliance Audit Certificate"
+    r_en_html = client.get(f"/documents/{doc_id}/report", params={"format": "html", "lang": "en"})
+    assert r_en_html.status_code == 200 and '<html lang="en">' in r_en_html.text and "Compliance Audit Certificate" in r_en_html.text
+    r_es_md = client.get(f"/documents/{doc_id}/report", params={"format": "markdown", "lang": "es"})
+    assert r_es_md.status_code == 200 and "Certificado de Auditoría de Cumplimiento" in r_es_md.text
+
+    # Verfahrensdokumentation (EN / ES) und GoBD-ZIP (?lang=en)
+    pd_en = client.get(f"/api/documents/{doc_id}/export/procedural-doc", params={"format": "html", "lang": "en"})
+    assert pd_en.status_code == 200 and '<html lang="en">' in pd_en.text and "GoBD Procedural Documentation" in pd_en.text
+    pd_es = client.get(f"/api/documents/{doc_id}/export/procedural-doc", params={"format": "markdown", "lang": "es"})
+    assert pd_es.status_code == 200 and "Documentación de procedimientos GoBD" in pd_es.text
+    zip_en = client.get(f"/api/documents/{doc_id}/export/gobd", params={"lang": "en"})
+    assert zip_en.status_code == 200 and zip_en.headers["content-type"] == "application/zip"
+    assert 'filename="AuditDataPackage_' in zip_en.headers["content-disposition"]
+    with zipfile.ZipFile(io.BytesIO(zip_en.content)) as zf:
+        assert '<html lang="en">' in zf.read(CERTIFICATE_FILE).decode("utf-8")
+        assert '<html lang="en">' in zf.read(PROCEDURAL_DOC_FILE).decode("utf-8")
+    assert verify_package(zip_en.content)["valid"] is True
+
+    # Referenz-Copilot in EN & ES ohne echtes LLM
+    cp_en = client.post(
+        f"/documents/{doc_id}/copilot",
+        json={"question": "Which mandatory fields are missing from this invoice?", "lang": "en"},
+    )
+    assert cp_en.status_code == 200
+    assert cp_en.json()["reference"] is True and "mandatory elements" in cp_en.json()["answer"]
+
+    cp_es = client.post(
+        f"/documents/{doc_id}/copilot",
+        json={"question": "¿Qué datos obligatorios faltan en esta factura?", "lang": "es"},
+    )
+    assert cp_es.status_code == 200
+    assert cp_es.json()["reference"] is True and "datos obligatorios" in cp_es.json()["answer"].lower()
+
+    # Alle [Z. n]-Zitate in Referenzantworten liegen innerhalb der Dokumentzeilen
+    for item in seed["items"]:
+        doc_detail = client.get(f"/documents/{item['id']}").json()
+        lines = ((doc_detail.get("text_view") or {}).get("text") or doc_detail.get("text_preview") or "").splitlines()
+        assert lines, f"{item['filename']}: Dokumenttext fehlt"
+        for lang_answers in (REFERENCE_ANSWERS_EN, REFERENCE_ANSWERS_ES):
+            for answer in lang_answers.get(item["filename"], ()):
+                for match in re.finditer(r"\[Z\.\s*(\d+)\]", answer):
+                    assert 1 <= int(match.group(1)) <= len(lines), f"{item['filename']}: {match.group(0)}"
+
+    # Nicht-Latin-1-Dateiname (z. B. Polnisch/Tschechisch) stuerzt bei JSON/Markdown-Report nicht ab
+    upload = client.post(
+        "/documents/upload",
+        files={"file": ("Rechnung_Łódź_2026.pdf", build_hybrid_pdf(HYBRID_INVOICE), "application/pdf")},
+    )
+    assert upload.status_code in (200, 201)
+    lodz_id = upload.json()["id"]
+    assert client.post(f"/documents/{lodz_id}/extract", params={"wait": "true"}).status_code == 200
+    for fmt, lang in (("json", "en"), ("markdown", "es")):
+        rep = client.get(f"/documents/{lodz_id}/report", params={"format": fmt, "lang": lang})
+        assert rep.status_code == 200
+        assert "inline;" in rep.headers["content-disposition"]
+        assert "filename*=UTF-8''" in rep.headers["content-disposition"]
+
+    # Heuristik-Fallback respektiert lang
+    rec = client.get(f"/documents/{doc_id}").json()
+    fake_rec = type("Rec", (), {"scorecard": rec.get("scorecard"), "extraction": rec.get("extraction")})()
+    assert "without a language model" in heuristic_copilot_answer(fake_rec, "Q", "timeout", lang="en")
+    assert "sin modelo de lenguaje" in heuristic_copilot_answer(fake_rec, "Q", "timeout", lang="es")

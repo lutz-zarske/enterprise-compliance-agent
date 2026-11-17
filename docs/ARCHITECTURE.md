@@ -245,12 +245,16 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
   Portal, weil die Kopfzeile selbst `backdrop-filter` trägt. Tooltips nur über
   `Tooltip` aus `components/ui.tsx` (Portal, `position: fixed`,
   Viewport-Clamping).
-* **`backdrop-filter` nur als Standard-Eigenschaft notieren:** Das
-  `-webkit-`-Präfix ergänzt der Build. Doppelt notiert, behielt Lightning CSS
-  nur das Präfix – in Chromium ohne Wirkung.
-* **Scrollbereiche und Eingaben:** Klasse `scroll-area` plus `pr-4`; keine
-  Schrift unter `text-xs` (Ausnahme: Belegtext 13 px); mehrzeilige Eingaben
-  über `AutoTextarea`, nie mit Zieh-Ecke.
+* **Barrierefreiheit & Mehrsprachigkeit (DE / EN / ES):** Modale rendern per
+  Portal auf `document.body` mit Tab-Focus-Trap, Hintergrund-`inert` auf
+  `#eca-app-shell` und Fokus-Rückgabe; `@media (forced-colors: active)` und
+  vergrößerte Touch-Ziele (`@media (pointer: coarse)`, `@media (hover: none)`).
+  Vollständige UI-, Copilot- und Export-Lokalisierung (`lib/i18n.tsx`,
+  `?lang=de|en|es`) vor dem ersten Bildaufbau (`localStorage` `eca-lang`).
+* **Design-Regeln:** `backdrop-filter` nur als Standard-Eigenschaft notieren
+  (das `-webkit-`-Präfix ergänzt Lightning CSS beim Build). Keine Schrift unter
+  `text-xs` (Ausnahme: Belegtext 13 px); mehrzeilige Eingaben über
+  `AutoTextarea`, Scrollbereiche `scroll-area` plus `pr-4`.
 * **Viewports:** 1920 × 945 und 2560 × 1305 ohne Seiten-Scrollen im Copilot,
   feste Inspektorhöhe (`PANEL_HEIGHT`), Inhalt `max-w-[1920px]` bzw.
   `2xl:max-w-[2400px]`.
@@ -266,7 +270,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (329 Tests, Stand v2.5.1) deckt die Kette vom HTTP-Request bis zur
+`pytest` (330 Tests, Stand v2.6.0) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die

@@ -1251,6 +1251,7 @@ class DocumentService:
         history: list[dict[str, str]],
         *,
         thinking: str = "medium",
+        lang: str = "de",
         progress_id: str | None = None,
     ) -> dict[str, object]:
         """Beantwortet eine Pruefer-Frage, geerdet auf Dokumenttext und Pruefergebnis.
@@ -1271,7 +1272,7 @@ class DocumentService:
 
             is_demo_einvoice = record.provider == STRUCTURED_PROVIDER and record.sha256 == hybrid_demo_sha256()
             if record.provider == REFERENCE_PROVIDER or is_demo_einvoice:
-                answer = reference_answer(record.original_filename, question)
+                answer = reference_answer(record.original_filename, question, lang=lang)
                 if answer is not None:
                     return {"answer": answer, "model": "reference-answer", "provider": REFERENCE_PROVIDER,
                             "duration_ms": 0, "reference": True}
@@ -1308,7 +1309,14 @@ class DocumentService:
             if vault is not None:
                 steps.step(progress_id, "Personenbezogene Daten pseudonymisieren (Privacy Vault)")
             steps.step(progress_id, f"{client.model} prüft Belegstellen und Rechtsnormen")
-            system_prompt = COPILOT_SYSTEM_PROMPT + THINKING_INSTRUCTIONS.get(thinking, "")
+            lang_hint = (
+                "\n\nLANGUAGE: Respond concisely in professional English. Keep German/EU statutory citations (e.g. § 14 UStG, EN 16931, EU AI Act) and [Z. n] line citations intact."
+                if lang == "en"
+                else "\n\nIDIOMA: Responde de forma concisa y precisa en español profesional. Conserva exactamente las referencias normativas (p. ej. § 14 UStG, EN 16931, Reglamento de IA) y las citas [Z. n]."
+                if lang == "es"
+                else ""
+            )
+            system_prompt = COPILOT_SYSTEM_PROMPT + THINKING_INSTRUCTIONS.get(thinking, "") + lang_hint
             try:
                 answer, duration_ms = await client.chat_text(system_prompt=system_prompt, messages=messages)
             except asyncio.CancelledError:
@@ -1322,7 +1330,7 @@ class DocumentService:
                     raise
                 steps.step(progress_id, "Regelwerk antwortet (KI nicht verfügbar)")
                 return {
-                    "answer": heuristic_copilot_answer(record, question, describe_failure(exc)),
+                    "answer": heuristic_copilot_answer(record, question, describe_failure(exc), lang=lang),
                     "model": HEURISTIC_MODEL, "provider": HEURISTIC_PROVIDER, "duration_ms": 0,
                     "reference": False, "heuristic": True,
                     "failover": list(getattr(client, "switches", None) or []) or None,

@@ -528,10 +528,10 @@ def _settings_view(request: Request) -> dict[str, object]:
     }
 
 
-def _attachment_header(filename: str) -> str:
+def _attachment_header(filename: str, disposition: Literal["attachment", "inline"] = "attachment") -> str:
     """Content-Disposition mit ASCII-Fallback und RFC-5987-Dateinamen (Umlaute)."""
     fallback = filename.encode("ascii", "replace").decode("ascii").replace("?", "_").replace('"', "")
-    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"
+    return f"{disposition}; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"
 
 
 async def _procedural_doc(
@@ -540,6 +540,7 @@ async def _procedural_doc(
     *,
     entries: list | None = None,
     verification: object | None = None,
+    lang: str = "de",
 ) -> dict[str, object]:
     """Baut die Verfahrensdokumentation aus Settings, Laufzeitstand, Ledger und Schluessel."""
     ledger: AuditLedger = request.app.state.ledger
@@ -555,6 +556,7 @@ async def _procedural_doc(
         entries=entries,
         verification=verification,  # type: ignore[arg-type]
         signing_key=await anyio.to_thread.run_sync(signer.public_info),
+        lang=lang,
     )
 
 
@@ -1001,6 +1003,7 @@ def _register_routes(application: FastAPI) -> None:
         request: Request,
         document_id: str = Path(...),
         doc_format: Literal["html", "markdown"] = Query("html", alias="format"),
+        lang: Literal["de", "en", "es"] = Query("de"),
         service: DocumentService = Depends(get_service),
     ) -> Response:
         """Vier Säulen nach GoBD Rz. 153 aus dem aktuellen Systemzustand, plus Anhang zum Beleg.
@@ -1010,16 +1013,17 @@ def _register_routes(application: FastAPI) -> None:
         (§ 147 Abs. 1 Nr. 1 AO).
         """
         record = await service.require_document(document_id)
-        doc = await _procedural_doc(request, record)
+        doc = await _procedural_doc(request, record, lang=lang)
         stem = record.original_filename.rsplit(".", 1)[0]
+        prefix = {"de": "Verfahrensdokumentation", "en": "ProceduralDocumentation", "es": "DocumentacionProcedimientos"}[lang]
         if doc_format == "markdown":
             return PlainTextResponse(
-                render_procedural_markdown(doc),
+                render_procedural_markdown(doc, lang=lang),
                 media_type="text/markdown; charset=utf-8",
-                headers={"Content-Disposition": _attachment_header(f"Verfahrensdokumentation_{stem}.md")},
+                headers={"Content-Disposition": _attachment_header(f"{prefix}_{stem}.md")},
             )
         return HTMLResponse(
-            render_procedural_html(doc),
+            render_procedural_html(doc, lang=lang),
             headers={"Content-Security-Policy": REPORT_CSP, "X-Content-Type-Options": "nosniff"},
         )
 
@@ -1085,6 +1089,7 @@ def _register_routes(application: FastAPI) -> None:
         request: Request,
         document_id: str = Path(...),
         report_format: Literal["html", "markdown", "json"] = Query("html", alias="format"),
+        lang: Literal["de", "en", "es"] = Query("de"),
         service: DocumentService = Depends(get_service),
     ) -> Response:
         record = await service.require_document(document_id)
@@ -1092,22 +1097,23 @@ def _register_routes(application: FastAPI) -> None:
             raise DocumentNotAnalyzedError(f"Dokument {document_id} ist noch nicht analysiert.")
         ledger: AuditLedger = request.app.state.ledger
         report = build_report(
-            record, await ledger.list(document_id=document_id, limit=50), await ledger.verify_chain()
+            record, await ledger.list(document_id=document_id, limit=50), await ledger.verify_chain(), lang=lang
         )
         stem = record.original_filename.rsplit(".", 1)[0]
+        prefix = {"de": "Pruefzertifikat", "en": "AuditCertificate", "es": "CertificadoAuditoria"}[lang]
         if report_format == "json":
             return JSONResponse(
                 report,
-                headers={"Content-Disposition": f'inline; filename="Pruefzertifikat_{stem}.json"'},
+                headers={"Content-Disposition": _attachment_header(f"{prefix}_{stem}.json", "inline")},
             )
         if report_format == "markdown":
             return PlainTextResponse(
-                render_markdown(report),
+                render_markdown(report, lang=lang),
                 media_type="text/markdown; charset=utf-8",
-                headers={"Content-Disposition": f'inline; filename="Pruefzertifikat_{stem}.md"'},
+                headers={"Content-Disposition": _attachment_header(f"{prefix}_{stem}.md", "inline")},
             )
         return HTMLResponse(
-            render_html(report),
+            render_html(report, lang=lang),
             headers={"Content-Security-Policy": REPORT_CSP, "X-Content-Type-Options": "nosniff"},
         )
 
@@ -1127,6 +1133,7 @@ def _register_routes(application: FastAPI) -> None:
     async def export_gobd(
         request: Request,
         document_id: str = Path(...),
+        lang: Literal["de", "en", "es"] = Query("de"),
         service: DocumentService = Depends(get_service),
     ) -> Response:
         """GoBD-orientiertes Einzelbeleg-Paket (Rz. 58 ff.: Nachvollziehbarkeit, Unveränderbarkeit).
@@ -1143,9 +1150,9 @@ def _register_routes(application: FastAPI) -> None:
         entries = await ledger.list(document_id=document_id, limit=1000)
         verification = await ledger.verify_chain()
         original = await service.read_original(record)
-        certificate = render_html(build_report(record, entries[:50], verification))
+        certificate = render_html(build_report(record, entries[:50], verification, lang=lang), lang=lang)
         procedural = render_procedural_html(
-            await _procedural_doc(request, record, entries=entries, verification=verification)
+            await _procedural_doc(request, record, entries=entries, verification=verification, lang=lang), lang=lang
         )
         data, _ = await anyio.to_thread.run_sync(
             partial(
@@ -1161,12 +1168,13 @@ def _register_routes(application: FastAPI) -> None:
             )
         )
         stem = record.original_filename.rsplit(".", 1)[0]
+        pkg_prefix = {"de": "Pruefdatenpaket", "en": "AuditDataPackage", "es": "PaqueteAuditoria"}[lang]
         logger.info("Prüfdatenpaket für %s erzeugt (%s Bytes).", record.id, len(data))
         return Response(
             data,
             media_type="application/zip",
             headers={
-                "Content-Disposition": _attachment_header(f"Pruefdatenpaket_{stem}.zip"),
+                "Content-Disposition": _attachment_header(f"{pkg_prefix}_{stem}.zip"),
                 "X-Content-SHA256": hashlib.sha256(data).hexdigest(),
             },
         )
@@ -1196,6 +1204,7 @@ def _register_routes(application: FastAPI) -> None:
             body.question,
             [turn.model_dump() for turn in body.history],
             thinking=body.thinking,
+            lang=body.lang,
             progress_id=body.progress_id,
         )
         return CopilotResponse.model_validate(result)

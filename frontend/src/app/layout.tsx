@@ -7,6 +7,7 @@ import "@fontsource/ibm-plex-serif/latin-600.css";
 import "./globals.css";
 import { SplashAbbau } from "../components/SplashAbbau";
 import { ThemeProvider } from "../components/ThemeProvider";
+import { I18nProvider } from "../lib/i18n";
 
 export const metadata: Metadata = {
   title: "Enterprise Compliance Agent",
@@ -32,7 +33,7 @@ export const viewport: Viewport = {
  * Setzt das Farbschema vor dem ersten Paint (kein Aufblitzen des falschen Themes).
  * Wahl dark | light | system; Standard ist der dunkle Arbeitsmodus.
  */
-const themeScript = `(function(){try{var t=localStorage.getItem("eca-theme");var d=t==="light"?false:t==="system"?!window.matchMedia("(prefers-color-scheme: light)").matches:true;document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light";}catch(e){document.documentElement.classList.add("dark");}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem("eca-theme");var d=t==="light"?false:t==="system"?!window.matchMedia("(prefers-color-scheme: light)").matches:true;document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light";var l=localStorage.getItem("eca-lang");if(l==="en"||l==="es"||l==="de")document.documentElement.lang=l;}catch(e){document.documentElement.classList.add("dark");}})();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -51,7 +52,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </div>
         </div>
         <SplashAbbau />
-        <ThemeProvider>{children}</ThemeProvider>
+        <I18nProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </I18nProvider>
       </body>
     </html>
   );

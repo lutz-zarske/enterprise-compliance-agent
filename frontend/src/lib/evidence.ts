@@ -8,6 +8,7 @@
  * „Rechnungsdatum:“ bleiben stehen, nur die Werte werden zu Platzhaltern.
  */
 import type { CheckStatus, DetectionSource, DocumentDetail, ScoreCheck, ScoreTile } from "../types/api";
+import { tr } from "./i18n";
 
 export interface Line {
   start: number;
@@ -72,11 +73,24 @@ export const EVIDENCE_LABELS: Record<EvidenceTone, string> = {
   bad: "Verstoß",
 };
 
+export function evidenceLabel(tone: EvidenceTone): string {
+  switch (tone) {
+    case "ok":
+      return tr("Konform", "Compliant", "Conforme");
+    case "warn":
+      return tr("Prüfhinweis", "Review note", "Aviso");
+    case "bad":
+      return tr("Verstoß", "Violation", "Infracción");
+  }
+}
+
 export function toneLabel(check: ScoreCheck): string {
   const tone = evidenceTone(check.status, check.evidence_source);
-  if (!tone) return "Nicht einschlägig";
-  if (tone === "warn" && check.status === "pass") return "KI-Vorschlag – manuell sichten";
-  return EVIDENCE_LABELS[tone];
+  if (!tone) return tr("Nicht einschlägig", "Not applicable", "No aplicable");
+  if (tone === "warn" && check.status === "pass") {
+    return tr("KI-Vorschlag – manuell sichten", "AI suggestion – review manually", "Sugerencia de IA – revisar");
+  }
+  return evidenceLabel(tone);
 }
 
 const RANK: Record<EvidenceTone, number> = { ok: 0, warn: 1, bad: 2 };

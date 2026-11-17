@@ -388,7 +388,7 @@ body {
     border-bottom-width: 2px;
     background: var(--surface-2);
     padding: 0 0.3rem;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 500;
     line-height: 1.1rem;
     color: var(--fg-subtle);
@@ -397,6 +397,21 @@ body {
     border-color: color-mix(in srgb, var(--primary-fg) 30%, transparent);
     background: color-mix(in srgb, var(--primary-fg) 10%, transparent);
     color: var(--primary-fg);
+  }
+
+  /* Mindest-Trefferflaeche fuer Icon-Schaltflaechen (WCAG 2.5.8 >= 24 px, Touch >= 36 px). */
+  .icon-target {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+  }
+  @media (pointer: coarse) {
+    .icon-target {
+      min-width: 2.25rem;
+      min-height: 2.25rem;
+    }
   }
 
   /*
@@ -666,7 +681,7 @@ a,
   display: grid;
   place-items: center;
   background: var(--bg);
-  transition: opacity 320ms var(--ease-out, ease-out);
+  transition: opacity 160ms var(--ease-out, ease-out);
   /* Notaus ohne JavaScript: nach 4 s weg. */
   animation: eca-splash-notaus 0s linear 4s forwards;
 }
@@ -805,5 +820,59 @@ nextjs-portal [data-nextjs-dev-tools-button],
 @media print {
   .no-print {
     display: none !important;
+  }
+}
+
+/* Windows High Contrast (Forced Colors Mode): Rahmen und aktive Auswahl bleiben klar sichtbar. */
+@media (forced-colors: active) {
+  .card,
+  .glass-menu,
+  .tip-bubble,
+  .chip {
+    border: 1px solid CanvasText !important;
+  }
+  .pill-tab:is([aria-selected="true"], [aria-checked="true"]) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  [role="switch"] {
+    border: 1px solid ButtonText;
+    forced-color-adjust: none;
+  }
+  [role="switch"] > span {
+    background: ButtonText;
+  }
+  [role="switch"][aria-checked="true"] {
+    border-color: Highlight;
+    background: Highlight;
+  }
+  [role="switch"][aria-checked="true"] > span {
+    background: HighlightText;
+  }
+  .progress-track {
+    border: 1px solid CanvasText;
+  }
+  .progress-fill {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+  .pii-mark,
+  .doc-line[data-evidence],
+  .doc-line[data-cited="true"] {
+    outline: 1.5px solid Highlight;
+  }
+  .tour-ring {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* Groessere Klickflaechen auf Touch-Geraeten (WCAG 2.5.8). */
+@media (pointer: coarse) {
+  .btn,
+  .btn-sm,
+  .btn-icon,
+  .pill-tab {
+    min-height: 2.25rem;
+    min-width: 2.25rem;
   }
 }
