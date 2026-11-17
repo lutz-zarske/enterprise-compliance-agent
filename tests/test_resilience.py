@@ -1,4 +1,4 @@
-"""v2.5: ausfallsichere KI-Kaskade, Hintergrund-Jobs, Cloud-Budget und lokale KI."""
+"""Ausfallsichere KI-Kaskade, Hintergrund-Jobs, Cloud-Budget und lokale KI."""
 
 from __future__ import annotations
 
@@ -459,7 +459,7 @@ def test_ueberlast_meldung_nennt_die_tatsaechliche_ursache() -> None:
     # Nur ein Key, keine Ausweich-Stufe: Ursache plus konkreter nächster Schritt.
     single = fallback_explanation(ProviderUnavailableError(overload_message("Gemini", 503)), stages=1)
     assert single.startswith("Gemini ist vorübergehend überlastet (HTTP 503).")
-    assert "Einstellungen › Ausweich-Kaskade" in single
+    assert "Einstellungen › KI › Ausweich-Kaskade" in single
     # Mit Kaskade: kein Ratschlag, eine Kaskade anzulegen, sondern der Hinweis auf alle Stufen.
     chain = fallback_explanation(ProviderUnavailableError(overload_message("Claude", 529)), stages=3)
     assert chain.endswith("Auch die übrigen 2 Stufen der Ausweich-Kaskade antworteten nicht.")

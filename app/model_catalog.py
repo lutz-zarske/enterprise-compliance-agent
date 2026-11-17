@@ -1,4 +1,4 @@
-"""Modell-Kataloge der Provider und Upgrade-Erkennung (seit v2.4).
+"""Modell-Kataloge der Provider und Upgrade-Erkennung.
 
 Liest die verfuegbaren Modelle ueber die jeweilige API und schlaegt ein
 neueres Modell *derselben Klasse* vor (Sonnet -> neueres Sonnet, Flash ->

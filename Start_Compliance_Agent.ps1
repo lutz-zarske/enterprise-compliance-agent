@@ -13,6 +13,9 @@ param(
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 chcp 65001 | Out-Null
+# PowerShell 5.1 blendet bei Invoke-WebRequest sonst je Anfrage einen blauen Fortschrittsbalken
+# ein - im 250-ms-Takt flackert das Fenster. Ohne Fortschrittsanzeige ist die Abfrage zudem schneller.
+$ProgressPreference = "SilentlyContinue"
 
 $ErrorActionPreference = "Stop"
 $AppDir = $PSScriptRoot
@@ -107,7 +110,12 @@ function Ensure-PortOwnOrFree([int]$port, [string]$cmdPattern, [bool]$stopIfOwne
     return $true
 }
 
-Write-Host "Enterprise Compliance Agent — Schnellstart" -ForegroundColor Cyan
+function Box-Zeile([string]$text, [string]$farbe) { Write-Host ("   " + $text).PadRight(58) -ForegroundColor $farbe }
+
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host "             Enterprise Compliance Agent                  " -ForegroundColor Cyan
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host ""
 
 # 1. Python (.venv) und Abhängigkeiten prüfen
 $VenvPython = Join-Path $AppDir ".venv\Scripts\python.exe"
@@ -208,6 +216,9 @@ if ($BuildChanged) {
         exit 1
     }
     Set-Content -Path $BuildMarker -Value $BuildHash -Encoding ascii
+    Write-Host "[OK] Production-Build erstellt." -ForegroundColor Green
+} else {
+    Write-Host "[OK] Production-Build aktuell (Cache)." -ForegroundColor Green
 }
 
 # 5. Backend und Frontend parallel starten
@@ -216,11 +227,17 @@ $FrontendErr = Join-Path $LogDir "frontend.err.log"
 $BackendProc = $null
 $FrontendProc = $null
 
-if (-not $BackendActive) {
+if ($BackendActive) {
+    Write-Host "[x] Backend läuft bereits auf Port $BackendPort." -ForegroundColor Green
+} else {
+    Write-Host "[>] Starte Backend (FastAPI) auf Port $BackendPort" -ForegroundColor Cyan
     $BackendProc = Start-Process -FilePath $PythonExe -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$BackendPort") -WorkingDirectory $AppDir -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $LogDir "backend.log") -RedirectStandardError $BackendErr
     Set-Content -Path (Join-Path $RunDir "backend.pid") -Value $BackendProc.Id -Encoding ascii
 }
-if (-not $FrontendActive) {
+if ($FrontendActive) {
+    Write-Host "[x] Oberfläche läuft bereits auf Port $FrontendPort." -ForegroundColor Green
+} else {
+    Write-Host "[>] Starte Oberfläche (Next.js) auf Port $FrontendPort" -ForegroundColor Cyan
     $startArgs = @("run", "start")
     if ($FrontendPort -ne 3001) { $startArgs += @("--", "-p", "$FrontendPort") }
     $FrontendProc = Start-Process -FilePath $NpmExe -ArgumentList $startArgs -WorkingDirectory $FrontendDir -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $LogDir "frontend.log") -RedirectStandardError $FrontendErr
@@ -269,7 +286,18 @@ if (-not $BackendReady -or -not $FrontendReady) {
     exit 1
 }
 
+Write-Host "[OK] Backend bereit (http://127.0.0.1:$BackendPort)" -ForegroundColor Green
+Write-Host "[OK] Oberfläche bereit (http://127.0.0.1:$FrontendPort)" -ForegroundColor Green
+
 $ver = if ($TargetVersion) { " v$TargetVersion" } else { "" }
-Write-Host "[OK] Enterprise Compliance Agent$ver bereit -> http://127.0.0.1:$FrontendPort  (Stop: Stop_Compliance_Agent.bat)" -ForegroundColor Green
-if (-not $NoBrowser) { Start-Process "http://127.0.0.1:$FrontendPort" }
+Write-Host ""
+Write-Host "==========================================================" -ForegroundColor Green
+Box-Zeile "Enterprise Compliance Agent$ver ist bereit" Green
+Box-Zeile "URL:     http://127.0.0.1:$FrontendPort" Green
+Box-Zeile "Logs:    $LogDir" DarkGray
+Box-Zeile "Beenden: Stop_Compliance_Agent.bat" DarkGray
+Write-Host "==========================================================" -ForegroundColor Green
+Write-Host ""
+# Kurze Lesepause fuer die Statusbox, danach schliesst sich das Fenster von selbst.
+if (-not $NoBrowser) { Start-Process "http://127.0.0.1:$FrontendPort"; Start-Sleep -Seconds 2 }
 exit 0

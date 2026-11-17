@@ -284,6 +284,9 @@ const EXACT_EN: Record<string, string> = {
   "§ 14 UStG Extraktion & Prüfung": "§ 14 VAT Extraction & Audit",
   "EU AI Act, Scorecard & Ledger": "EU AI Act, Scorecard & Ledger",
   "Regelbasiertes Referenz-Audit – KI nicht verfügbar": "Rule-Based Reference Audit – AI Unavailable",
+  "Regelbasiertes Referenz-Audit – KI temporär überlastet": "Rule-Based Reference Audit – AI Unavailable",
+  "Beleg archiviert": "Document archived",
+  "Beleg aus dem Archiv geholt": "Document restored from archive",
   "Belegstellen und Prüfergebnis aufbereiten": "Preparing document excerpts and audit findings",
   "Personenbezogene Daten pseudonymisieren (Privacy Vault)": "Pseudonymizing personal data (Privacy Vault)",
   "Regelwerk antwortet (KI nicht verfügbar)": "Rule engine answering (AI unavailable)",
@@ -545,6 +548,9 @@ const EXACT_ES: Record<string, string> = {
   "§ 14 UStG Extraktion & Prüfung": "Extracción § 14 UStG y verificación",
   "EU AI Act, Scorecard & Ledger": "Reglamento de IA, Scorecard y Registro",
   "Regelbasiertes Referenz-Audit – KI nicht verfügbar": "Auditoría de referencia basada en reglas – IA no disponible",
+  "Regelbasiertes Referenz-Audit – KI temporär überlastet": "Auditoría de referencia basada en reglas – IA no disponible",
+  "Beleg archiviert": "Documento archivado",
+  "Beleg aus dem Archiv geholt": "Documento recuperado del archivo",
   "Belegstellen und Prüfergebnis aufbereiten": "Preparando citas y resultado de auditoría",
   "Personenbezogene Daten pseudonymisieren (Privacy Vault)": "Seudonimizando datos personales (Privacy Vault)",
   "Regelwerk antwortet (KI nicht verfügbar)": "Responde el motor de reglas (IA no disponible)",
@@ -567,12 +573,60 @@ const EXACT_ES: Record<string, string> = {
   "Lokale Änderungen vorhanden - Update abgebrochen.": "Hay cambios locales — actualización cancelada.",
 };
 
+/**
+ * Protokoll-Zusammenfassungen und Anbieter-Meldungen.  Gespeichert bleiben sie deutsch
+ * (Teil der Hash-Kette); uebersetzt wird nur die Anzeige.  Muster gelten auch mitten
+ * in aneinandergereihten Saetzen (fallback_reason = Ursache + Hinweis).
+ */
+const MESSAGE_RULES: [RegExp, string, string][] = [
+  [/^Wechsel (\S+) -> (\S+) \(([^)]+)\)$/, "Provider switch $1 -> $2 ($3)", "Cambio de proveedor $1 -> $2 ($3)"],
+  [/^Modellwechsel (.+) -> (.+)$/, "Model change $1 -> $2", "Cambio de modelo $1 -> $2"],
+  [/^Release-Wechsel (\S+) -> (\S+) durch (.+)$/, "Release change $1 -> $2 by $3", "Cambio de versión $1 -> $2 por $3"],
+  [/^Einstufung (\S+) -> (\S+) durch (.+); Score (\S+) -> (\S+)$/, "Classification $1 -> $2 by $3; score $4 -> $5", "Clasificación $1 -> $2 por $3; puntuación $4 -> $5"],
+  [/^(SEALED_[A-Z]+) durch (.+)$/, "$1 by $2", "$1 por $2"],
+  [/^Score (\d+): /, "Score $1: ", "Puntuación $1: "],
+  [/§ 14 UStG −/g, "Sec. 14 UStG −", "§ 14 UStG −"],
+  [/Finanzmathematik −/g, "Financial math −", "Matemática financiera −"],
+  [/DSGVO −/g, "GDPR −", "RGPD −"],
+  [/^EU AI Act: Hochrisiko$/, "EU AI Act: high risk", "EU AI Act: alto riesgo"],
+  [/^DSGVO: personenbezogene Daten \((\w+)\)$/, "GDPR: personal data ($1)", "RGPD: datos personales ($1)"],
+  [/^DSGVO: besondere Kategorien \(Art\. 9\/10\)$/, "GDPR: special categories (Art. 9/10)", "RGPD: categorías especiales (Art. 9/10)"],
+  [/ nimmt vorerst keine Anfragen an \(HTTP 429: Anfragelimit oder Kontingent des API-Keys erreicht\)\./g,
+    " is not accepting requests for now (HTTP 429: rate limit or API key quota reached).",
+    " no acepta solicitudes por ahora (HTTP 429: límite de solicitudes o cuota de la clave API alcanzados)."],
+  [/ hat die Anfrage wegen Zeitüberschreitung abgebrochen \(HTTP 408\)\./g,
+    " cancelled the request after a timeout (HTTP 408).", " canceló la solicitud por tiempo agotado (HTTP 408)."],
+  [/ ist vorübergehend überlastet \(HTTP (\d+)\)\./g, " is temporarily overloaded (HTTP $1).", " está saturado temporalmente (HTTP $1)."],
+  [/ meldet eine Störung \(HTTP (\d+)\)\./g, " reports an outage (HTTP $1).", " informa de una incidencia (HTTP $1)."],
+  [/ antwortet nicht rechtzeitig \(Zeitüberschreitung\)\./g, " did not respond in time (timeout).", " no respondió a tiempo (tiempo agotado)."],
+  [/ ist nicht erreichbar \(Verbindungsfehler\)\./g, " is unreachable (connection error).", " no está disponible (error de conexión)."],
+  [/ lehnt den API-Key ab \(HTTP (\d+)\)\./g, " rejects the API key (HTTP $1).", " rechaza la clave API (HTTP $1)."],
+  [/Ausweichmodell oder zweiten API-Key unter Einstellungen › KI › Ausweich-Kaskade hinterlegen; sonst in einigen Minuten erneut prüfen\./g,
+    "Add a fallback model or a second API key under Settings › AI › Fallback cascade; otherwise try again in a few minutes.",
+    "Añada un modelo alternativo o una segunda clave API en Ajustes › IA › Cascada de respaldo; si no, reintente en unos minutos."],
+  [/Auch die zweite Stufe der Ausweich-Kaskade antwortete nicht\./g,
+    "The second stage of the fallback cascade did not respond either.", "Tampoco respondió el segundo nivel de la cascada de respaldo."],
+  [/Auch die übrigen (\d+) Stufen der Ausweich-Kaskade antworteten nicht\./g,
+    "The remaining $1 stages of the fallback cascade did not respond either.", "Tampoco respondieron los $1 niveles restantes de la cascada de respaldo."],
+  [/API-Key prüfen; ggf\. Berechtigung für das gewählte Modell freischalten\./g,
+    "Check the API key; if needed, enable access to the selected model.", "Compruebe la clave API; si es necesario, habilite el acceso al modelo elegido."],
+  [/API-Key unter Einstellungen › KI hinterlegen oder auf 'Lokal' umschalten\./g,
+    "Add an API key under Settings › AI or switch to 'Local'.", "Añada una clave API en Ajustes › IA o cambie a 'Local'."],
+  [/Ollama unter (\S+) ist nicht erreichbar\./g, "Ollama at $1 is unreachable.", "Ollama en $1 no está disponible."],
+  [/Lokale KI starten \(Einstellungen › KI\) oder im Terminal 'ollama serve' ausführen; Erreichbarkeit mit scripts\/smoke_test_ollama\.py prüfen\./g,
+    "Start local AI (Settings › AI) or run 'ollama serve' in a terminal; check reachability with scripts/smoke_test_ollama.py.",
+    "Inicie la IA local (Ajustes › IA) o ejecute 'ollama serve' en una terminal; compruebe la conexión con scripts/smoke_test_ollama.py."],
+];
+
 export function translateDynamic(text: string | null | undefined, locale: Locale = getActiveLocale()): string {
   if (!text || locale === "de") return text ?? "";
   const map = locale === "en" ? EXACT_EN : EXACT_ES;
   if (map[text]) return map[text];
+  // Zusammengesetzte Protokoll-Zeilen ("A | B | C") Teil fuer Teil uebersetzen.
+  if (text.includes(" | ")) return text.split(" | ").map((part) => translateDynamic(part, locale)).join(" | ");
 
   let out = text;
+  for (const [pattern, en, es] of MESSAGE_RULES) out = out.replace(pattern, locale === "en" ? en : es);
   if (locale === "en") {
     out = out
       .replace(/^Vollständig \((\d+\/\d+)\)(.*)$/, "Complete ($1)$2")

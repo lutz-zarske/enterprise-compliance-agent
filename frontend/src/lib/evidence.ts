@@ -67,12 +67,6 @@ export function evidenceTone(status: CheckStatus, source: DetectionSource | null
   return null;
 }
 
-export const EVIDENCE_LABELS: Record<EvidenceTone, string> = {
-  ok: "Konform",
-  warn: "Prüfhinweis",
-  bad: "Verstoß",
-};
-
 export function evidenceLabel(tone: EvidenceTone): string {
   switch (tone) {
     case "ok":

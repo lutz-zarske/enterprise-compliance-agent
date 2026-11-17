@@ -1,4 +1,4 @@
-// Typen spiegeln die Pydantic-Modelle aus app/schemas.py (Backend v2.3).
+// Typen spiegeln die Pydantic-Modelle aus app/schemas.py.
 
 export type DocumentStatus = "uploaded" | "processing" | "extracted" | "failed";
 export type DocType = "invoice" | "contract" | "offer" | "reminder" | "other";
@@ -57,9 +57,9 @@ export interface ComplianceAudit {
   duration_ms: number;
   provider: InferenceMode | string;
   privacy_gateway: Record<string, number> | null;
-  /** Provider-Wechsel waehrend der Analyse (Ausweich-Kaskade, seit v2.4). */
+  /** Provider-Wechsel waehrend der Analyse (Ausweich-Kaskade). */
   failover?: FailoverSwitch[] | null;
-  /** Alle KI-Stufen ausgefallen: das Regelwerk hat die Pruefung abgeschlossen (seit v2.5). */
+  /** Alle KI-Stufen ausgefallen: das Regelwerk hat die Pruefung abgeschlossen. */
   heuristic?: boolean;
   fallback_reason?: string | null;
   headline: string;

@@ -14,9 +14,9 @@ type EdgeTone = "pass" | "warn" | "fail" | "neutral";
  * Im hellen Modus traegt nur die Kontur den Ton; die Lichtkante gilt im Dark Mode.
  */
 const EDGE: Record<EdgeTone, string> = {
-  pass: "border-ok-line dark:border-emerald-500/[0.14] dark:shadow-[inset_0_1px_0_0_rgba(16,185,129,0.09)]",
-  warn: "border-warn-line dark:border-amber-500/[0.14] dark:shadow-[inset_0_1px_0_0_rgba(245,158,11,0.09)]",
-  fail: "border-bad-line dark:border-rose-500/[0.14] dark:shadow-[inset_0_1px_0_0_rgba(244,63,94,0.09)]",
+  pass: "dark:border-emerald-500/[0.14] dark:shadow-[inset_0_1px_0_0_rgba(16,185,129,0.09)]",
+  warn: "dark:border-amber-500/[0.14] dark:shadow-[inset_0_1px_0_0_rgba(245,158,11,0.09)]",
+  fail: "dark:border-rose-500/[0.14] dark:shadow-[inset_0_1px_0_0_rgba(244,63,94,0.09)]",
   neutral: "dark:border-white/[0.08] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]",
 };
 

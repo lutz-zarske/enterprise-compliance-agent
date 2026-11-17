@@ -61,7 +61,7 @@ class AuditEventType:
     ANALYSIS = "analysis"
     SIGN_OFF = "sign_off"
     HUMAN_OVERRIDE = "human_override"
-    #: Seit v2.4: Provider-Wechsel bei Ausfall (maschinell), Modellwechsel,
+    #: Provider-Wechsel bei Ausfall (maschinell), Modellwechsel,
     #: Archivierung und Release-Wechsel (jeweils durch eine Person ausgeloest).
     PROVIDER_FAILOVER = "provider_failover"
     MODEL_CHANGE = "model_change"

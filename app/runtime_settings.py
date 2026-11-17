@@ -4,13 +4,13 @@ Startwerte kommen aus der Umgebung (``Settings``); Aenderungen ueber
 ``POST /api/settings`` werden in der Tabelle ``app_settings`` gespeichert und
 ueberleben einen Neustart.
 
-Ausweich-Kaskade (seit v2.5)
+Ausweich-Kaskade
 ----------------------------
 1. Hauptmodell des aktiven Providers (Hauptschluessel)
 2. Ausweichmodell desselben Anbieters (``ausweich_modelle``, gleicher Schluessel)
 3. Ausweich-Schluessel der Reihe nach (``ausweich_schluessel``, hoechstens sechs, auch
    mehrere Schluessel desselben Anbieters, z. B. ein zweiter Gemini-Key)
-4. Anbieter-Fallbacks aus v2.4 (``fallbacks``: weitere Anbieter mit ihrem Hauptschluessel,
+4. Anbieter-Fallbacks (``fallbacks``: weitere Anbieter mit ihrem Hauptschluessel,
    ``local`` = lokales Ollama)
 5. Deterministisches Regelwerk (``services``), wenn alle KI-Stufen ausfallen
 
@@ -188,7 +188,7 @@ class RuntimeSnapshot:
 
     @property
     def chain(self) -> tuple[InferenceMode, ...]:
-        """Primaerer Provider plus Anbieter-Fallbacks, ohne Dubletten (Kompatibilitaet v2.4)."""
+        """Primaerer Provider plus Anbieter-Fallbacks, ohne Dubletten."""
         return (self.inference_mode, *(mode for mode in self.fallbacks if mode is not self.inference_mode))
 
     def effective_chain(self) -> list[ChainStage]:

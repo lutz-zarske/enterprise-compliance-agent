@@ -1,4 +1,4 @@
-"""v2.4: Archiv, Musterbeleg-Auswahl, Ausweich-Kaskade, Modellwechsel im Ledger, Modell-Katalog."""
+"""Archiv, Musterbeleg-Auswahl, Ausweich-Kaskade, Modellwechsel im Ledger, Modell-Katalog."""
 
 from __future__ import annotations
 

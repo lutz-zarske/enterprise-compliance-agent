@@ -1,4 +1,4 @@
-"""Release-Assistent (seit v2.4): neue Versionen pruefen und kontrolliert einspielen.
+"""Release-Assistent: neue Versionen pruefen und kontrolliert einspielen.
 
 Grundsaetze - kein unkontrolliertes Auto-Pulling:
 

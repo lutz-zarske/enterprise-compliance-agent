@@ -13,16 +13,18 @@
  * Auswahl, laufende Jobs).
  */
 :root {
-  --bg: #f8fafc;
+  /* Hell: kuehles Papiergrau als Grund, weisse Flaechen mit klarer Kontur - Tiefe ueber
+     Kontrast der Flaechen statt ueber Schatten oder Farbe. */
+  --bg: #f3f5f8;
   --surface: #ffffff;
-  --surface-2: #f1f5f9;
+  --surface-2: #f1f4f8;
   --surface-solid: #ffffff;
-  --surface-hover: #e8eef5;
-  --line: #e2e8f0;
-  --line-strong: #cbd5e1;
+  --surface-hover: #eaeef4;
+  --line: #dfe4eb;
+  --line-strong: #c5cdd8;
   --fg: #0f172a;
   --fg-muted: #334155;
-  --fg-subtle: #556070;
+  --fg-subtle: #525d6e;
 
   --accent: #0369a1;
   --accent-fg: #ffffff;
@@ -58,8 +60,8 @@
   --viz-8: #e34948;
   --viz-rest: #9ca3af;
 
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
-  --header-bg: rgba(255, 255, 255, 0.86);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 8px -4px rgba(15, 23, 42, 0.08);
+  --header-bg: rgba(255, 255, 255, 0.92);
   --menu-bg: rgba(255, 255, 255, 0.96);
   --menu-line: #cbd5e1;
   --backdrop: rgba(15, 23, 42, 0.35);
@@ -211,12 +213,9 @@ body {
     font-size: 0.8125rem;
     font-weight: 500;
     line-height: 1.25rem;
-    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+    /* Kein Druck-Versatz beim Klick: Schaltflaechen bleiben ortsfest, Feedback nur ueber Farbe. */
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
     white-space: nowrap;
-  }
-  /* Druckgefuehl (0.97): die Oberflaeche bestaetigt den Klick sofort. */
-  .btn:active:not(:disabled) {
-    transform: scale(0.97);
   }
   .btn:hover:not(:disabled) {
     background: var(--surface-hover);
@@ -488,9 +487,10 @@ body {
   .kopf-kapsel {
     border-radius: 9999px;
     padding: 0.3125rem;
-    background: rgba(255, 255, 255, 0.72);
-    border-color: rgba(15, 23, 42, 0.12);
-    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 8px 24px -12px rgba(15, 23, 42, 0.2);
+    /* Hell: leicht abgesetzte Mulde auf der weissen Kopfzeile, der weisse Indikator hebt die Auswahl. */
+    background: rgba(236, 240, 245, 0.85);
+    border-color: rgba(15, 23, 42, 0.1);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
     /* Nur die Standard-Eigenschaft: Das -webkit-Praefix ergaenzt der Build (Lightning CSS).
        Beide von Hand notiert, behielt er nur das Praefix - in Chromium ohne Wirkung. */
     backdrop-filter: blur(24px) saturate(150%);
@@ -697,7 +697,22 @@ a,
 .eca-splash-logo {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
+}
+
+/* Bildmarke (BrandMark): dunkle Kachel in beiden Themes, im Dunkeln mit feiner Kontur. */
+.brand-tile {
+  fill: #0f172a;
+  stroke: #0f172a;
+}
+.dark .brand-tile {
+  fill: #161924;
+  stroke: rgba(255, 255, 255, 0.16);
+}
+.brand-shield {
+  stroke: #e2e8f0;
+}
+.brand-check {
+  stroke: #34d399;
 }
 .eca-splash-name {
   font-size: 15px;

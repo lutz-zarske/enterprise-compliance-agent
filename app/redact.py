@@ -1,4 +1,4 @@
-"""Generisches Data-Loss-Prevention-Gateway (seit v2.4, ``POST /api/v1/redact``).
+"""Generisches Data-Loss-Prevention-Gateway (``POST /api/v1/redact``).
 
 Andere Anwendungen (externe Fachanwendungen, Analyse-Pipelines) schicken Text
 hierher, *bevor* sie ihn an ein Cloud-LLM geben.  Anders als der Privacy Vault der Dokumentpruefung

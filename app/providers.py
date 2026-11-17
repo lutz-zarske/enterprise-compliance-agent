@@ -45,7 +45,7 @@ class ProviderNotConfiguredError(LLMError):
     """Cloud-Modus gewaehlt, aber kein API-Key hinterlegt."""
 
     code = "provider_not_configured"
-    hint = "API-Key unter Einstellungen › KI-Modelle hinterlegen oder auf 'Lokal' umschalten."
+    hint = "API-Key unter Einstellungen › KI hinterlegen oder auf 'Lokal' umschalten."
 
 
 class ProviderAuthError(LLMError):
@@ -60,7 +60,7 @@ class ProviderUnavailableError(LLMError):
 
     code = "provider_unavailable"
     hint = (
-        "Ausweichmodell oder zweiten API-Key unter Einstellungen › Ausweich-Kaskade hinterlegen; "
+        "Ausweichmodell oder zweiten API-Key unter Einstellungen › KI › Ausweich-Kaskade hinterlegen; "
         "sonst in einigen Minuten erneut prüfen."
     )
     failover = True

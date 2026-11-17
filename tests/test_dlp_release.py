@@ -1,4 +1,4 @@
-"""v2.4: DLP-Gateway (POST /api/v1/redact) und Release-Assistent (Fast-Forward mit Sicherung)."""
+"""DLP-Gateway (POST /api/v1/redact) und Release-Assistent (Fast-Forward mit Sicherung)."""
 
 from __future__ import annotations
 
@@ -141,10 +141,54 @@ def test_release_einspielen(
     backup = settings.data_dir / "backups" / done.json()["database_backup"]
     assert backup.exists() and backup.stat().st_size > 0
 
+    # Ohne Starter (Start/Stop-Skripte, .run/backend.pid) kein Auto-Neustart: klarer Hinweis statt Reload.
+    assert done.json()["restart_required"] is True
+    assert "Start_Compliance_Agent.bat" in done.json()["message"]
+
     entry = client.get("/api/audit/trail", params={"document_id": "system"}).json()["items"][0]
     assert entry["event_type"] == "release_update" and entry["signature_status"] == "valid"
     assert entry["details"]["to_commit"] == commit and entry["details"]["admin_name"] == "IT"
     assert client.get("/api/audit/verify").json()["valid"] is True
+
+
+def test_neustart_nur_ueber_den_windows_starter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import base64
+    import types
+
+    from app import release as release_module
+
+    manager = release_module.ReleaseManager(tmp_path, APP_VERSION)
+    calls: list[list[str]] = []
+    returncode = 0
+
+    def fake_run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, returncode, "", "")
+
+    monkeypatch.setattr(release_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(release_module, "os", types.SimpleNamespace(name="nt", environ={}))
+
+    # Starter fehlt (z. B. uvicorn von Hand gestartet) -> kein Neustart-Versuch.
+    assert manager.schedule_restart_if_managed() is False and calls == []
+
+    (tmp_path / "Start_Compliance_Agent.ps1").write_text("# start")
+    (tmp_path / "Stop_Compliance_Agent.ps1").write_text("# stop")
+    (tmp_path / ".run").mkdir()
+    (tmp_path / ".run" / "backend.pid").write_text("4242")
+    assert manager.schedule_restart_if_managed() is True
+    encoded = re.search(r"-EncodedCommand (\S+)", calls[-1][-1])
+    assert encoded is not None
+    inner = base64.b64decode(encoded.group(1)).decode("utf-16-le")
+    # Erst stoppen, dann ohne neues Browserfenster starten - die Updater-Sperre laedt selbst neu.
+    assert inner.index("Stop_Compliance_Agent.ps1") < inner.index("Start_Compliance_Agent.ps1")
+    assert inner.rstrip().endswith("-NoBrowser")
+
+    returncode = 1
+    assert manager.schedule_restart_if_managed() is False
+
+    # macOS/Linux: nie automatisch.
+    monkeypatch.setattr(release_module, "os", types.SimpleNamespace(name="posix", environ={}))
+    assert manager.schedule_restart_if_managed() is False
 
 
 def test_release_ohne_git(make_full_client: Callable[..., TestClient], tmp_path: Path) -> None:

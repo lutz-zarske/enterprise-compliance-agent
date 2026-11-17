@@ -65,7 +65,8 @@ export function formatModel(model: string): string {
   if (model.startsWith("regelwerk-")) return `${tr("Regelwerk", "Rule Engine", "Motor de reglas")} ${model.slice(10)} (${tr("ohne KI", "no AI", "sin IA")})`;
   if (model === "reference-answer") return tr("Musterantwort", "Reference Answer", "Respuesta de referencia");
   if (model === "reference-fixture") return tr("Referenz-Audit (Musterdaten)", "Reference Audit (Sample Data)", "Auditoría de referencia (Muestras)");
-  if (/^gpt-/i.test(model)) return model.toUpperCase();
+  // Produktschreibweise statt Versalien: "Gemini 3.8 Flash", "Claude Sonnet 5", "GPT-4o", "Qwen 2.5 14B".
+  if (/^gpt-/i.test(model)) return `GPT-${model.slice(4)}`;
   const tokens = model
     .split(/[-:_]/)
     .filter((token) => token && !/^(instruct|latest|chat)$/i.test(token))
@@ -81,15 +82,14 @@ export function formatModel(model: string): string {
       merged.push(token);
     }
   }
-  return merged.join(" ").toUpperCase();
+  return merged.map(displayToken).join(" ");
 }
 
-export const PROVIDER_SHORT: Record<InferenceMode, string> = {
-  local: "LOCAL",
-  gemini: "CLOUD",
-  anthropic: "CLOUD",
-  openai: "CLOUD",
-};
+function displayToken(token: string): string {
+  if (/^\d+(\.\d+)?[bkm]$/i.test(token)) return token.toUpperCase(); // Parametergroesse: 14B
+  if (/^[a-z]+$/i.test(token) && token.length <= 3 && token === token.toUpperCase()) return token; // Kuerzel bleiben
+  return token.charAt(0).toUpperCase() + token.slice(1);
+}
 
 export const PROVIDER_NAMES: Record<InferenceMode, string> = {
   local: "Lokal · Ollama",
@@ -112,27 +112,6 @@ export function providerLabel(provider: string | null | undefined): string {
   return provider in PROVIDER_NAMES ? providerDisplayName(provider as InferenceMode) : provider;
 }
 
-/** Verstaendliche Meldung zu einem Fehlercode - nie ein Klassenname oder "Failed to fetch". */
-export function friendlyError(code: string, message: string, apiBase: string): string {
-  if (code === "network") {
-    const port = /:(\d+)/.exec(apiBase.replace(/^https?:\/\//, ""))?.[1] ?? "8001";
-    return tr(
-      `Backend nicht erreichbar (Port ${port}) – Start_Compliance_Agent.bat ausführen bzw. „uvicorn app.main:app --port ${port}“ starten.`,
-      `Backend unreachable (port ${port}) — run Start_Compliance_Agent.bat or launch "uvicorn app.main:app --port ${port}".`,
-      `Backend inaccesible (puerto ${port}) — ejecute Start_Compliance_Agent.bat o inicie "uvicorn app.main:app --port ${port}".`,
-    );
-  }
-  return message;
-}
-
-export const RISK_LABELS: Record<AIActRiskLevel, string> = {
-  unacceptable: "Verbotene Praktik (Art. 5)",
-  high: "Hochrisiko (Anhang III)",
-  limited: "Begrenztes Risiko (Art. 50)",
-  minimal: "Minimales Risiko",
-  not_applicable: "Kein KI-System",
-};
-
 export function riskLabel(level: AIActRiskLevel): string {
   switch (level) {
     case "unacceptable":
@@ -147,14 +126,6 @@ export function riskLabel(level: AIActRiskLevel): string {
       return tr("Kein KI-System", "No AI System", "Sin sistema de IA");
   }
 }
-
-export const DOC_TYPE_LABELS: Record<string, string> = {
-  invoice: "Rechnung",
-  contract: "Vertrag",
-  offer: "Angebot",
-  reminder: "Mahnung",
-  other: "Sonstiges",
-};
 
 export function docTypeLabel(docType: string | null | undefined): string {
   switch (docType) {
@@ -208,13 +179,6 @@ export const TONE_TEXT: Record<Tone, string> = {
   pii: "text-pii",
   accent: "text-accent",
   neutral: "text-subtle",
-};
-
-export const STATUS_LABELS: Record<CheckStatus, string> = {
-  pass: "Erfüllt",
-  warn: "Hinweis",
-  fail: "Mangel",
-  not_applicable: "n. e.",
 };
 
 export function checkStatusLabel(status: CheckStatus): string {

@@ -1,20 +1,31 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, ApiError, fetchHealth } from "../lib/api";
-import { cx } from "../lib/format";
+import { cx, formatElapsed } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import type { ReleaseApplyResult, ReleaseStatus } from "../types/api";
-import { ArrowUpCircle, CheckCircle, RefreshCw, ShieldAlert, ShieldCheck } from "./icons";
+import { AlertTriangle, ArrowUpCircle, CheckCircle, RefreshCw, ShieldAlert, ShieldCheck } from "./icons";
 import { HashBadge, Modal, Spinner } from "./ui";
+
+/** Fensterweites Ereignis: ein Release wurde eingespielt (Detail: ``ReleaseApplyResult``). */
+export const RELEASE_APPLIED_EVENT = "eca:release-applied";
+/** Ab hier zeigt die Sperre die Anleitung fuer den manuellen Neustart (weiter mit Abfrage). */
+const UPDATE_FALLBACK_MS = 180_000;
+const UPDATE_POLL_MS = 1_000;
 
 /**
  * Release pruefen und per Klick einspielen. Das Backend prueft laufende Analysen,
  * legt automatisch eine Sicherungskopie von ``data/agent.db`` an und protokolliert
  * den Versionswechsel im Ledger; lokale Daten und Einstellungen bleiben erhalten.
  */
-export function ReleasePanel({ initial, onApplied, notify }: {
+export function ReleasePanel({ initial, installedVersion, externalChecking = false, onApplied, notify }: {
   initial?: ReleaseStatus | null;
+  /** Bekannte Version (aus /health) - sofort sichtbar, bevor der Release-Status da ist. */
+  installedVersion?: string;
+  /** Der Aufrufer laedt den Status bereits (z. B. Einstellungen beim Oeffnen). */
+  externalChecking?: boolean;
   onApplied?: (result: ReleaseApplyResult) => void;
   notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 }) {
@@ -36,8 +47,17 @@ export function ReleasePanel({ initial, onApplied, notify }: {
   }, [notify, td, tr]);
 
   useEffect(() => {
-    if (!initial) void check();
-  }, [initial, check]);
+    if (initial) setStatus(initial);
+  }, [initial]);
+
+  // Nur selbst pruefen, wenn niemand sonst den Status liefert - und nur einmal.
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (autoChecked.current || initial || externalChecking) return;
+    autoChecked.current = true;
+    void check();
+  }, [initial, externalChecking, check]);
+  const searching = checking || externalChecking;
 
   async function apply() {
     const latest = status?.latest;
@@ -46,17 +66,16 @@ export function ReleasePanel({ initial, onApplied, notify }: {
     try {
       const result = await api.applyRelease(latest.tag, latest.commit, "System");
       setDone(result);
-      notify("ok", tr(`Release ${result.to_tag} installiert`, `Release ${result.to_tag} installed`, `Versión ${result.to_tag} instalada`), td(result.message));
       onApplied?.(result);
-      if (!result.restart_required) {
-        window.setTimeout(() => {
-          const poll = window.setInterval(() => {
-            fetchHealth().then(() => {
-              window.clearInterval(poll);
-              window.location.reload();
-            }).catch(() => undefined);
-          }, 1500);
-        }, 2500);
+      if (result.restart_required) {
+        notify(
+          "warn",
+          tr(`${result.to_tag} installiert – Neustart nötig`, `${result.to_tag} installed – restart required`, `${result.to_tag} instalada – reinicio necesario`),
+          tr("Dienste von Hand neu starten, danach lädt die Seite selbst neu.", "Restart the services manually; the page reloads by itself afterwards.", "Reinicie los servicios manualmente; la página se recargará sola."),
+        );
+      } else {
+        // Die Sperre (UpdaterLock) uebernimmt: Neustart abwarten, dann neu laden.
+        window.dispatchEvent(new CustomEvent<ReleaseApplyResult>(RELEASE_APPLIED_EVENT, { detail: result }));
       }
     } catch (err) {
       const error = err instanceof ApiError ? err : null;
@@ -78,16 +97,19 @@ export function ReleasePanel({ initial, onApplied, notify }: {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-fg">
-          {tr("Installiert:", "Installed:", "Instalado:")} <span className="tabular-nums">v{status?.current_version ?? "…"}</span>
+          {tr("Installiert:", "Installed:", "Instalado:")} <span className="tabular-nums">v{status?.current_version ?? installedVersion ?? "…"}</span>
           {status?.current_commit && <span className="ml-2 text-xs tabular-nums text-subtle">{status.current_commit.slice(0, 10)}</span>}
         </p>
-        <button className="btn" onClick={() => void check()} disabled={checking || busy}>
-          {checking ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />} {tr("Nach Updates suchen", "Check for updates", "Buscar actualizaciones")}
+        <button className="btn" onClick={() => void check()} disabled={searching || busy}>
+          {searching ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />} {tr("Nach Updates suchen", "Check for updates", "Buscar actualizaciones")}
         </button>
       </div>
 
       {status?.message && <p className="text-xs text-subtle">{td(status.message)}</p>}
-      {status && status.git && !latest && (
+      {searching && !status?.latest && (
+        <p className="text-xs text-subtle" role="status">{tr("Suche nach Updates …", "Checking for updates …", "Buscando actualizaciones …")}</p>
+      )}
+      {!searching && status && status.git && !latest && (
         <p className="flex items-center gap-2 text-xs text-ok">
           <CheckCircle size={14} aria-hidden="true" /> {tr("Aktuellste Version installiert.", "Latest version is installed.", "Última versión instalada.")}
         </p>
@@ -139,12 +161,26 @@ export function ReleasePanel({ initial, onApplied, notify }: {
       )}
 
       {done && (
-        <div className="rounded-lg border border-ok-line bg-ok-soft p-3 text-xs text-ok">
+        <div className={cx("rounded-lg border p-3 text-xs", done.restart_required ? "border-warn-line bg-warn-soft text-warn" : "border-ok-line bg-ok-soft text-ok")}>
           <p className="font-semibold">
-            {tr(`${done.to_tag} installiert`, `${done.to_tag} installed`, `${done.to_tag} instalado`)}
-            {done.database_backup ? ` · ${tr("Sicherung", "Backup", "Copia")} ${done.database_backup}` : ""}
+            {done.restart_required
+              ? tr(`${done.to_tag} installiert – Neustart nötig`, `${done.to_tag} installed – restart required`, `${done.to_tag} instalada – reinicio necesario`)
+              : tr(`${done.to_tag} installiert`, `${done.to_tag} installed`, `${done.to_tag} instalada`)}
           </p>
-          <p className="mt-1 text-fg">{td(done.message)}</p>
+          {done.database_backup && (
+            <p className="mt-1 text-muted [overflow-wrap:anywhere]">
+              {tr("Sicherung", "Backup", "Copia de seguridad")}: data/backups/{done.database_backup}
+            </p>
+          )}
+          <p className="mt-1 leading-relaxed text-fg">
+            {done.restart_required
+              ? tr(
+                  "Der automatische Neustart ist nur über Start_Compliance_Agent.bat unter Windows möglich. Bitte Stop_Compliance_Agent.bat und danach Start_Compliance_Agent.bat ausführen (macOS/Linux: Backend und Frontend neu starten) – der Starter aktualisiert Abhängigkeiten und baut die Oberfläche neu. Sobald beide Dienste wieder laufen, lädt diese Seite von selbst neu.",
+                  "Automatic restart is only available via Start_Compliance_Agent.bat on Windows. Run Stop_Compliance_Agent.bat, then Start_Compliance_Agent.bat (macOS/Linux: restart backend and frontend) – the launcher updates dependencies and rebuilds the interface. This page reloads by itself once both services are back.",
+                  "El reinicio automático solo está disponible con Start_Compliance_Agent.bat en Windows. Ejecute Stop_Compliance_Agent.bat y después Start_Compliance_Agent.bat (macOS/Linux: reinicie backend y frontend); el lanzador actualiza dependencias y recompila la interfaz. Esta página se recargará sola cuando ambos servicios vuelvan.",
+                )
+              : tr("Dienste starten im Hintergrund neu.", "Services are restarting in the background.", "Los servicios se reinician en segundo plano.")}
+          </p>
         </div>
       )}
     </div>
@@ -195,5 +231,231 @@ export function GitSyncButton({ online, notify }: {
         <ReleasePanel initial={status} notify={notify} />
       </Modal>
     </>
+  );
+}
+
+type StepState = "done" | "active" | "pending";
+
+function UpdateStep({ state, title, detail }: { state: StepState; title: string; detail?: React.ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
+        {state === "done" ? (
+          <CheckCircle size={18} className="text-ok" />
+        ) : state === "active" ? (
+          <span className="text-accent"><Spinner size={15} /></span>
+        ) : (
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-line-strong" />
+        )}
+      </span>
+      <div className="min-w-0">
+        <p className={cx("text-sm", state === "pending" ? "text-subtle" : "font-medium text-fg")}>{title}</p>
+        {detail && <div className="mt-0.5 text-xs leading-relaxed text-muted">{detail}</div>}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Nicht schliessbare Vollbild-Sperre waehrend eines automatischen Release-Neustarts.
+ *
+ * Wartet, bis das Backend die Zielversion meldet (oder nach einem beobachteten Ausfall
+ * wieder antwortet) und die Oberflaeche selbst wieder HTTP 200 liefert - erst dann wird
+ * neu geladen.  So laeuft nie ein altes Client-Bundle gegen ein neues Backend.
+ */
+export function UpdaterLock() {
+  const { tr } = useI18n();
+  const titleId = useId();
+  const descId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [result, setResult] = useState<ReleaseApplyResult | null>(null);
+  const [backendReady, setBackendReady] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [stalled, setStalled] = useState(false);
+
+  useEffect(() => {
+    const onApplied = (event: Event) => {
+      const detail = (event as CustomEvent<ReleaseApplyResult>).detail;
+      if (detail && !detail.restart_required) setResult(detail);
+    };
+    window.addEventListener(RELEASE_APPLIED_EVENT, onApplied);
+    return () => window.removeEventListener(RELEASE_APPLIED_EVENT, onApplied);
+  }, []);
+
+  // Sperre: alles ausser der Sperre wird inert (auch spaeter eingehaengte Portale),
+  // Escape und App-Kuerzel kommen nicht durch, Tab bleibt im Dialog.
+  useEffect(() => {
+    if (!result) return;
+    const panel = panelRef.current;
+    const overlay = panel?.closest("[data-updater-lock]") ?? null;
+    const lock = (node: Element) => {
+      if (node !== overlay && !node.hasAttribute("inert")) node.setAttribute("inert", "");
+    };
+    Array.from(document.body.children).forEach(lock);
+    document.getElementById("eca-app-shell")?.setAttribute("inert", "");
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
+        if (node instanceof Element) lock(node);
+      }));
+    });
+    observer.observe(document.body, { childList: true });
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") event.preventDefault();
+      if (event.key === "Tab" && panel) {
+        const focusables = Array.from(panel.querySelectorAll<HTMLElement>("button:not(:disabled)"));
+        if (!focusables.length) {
+          event.preventDefault();
+          panel.focus();
+        } else {
+          const first = focusables[0];
+          const last = focusables[focusables.length - 1];
+          if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          } else if (!panel.contains(document.activeElement)) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      }
+      event.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    panel?.focus();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [result]);
+
+  // Abfrage: zuerst Backend (Zielversion), danach die Oberflaeche selbst (HTTP 200).
+  useEffect(() => {
+    if (!result) return;
+    const target = result.to_tag.replace(/^v/, "");
+    const started = Date.now();
+    let cancelled = false;
+    let sawBackendDown = false;
+    let ready = false;
+    let timer = 0;
+    const tick = async () => {
+      if (cancelled) return;
+      setElapsed(Date.now() - started);
+      if (!ready) {
+        try {
+          const health = await fetchHealth();
+          if (health.version === target || sawBackendDown) {
+            ready = true;
+            setBackendReady(true);
+          }
+        } catch {
+          sawBackendDown = true;
+        }
+      }
+      if (ready) {
+        try {
+          const response = await fetch(window.location.origin, { cache: "no-store" });
+          if (response.ok && !cancelled) {
+            window.location.reload();
+            return;
+          }
+        } catch {
+          /* Oberflaeche wird noch gebaut */
+        }
+      }
+      if (Date.now() - started > UPDATE_FALLBACK_MS) setStalled(true);
+      if (!cancelled) timer = window.setTimeout(() => void tick(), UPDATE_POLL_MS);
+    };
+    timer = window.setTimeout(() => void tick(), UPDATE_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [result]);
+
+  if (!result || typeof document === "undefined") return null;
+  const version = result.to_tag;
+  return createPortal(
+    <div
+      data-updater-lock=""
+      className="anim-fade fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto bg-[var(--backdrop)] p-4 backdrop-blur-md no-print"
+    >
+      <div
+        ref={panelRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
+        tabIndex={-1}
+        className="anim-panel w-full max-w-lg rounded-2xl border border-line bg-surface-solid shadow-2xl outline-none"
+      >
+        <div className="flex items-start gap-3 border-b border-line px-5 py-4">
+          <ArrowUpCircle size={20} className="mt-0.5 shrink-0 text-ok" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 id={titleId} className="text-base font-semibold text-fg">
+              {tr(`Update auf ${version} wird eingespielt`, `Installing update ${version}`, `Instalando la actualización ${version}`)}
+            </h2>
+            <p id={descId} className="mt-0.5 text-xs text-subtle">
+              {tr(
+                "Die Oberfläche ist gesperrt und lädt automatisch neu, sobald die neue Version bereit ist.",
+                "The interface is locked and reloads automatically once the new version is ready.",
+                "La interfaz está bloqueada y se recargará automáticamente cuando la nueva versión esté lista.",
+              )}
+            </p>
+          </div>
+        </div>
+
+        <ol className="space-y-4 px-5 py-4" aria-live="polite">
+          <UpdateStep
+            state="done"
+            title={tr(`Datenbank gesichert, Code auf ${version} aktualisiert`, `Database backed up, code updated to ${version}`, `Base de datos respaldada, código actualizado a ${version}`)}
+            detail={result.database_backup ? <span className="[overflow-wrap:anywhere]">data/backups/{result.database_backup}</span> : undefined}
+          />
+          <UpdateStep
+            state={backendReady ? "done" : "active"}
+            title={tr("Server-Neustart und Production-Build der Oberfläche", "Server restart and production build of the interface", "Reinicio del servidor y compilación de la interfaz")}
+            detail={tr(
+              "Läuft im Hintergrund – beim ersten Build ca. 20–60 s. Bitte diesen Browser-Tab geöffnet lassen.",
+              "Running in the background – the first build takes about 20–60 s. Please keep this browser tab open.",
+              "Se ejecuta en segundo plano; la primera compilación tarda unos 20–60 s. Mantenga esta pestaña abierta.",
+            )}
+          />
+          <UpdateStep
+            state={backendReady ? "active" : "pending"}
+            title={tr("Warten auf die neue Version", "Waiting for the new version", "Esperando la nueva versión")}
+            detail={backendReady
+              ? tr(`Backend meldet ${version} – Oberfläche wird geprüft …`, `Backend reports ${version} – checking the interface …`, `El backend informa ${version}; comprobando la interfaz …`)
+              : tr("Backend (Port 8001) und Oberfläche (Port 3001) müssen beide antworten.", "Backend (port 8001) and interface (port 3001) must both respond.", "El backend (puerto 8001) y la interfaz (puerto 3001) deben responder.")}
+          />
+        </ol>
+
+        {stalled && (
+          <div className="mx-5 mb-4 flex gap-2.5 rounded-lg border border-warn-line bg-warn-soft p-3 text-xs leading-relaxed text-fg" role="status">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
+            <div className="min-w-0 space-y-2">
+              <p>
+                {tr(
+                  "Der Neustart dauert länger als erwartet. Falls die Oberfläche nicht zurückkommt: Stop_Compliance_Agent.bat und danach Start_Compliance_Agent.bat ausführen. Diese Seite prüft weiter und lädt von selbst neu.",
+                  "The restart is taking longer than expected. If the interface does not come back: run Stop_Compliance_Agent.bat, then Start_Compliance_Agent.bat. This page keeps checking and reloads by itself.",
+                  "El reinicio tarda más de lo esperado. Si la interfaz no vuelve: ejecute Stop_Compliance_Agent.bat y después Start_Compliance_Agent.bat. Esta página sigue comprobando y se recargará sola.",
+                )}
+              </p>
+              <button type="button" className="btn" onClick={() => window.location.reload()}>
+                <RefreshCw size={14} aria-hidden="true" /> {tr("Jetzt neu laden", "Reload now", "Recargar ahora")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs text-subtle">
+          <span>{tr("Lokale Daten und Einstellungen bleiben erhalten.", "Local data and settings are preserved.", "Los datos y ajustes locales se conservan.")}</span>
+          <span className="tabular-nums" aria-label={tr("Vergangene Zeit", "Elapsed time", "Tiempo transcurrido")}>{formatElapsed(elapsed)}</span>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

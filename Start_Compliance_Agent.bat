@@ -1,4 +1,5 @@
 @echo off
+title Enterprise Compliance Agent Launcher
 rem Enterprise Compliance Agent mit einem Klick starten (Backend + Frontend im Hintergrund, Browser erst bei Bereitschaft).
 setlocal
 

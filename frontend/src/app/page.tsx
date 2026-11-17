@@ -14,6 +14,7 @@ import { KpiStrip } from "../components/KpiStrip";
 import { markOnboardingDone, onboardingDone, ShortcutsModal, SpotlightTour, WelcomeModal } from "../components/Onboarding";
 import { OverrideModal } from "../components/OverrideModal";
 import { ProtocolView } from "../components/ProtocolView";
+import { UpdaterLock } from "../components/ReleaseAssistant";
 import { Scorecard } from "../components/Scorecard";
 import { SettingsModal } from "../components/SettingsModal";
 import { SealModal } from "../components/SignOffPanel";
@@ -46,6 +47,8 @@ const TILE_TO_TAB: Record<ScoreTile["key"], InspectorTab> = {
 const TAB_KEYS: InspectorTab[] = ["ustg", "aiact", "pii", "facts", "xml"];
 
 const VIEW_STORAGE = "eca-view";
+/** Merkt, fuer welche Backend-Version bereits einmal neu geladen wurde (keine Schleife). */
+const VERSION_RELOAD_STORAGE = "eca-reloaded-for";
 
 function asApiError(err: unknown): ApiError {
   return err instanceof ApiError ? err : new ApiError(String(err), 0, "unknown");
@@ -98,9 +101,9 @@ export default function DashboardPage() {
     (title: string, err: unknown) => {
       const error = asApiError(err);
       if (error.isOffline) setOffline(true);
-      notify("bad", title, `${error.message}${error.hint ? ` – ${error.hint}` : ""}`);
+      notify("bad", title, `${td(error.message)}${error.hint ? ` – ${td(error.hint)}` : ""}`);
     },
-    [notify],
+    [notify, td],
   );
 
   const setView = useCallback((next: View) => {
@@ -146,6 +149,8 @@ export default function DashboardPage() {
   }, []);
 
   const lastLoad = useRef(0);
+  /** Version des Backends, gegen die dieses Client-Bundle geladen wurde. */
+  const bootVersion = useRef<string | null>(null);
   const loadAll = useCallback(async () => {
     lastLoad.current = Date.now();
     try {
@@ -155,6 +160,24 @@ export default function DashboardPage() {
         refreshData(),
         api.settings(),
       ]);
+      // Neues Backend nach Neustart (z. B. von Hand im Terminal): einmal neu laden,
+      // damit nie ein altes Client-Bundle gegen ein neues Backend laeuft.
+      if (bootVersion.current === null) {
+        bootVersion.current = h.version;
+      } else if (h.version !== bootVersion.current) {
+        let alreadyReloaded = false;
+        try {
+          alreadyReloaded = window.sessionStorage.getItem(VERSION_RELOAD_STORAGE) === h.version;
+          window.sessionStorage.setItem(VERSION_RELOAD_STORAGE, h.version);
+        } catch {
+          /* privater Modus */
+        }
+        if (!alreadyReloaded) {
+          window.location.reload();
+          return;
+        }
+        bootVersion.current = h.version;
+      }
       setHealth(h);
       setOffline(false);
       setSettings(runtime);
@@ -170,9 +193,9 @@ export default function DashboardPage() {
           "warn",
           tr("Zugang verweigert", "Access denied", "Acceso denegado"),
           tr(
-            "Das Backend verlangt einen X-API-Key – unter Einstellungen › System & Verbindung hinterlegen.",
-            "Backend requires an X-API-Key – configure under Settings › System & Connection.",
-            "El backend requiere un X-API-Key – configúrelo en Ajustes › Sistema y conexión.",
+            "Das Backend verlangt einen X-API-Key – unter Einstellungen › Verbindung hinterlegen.",
+            "Backend requires an X-API-Key – configure under Settings › Connection.",
+            "El backend requiere un X-API-Key – configúrelo en Ajustes › Conexión.",
           ),
         );
       }
@@ -245,7 +268,7 @@ export default function DashboardPage() {
         notify(
           "bad",
           tr(`Prüfung fehlgeschlagen: ${job.title}`, `Audit failed: ${job.title}`, `Auditoría fallida: ${job.title}`),
-          `${job.error?.message ?? tr("Unbekannter Fehler", "Unknown error", "Error desconocido")}${job.error?.hint ? ` – ${job.error.hint}` : ""}`,
+          `${job.error?.message ? td(job.error.message) : tr("Unbekannter Fehler", "Unknown error", "Error desconocido")}${job.error?.hint ? ` – ${td(job.error.hint)}` : ""}`,
         );
       } else if (job.status === "cancelled") {
         notify(
@@ -385,7 +408,7 @@ export default function DashboardPage() {
   const structuredReady = Boolean(
     detail?.einvoice && !detail.einvoice.error && (detail.einvoice.source === "standalone" || detail.einvoice.is_einvoice),
   );
-  // Seit v2.5 bricht keine Pruefung an fehlender KI ab: das Regelwerk schliesst gekennzeichnet ab.
+  // Keine Pruefung bricht an fehlender KI ab: das Regelwerk schliesst gekennzeichnet ab.
   const canAnalyze = online && (!cloudUnconfigured || structuredReady);
   const isXml = detail?.content_type === "application/xml";
   const overlayOpen = settingsOpen || exportOpen || overrideOpen || sealOpen || welcomeOpen || tourOpen || shortcutsOpen;
@@ -566,12 +589,12 @@ export default function DashboardPage() {
                             {isHeuristic && (
                               <Tooltip
                                 content={tr(
-                                  `Regelbasiertes Referenz-Audit – KI nicht verfügbar. ${detail.compliance?.fallback_reason ?? ""} Felder per Mustererkennung, Einstufung konservativ; im Ledger gekennzeichnet. Mit erreichbarem Modell über „Neu prüfen“ wiederholen.`,
-                                  `Rule-based audit – AI unavailable. ${detail.compliance?.fallback_reason ?? ""} Fields extracted deterministically, conservative classification; logged in ledger. Re-run once a model is reachable.`,
-                                  `Auditoría por reglas – IA no disponible. ${detail.compliance?.fallback_reason ?? ""} Campos extraídos por reglas, clasificación conservadora.`,
+                                  `Regelbasiertes Referenz-Audit – KI nicht verfügbar. ${td(detail.compliance?.fallback_reason)} Felder per Mustererkennung, Einstufung konservativ; im Ledger gekennzeichnet. Mit erreichbarem Modell über „Neu prüfen“ wiederholen.`,
+                                  `Rule-based audit – AI unavailable. ${td(detail.compliance?.fallback_reason)} Fields extracted deterministically, conservative classification; logged in ledger. Re-run once a model is reachable.`,
+                                  `Auditoría por reglas – IA no disponible. ${td(detail.compliance?.fallback_reason)} Campos extraídos por reglas, clasificación conservadora.`,
                                 )}
                               >
-                                <span tabIndex={0} className="chip cursor-help border-warn-line bg-warn-soft text-warn">{tr("Regelwerk-Audit · KI überlastet", "Rules audit · AI overloaded", "Auditoría por reglas · IA saturada")}</span>
+                                <span tabIndex={0} className="chip cursor-help border-warn-line bg-warn-soft text-warn">{tr("Regelwerk-Audit · KI nicht verfügbar", "Rules audit · AI unavailable", "Auditoría por reglas · IA no disponible")}</span>
                               </Tooltip>
                             )}
                           </div>
@@ -737,6 +760,7 @@ export default function DashboardPage() {
       <SpotlightTour open={tourOpen} onClose={() => setTourOpen(false)} />
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <Toaster toasts={toasts} onDismiss={dismiss} onPause={pause} onResume={resume} />
+      <UpdaterLock />
     </>
   );
 }

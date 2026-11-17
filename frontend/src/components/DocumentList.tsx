@@ -80,9 +80,9 @@ function StatusBadge({ doc }: { doc: DocumentSummary }) {
       <span
         className="chip border-warn-line bg-warn-soft text-warn"
         title={tr(
-          "Regelbasiertes Referenz-Audit – alle KI-Stufen waren überlastet. Bei Bedarf neu prüfen.",
-          "Rule-based reference audit – all AI stages were overloaded. Re-run when ready.",
-          "Auditoría por reglas – etapas de IA saturadas. Reanalizar si es necesario.",
+          "Regelbasiertes Referenz-Audit – keine KI-Stufe war verfügbar. Bei Bedarf neu prüfen.",
+          "Rule-based reference audit – no AI stage was available. Re-run when ready.",
+          "Auditoría por reglas – ninguna etapa de IA estaba disponible. Reanalizar si es necesario.",
         )}
       >
         <AlertTriangle size={12} aria-hidden="true" /> {tr("Regelwerk-Audit", "Rules-only audit", "Auditoría por reglas")}

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, ApiError, getAccessKey, getApiBase, setAccessKey } from "../lib/api";
 import type {
+  ReleaseStatus,
   CloudMode,
   ConnectionTestResult,
   HealthResponse,
@@ -23,7 +24,6 @@ import {
   EyeOff,
   Info,
   KeyRound,
-  Layers,
   Lock,
   Palette,
   Play,
@@ -40,7 +40,8 @@ import { Select } from "./Select";
 import { useTheme, type ThemeChoice } from "./ThemeProvider";
 import { AutoTextarea, Modal, Segmented, Spinner, Toggle, Tooltip } from "./ui";
 
-type Section = "models" | "cascade" | "compliance" | "appearance" | "system" | "about";
+type Section = "ai" | "compliance" | "appearance" | "connection" | "about";
+type AiPart = "models" | "cascade";
 type Notify = (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 
 const CLOUD: { value: CloudMode; label: string }[] = [
@@ -345,7 +346,7 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title={tr("KI-Modelle", "AI Models", "Modelos de IA")}
+        title={tr("Modelle", "Models", "Modelos")}
         text={tr(
           "Hauptmodell und Ausweichmodell desselben Anbieters. Jeder Modellwechsel wird mit Modell-ID, Prompt-Hash und Zeitstempel signiert im Ledger verankert – nie still.",
           "Primary model and fallback model for the selected provider. Every model change is Ed25519-signed with model ID, prompt hash and timestamp in the ledger.",
@@ -716,7 +717,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
   return (
     <div className="space-y-5">
       <SectionTitle
-        title="Compliance & DLP"
+        title="Compliance"
         text={tr(
           "Änderungen gelten für die nächste Analyse; bestehende Prüfergebnisse bleiben unverändert im Ledger.",
           "Changes apply to subsequent audits; existing ledger entries remain immutable.",
@@ -751,7 +752,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
 
       <section className="space-y-2 border-t border-line pt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="label-caps">{tr("DLP-Gateway für andere Anwendungen", "DLP Gateway for External Apps", "DLP Gateway para otras aplicaciones")}</p>
+          <p className="label-caps">{tr("Schwärzungs-Gateway (DLP) für andere Anwendungen", "Redaction gateway (DLP) for other applications", "Pasarela de anonimización (DLP) para otras aplicaciones")}</p>
           <span className="text-xs tabular-nums text-subtle">{tr("Regelwerk", "Ruleset", "Reglamento")} {settings.dlp?.ruleset_version ?? "–"}</span>
         </div>
         <p className="text-xs leading-relaxed text-muted">
@@ -797,7 +798,7 @@ function AppearanceSection() {
   return (
     <div className="space-y-5">
       <SectionTitle
-        title={tr("Darstellung & Sprache", "Appearance & Language", "Apariencia e idioma")}
+        title={tr("Darstellung", "Appearance", "Apariencia")}
         text={tr(
           "Farbschema und Arbeitssprache für Navigation, Meldungen, Copilot und Exporte.",
           "Color theme and working language for navigation, status messages, Copilot and exported reports.",
@@ -835,70 +836,115 @@ function AppearanceSection() {
   );
 }
 
-function SystemSection({ open, onAccessChanged, notify }: { open: boolean; onAccessChanged: () => void; notify: Notify }) {
+function ConnectionSection({ open, health, onAccessChanged, notify }: {
+  open: boolean;
+  health: HealthResponse | null;
+  onAccessChanged: () => void;
+  notify: Notify;
+}) {
   const { tr } = useI18n();
   const [accessKey, setAccessKeyState] = useState("");
+  const [showKeyForm, setShowKeyForm] = useState(false);
   useEffect(() => {
     if (open) setAccessKeyState(getAccessKey());
   }, [open]);
+  const keyRequired = Boolean(health?.auth_enabled);
   return (
     <div className="space-y-5">
-      <SectionTitle title={tr("System & Verbindung", "System & Connection", "Sistema y conexión")} />
-      <Field label={tr("Backend-Adresse", "Backend Endpoint", "Dirección del backend")}>
-        <p className="font-mono text-sm text-fg">{getApiBase()}</p>
-        <p className="mt-1.5 flex gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
-          <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
-          {tr(
-            "Lokal http://127.0.0.1:8001 (unter Windows 127.0.0.1 statt localhost: vermeidet den IPv6-Umweg). Im Firmennetz oder Container die Adresse des zentralen Servers beim Build setzen (NEXT_PUBLIC_API_BASE_URL bzw. PUBLIC_API_URL).",
-            "Local http://127.0.0.1:8001 (uses 127.0.0.1 on Windows to avoid IPv6 loopback delay). For network or container deployments configure NEXT_PUBLIC_API_BASE_URL / PUBLIC_API_URL at build time.",
-            "Local http://127.0.0.1:8001 (usa 127.0.0.1 para evitar retardo IPv6). En despliegues de red configure NEXT_PUBLIC_API_BASE_URL.",
-          )}
-        </p>
-      </Field>
-      <Field
-        label={tr("Zugangsschlüssel (X-API-Key)", "Access Key (X-API-Key)", "Clave de acceso (X-API-Key)")}
-        hint={tr("Nur nötig, wenn API_KEY im Backend gesetzt ist. Wird nur in diesem Browser gespeichert.", "Only needed when API_KEY is set on the backend. Stored only in this browser.", "Solo necesario si API_KEY está configurado en el backend.")}
-      >
-        <input
-          className="input font-mono"
-          type="password"
-          value={accessKey}
-          onChange={(event) => setAccessKeyState(event.target.value)}
-          placeholder={tr("Wert von API_KEY eingeben…", "Enter API_KEY value…", "Introducir valor de API_KEY…")}
-          name="access-key"
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </Field>
-      <div className="flex justify-end">
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setAccessKey(accessKey.trim());
-            onAccessChanged();
-            notify("ok", tr("Zugangsschlüssel gespeichert", "Access key saved", "Clave de acceso guardada"), tr("Nur in diesem Browser (localStorage).", "Browser localStorage only.", "Solo en este navegador (localStorage)."));
-          }}
-        >
-          {tr("Übernehmen", "Save", "Aplicar")}
+      <SectionTitle
+        title={tr("Verbindung", "Connection", "Conexión")}
+        text={tr(
+          "Mit welchem Backend diese Oberfläche spricht. Lokal ist hier nichts einzustellen – relevant nur, wenn das Backend zentral auf einem Server mit Zugangsschutz läuft.",
+          "Which backend this interface talks to. Nothing to configure for local use – only relevant when the backend runs centrally on a protected server.",
+          "Con qué backend se comunica esta interfaz. En uso local no hay nada que configurar; solo es relevante si el backend se ejecuta en un servidor protegido.",
+        )}
+      />
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-lg border border-line bg-surface-2 px-4 py-3 text-sm">
+        <dt className="text-subtle">Backend</dt>
+        <dd className="font-mono text-fg [overflow-wrap:anywhere]">{getApiBase()}</dd>
+        <dt className="text-subtle">{tr("Status", "Status", "Estado")}</dt>
+        <dd className={cx("flex items-center gap-1.5", health ? "text-ok" : "text-bad")}>
+          {health ? <CheckCircle size={14} aria-hidden="true" /> : <XCircle size={14} aria-hidden="true" />}
+          <span className="tabular-nums">
+            {health
+              ? tr(`Verbunden · v${health.version}`, `Connected · v${health.version}`, `Conectado · v${health.version}`)
+              : tr("Nicht erreichbar", "Unreachable", "No disponible")}
+          </span>
+        </dd>
+        <dt className="text-subtle">{tr("Zugangsschutz", "Access control", "Control de acceso")}</dt>
+        <dd className="text-fg">
+          {keyRequired
+            ? tr("aktiv – Zugangsschlüssel nötig", "active – access key required", "activo – se requiere clave")
+            : tr("aus – kein Schlüssel nötig", "off – no key required", "desactivado – no se requiere clave")}
+        </dd>
+      </dl>
+
+      {keyRequired || showKeyForm || accessKey ? (
+        <>
+          <Field
+            label={tr("Zugangsschlüssel (X-API-Key)", "Access Key (X-API-Key)", "Clave de acceso (X-API-Key)")}
+            hint={tr("Wert der Variable API_KEY auf dem Server. Wird nur in diesem Browser gespeichert.", "Value of the API_KEY variable on the server. Stored only in this browser.", "Valor de la variable API_KEY del servidor. Solo se guarda en este navegador.")}
+          >
+            <input
+              className="input font-mono"
+              type="password"
+              value={accessKey}
+              onChange={(event) => setAccessKeyState(event.target.value)}
+              placeholder={tr("Wert von API_KEY eingeben…", "Enter API_KEY value…", "Introducir valor de API_KEY…")}
+              name="access-key"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <div className="flex justify-end">
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setAccessKey(accessKey.trim());
+                onAccessChanged();
+                notify("ok", tr("Zugangsschlüssel gespeichert", "Access key saved", "Clave de acceso guardada"), tr("Nur in diesem Browser (localStorage).", "Browser localStorage only.", "Solo en este navegador (localStorage)."));
+              }}
+            >
+              {tr("Übernehmen", "Save", "Aplicar")}
+            </button>
+          </div>
+        </>
+      ) : (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowKeyForm(true)}>
+          <KeyRound size={13} aria-hidden="true" /> {tr("Zugangsschlüssel trotzdem hinterlegen", "Enter an access key anyway", "Introducir una clave de todos modos")}
         </button>
-      </div>
+      )}
+
+      <p className="flex gap-2 text-xs leading-relaxed text-subtle">
+        <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
+        {tr(
+          "Für einen zentralen Server die Backend-Adresse beim Build setzen (NEXT_PUBLIC_API_BASE_URL bzw. PUBLIC_API_URL im Container). Unter Windows 127.0.0.1 statt localhost – das vermeidet den IPv6-Umweg.",
+          "For a central server, set the backend address at build time (NEXT_PUBLIC_API_BASE_URL, or PUBLIC_API_URL in the container). On Windows use 127.0.0.1 instead of localhost to avoid the IPv6 detour.",
+          "Para un servidor central, defina la dirección del backend al compilar (NEXT_PUBLIC_API_BASE_URL o PUBLIC_API_URL en el contenedor). En Windows use 127.0.0.1 en lugar de localhost.",
+        )}
+      </p>
     </div>
   );
 }
 
-function AboutSection({ open, version, notify }: { open: boolean; version: string; notify: Notify }) {
+function AboutSection({ version, release, checking, notify }: {
+  version: string;
+  release: ReleaseStatus | null;
+  checking: boolean;
+  notify: Notify;
+}) {
   const { tr } = useI18n();
   return (
     <div className="space-y-5">
       <SectionTitle
-        title={tr("Updates & Über", "Updates & About", "Actualizaciones y acerca de")}
+        title={tr("Über", "About", "Acerca de")}
         text={tr(
           `Enterprise Compliance Agent${version ? ` v${version}` : ""}. Neue Releases per Klick installieren – mit automatischer Datenbanksicherung und Erhalt aller lokalen Daten.`,
           `Enterprise Compliance Agent${version ? ` v${version}` : ""}. Install new releases in one click – with automatic database backups and preserved local data.`,
           `Enterprise Compliance Agent${version ? ` v${version}` : ""}. Instala nuevas versiones en un clic con copia de seguridad automática.`,
         )}
       />
-      {open && <ReleasePanel notify={notify} />}
+      <ReleasePanel initial={release} installedVersion={version} externalChecking={checking} notify={notify} />
       <div className="border-t border-line pt-4">
         <p className="label-caps">{tr("Regulatorischer Stand", "Regulatory Baseline", "Marco normativo")}</p>
         <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
@@ -916,17 +962,43 @@ function AboutSection({ open, version, notify }: { open: boolean; version: strin
 }
 
 /** Einstellungen: Kategorien links, ruhige Formulare rechts; feste Hoehe, Inhalte scrollen im Panel. */
-export function SettingsModal({ open, settings, version, onClose, onSaved, onAccessChanged, notify }: Props) {
+export function SettingsModal({ open, settings, health, version, onClose, onSaved, onAccessChanged, notify }: Props) {
   const { tr } = useI18n();
-  const [section, setSection] = useState<Section>("models");
-  const needsSettings = section === "models" || section === "cascade" || section === "compliance";
+  const [section, setSection] = useState<Section>("ai");
+  const [aiPart, setAiPart] = useState<AiPart>("models");
+  const [release, setRelease] = useState<ReleaseStatus | null>(null);
+  const [releaseChecking, setReleaseChecking] = useState(false);
+  const needsSettings = section === "ai" || section === "compliance";
+
+  // Release-Status beim Oeffnen vorab laden: zuerst lokal (sofort), dann mit Abgleich des Servers.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setReleaseChecking(true);
+    api.release(false)
+      .then((quick) => {
+        if (alive) setRelease(quick);
+      })
+      .catch(() => undefined)
+      .then(() => api.release(true))
+      .then((full) => {
+        if (alive && full) setRelease(full);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setReleaseChecking(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
   const sections: { key: Section; label: string; icon: React.ReactNode }[] = [
-    { key: "models", label: tr("KI-Modelle", "AI Models", "Modelos de IA"), icon: <Sliders size={15} aria-hidden="true" /> },
-    { key: "cascade", label: tr("Ausweich-Kaskade", "Fallback Cascade", "Cascada de respaldo"), icon: <Layers size={15} aria-hidden="true" /> },
-    { key: "compliance", label: "Compliance & DLP", icon: <Scale size={15} aria-hidden="true" /> },
-    { key: "appearance", label: tr("Darstellung & Sprache", "Appearance & Language", "Apariencia e idioma"), icon: <Palette size={15} aria-hidden="true" /> },
-    { key: "system", label: tr("System & Verbindung", "System & Connection", "Sistema y conexión"), icon: <Server size={15} aria-hidden="true" /> },
-    { key: "about", label: tr("Updates & Über", "Updates & About", "Actualizaciones"), icon: <ArrowUpCircle size={15} aria-hidden="true" /> },
+    { key: "ai", label: tr("KI", "AI", "IA"), icon: <Sliders size={15} aria-hidden="true" /> },
+    { key: "compliance", label: "Compliance", icon: <Scale size={15} aria-hidden="true" /> },
+    { key: "appearance", label: tr("Darstellung", "Appearance", "Apariencia"), icon: <Palette size={15} aria-hidden="true" /> },
+    { key: "connection", label: tr("Verbindung", "Connection", "Conexión"), icon: <Server size={15} aria-hidden="true" /> },
+    { key: "about", label: tr("Über", "About", "Acerca de"), icon: <ArrowUpCircle size={15} aria-hidden="true" /> },
   ];
   return (
     <Modal open={open} onClose={onClose} title={tr("Einstellungen", "Settings", "Ajustes")} width="max-w-5xl" padded={false}>
@@ -954,14 +1026,30 @@ export function SettingsModal({ open, settings, version, onClose, onSaved, onAcc
               {tr("Backend nicht erreichbar – Einstellungen können nicht geladen werden.", "Backend unreachable – settings cannot be loaded.", "Backend no disponible – no se pueden cargar los ajustes.")}
             </p>
           )}
-          {section === "models" && settings && (
-            <ModelsSection settings={settings} active={open} onSaved={onSaved} onAccessChanged={onAccessChanged} notify={notify} />
+          {section === "ai" && settings && (
+            <>
+              <div className="mb-5">
+                <Segmented<AiPart>
+                  ariaLabel={tr("KI-Bereich", "AI area", "Área de IA")}
+                  value={aiPart}
+                  onChange={setAiPart}
+                  options={[
+                    { value: "models", label: tr("Modelle", "Models", "Modelos") },
+                    { value: "cascade", label: tr("Ausweich-Kaskade", "Fallback cascade", "Cascada de respaldo") },
+                  ]}
+                />
+              </div>
+              {aiPart === "models" ? (
+                <ModelsSection settings={settings} active={open} onSaved={onSaved} onAccessChanged={onAccessChanged} notify={notify} />
+              ) : (
+                <CascadeSection settings={settings} onSaved={onSaved} onAccessChanged={onAccessChanged} notify={notify} />
+              )}
+            </>
           )}
-          {section === "cascade" && settings && <CascadeSection settings={settings} onSaved={onSaved} onAccessChanged={onAccessChanged} notify={notify} />}
           {section === "compliance" && settings && <ComplianceSection settings={settings} onSaved={onSaved} notify={notify} />}
           {section === "appearance" && <AppearanceSection />}
-          {section === "system" && <SystemSection open={open} onAccessChanged={onAccessChanged} notify={notify} />}
-          {section === "about" && <AboutSection open={open} version={version} notify={notify} />}
+          {section === "connection" && <ConnectionSection open={open} health={health} onAccessChanged={onAccessChanged} notify={notify} />}
+          {section === "about" && <AboutSection version={version} release={release} checking={releaseChecking} notify={notify} />}
         </div>
       </div>
     </Modal>

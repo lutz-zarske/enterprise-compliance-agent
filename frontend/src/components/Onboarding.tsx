@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../lib/i18n";
+import { BrandMark } from "./BrandMark";
 import { Kbd, Modal, useModalFocusLock, useModifierLabel } from "./ui";
 
 export const ONBOARDING_KEY = "eca-onboarding-done";
@@ -38,7 +38,7 @@ export function WelcomeModal({ open, onStartTour, onSkip }: { open: boolean; onS
       width="max-w-lg"
     >
       <div className="flex items-start gap-4">
-        <Image src="/compliance-logo-transparent.png" alt="" width={48} height={48} unoptimized className="h-12 w-12 shrink-0 object-contain" />
+        <BrandMark size={48} className="shrink-0" />
         <div>
           <p className="text-sm font-medium text-fg">
             {tr(

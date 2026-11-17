@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import React, { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { HealthResponse, JobSnapshot, LedgerVerification, RuntimeSettings } from "../types/api";
@@ -8,6 +7,7 @@ import { getApiBase } from "../lib/api";
 import { cx, formatModel, providerDisplayName } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useAnchoredStyle, useDismiss, usePopoverExclusive } from "../lib/popover";
+import { BrandMark } from "./BrandMark";
 import { HelpCircle, Moon, Settings, Sun, WifiOff } from "./icons";
 import { JobMonitor, type FinishedJob } from "./JobMonitor";
 import { Notifications } from "./Notifications";
@@ -19,13 +19,6 @@ import { PillTabs, Tooltip } from "./ui";
 
 /** Drei fokussierte Ansichten statt einer ueberfrachteten Einzelseite. */
 export type View = "workspace" | "copilot" | "protocol";
-
-/** Ein Wort je Bereich - in der Kapsel wie in der kompakten Leiste. */
-export const VIEW_LABELS: Record<View, string> = {
-  workspace: "Prüfung",
-  copilot: "Copilot",
-  protocol: "Protokoll",
-};
 
 type Notify = (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 
@@ -72,10 +65,7 @@ function LogoVersion({ version, ruleset }: { version: string | null; ruleset: st
         aria-label={tr("Enterprise Compliance Agent – Version anzeigen", "Enterprise Compliance Agent – show version", "Enterprise Compliance Agent – ver versión")}
         className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-0.5 transition-colors duration-150 hover:bg-surface-hover"
       >
-        {/* Einheitliche dunkle Emblem-Kachel fuer scharfen Kontrast in Light und Dark Mode. */}
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-900/15 bg-[#0b0e15] p-1 dark:border-white/10">
-          <Image src="/compliance-logo-transparent.png" alt="" width={24} height={24} priority unoptimized className="h-full w-full object-contain" />
-        </span>
+        <BrandMark size={30} className="shrink-0" />
         <span className="truncate text-[15px] font-semibold tracking-tight text-fg">Enterprise Compliance Agent</span>
       </button>
       {open &&
@@ -178,9 +168,9 @@ function ModelStatus({ health, settings }: { health: HealthResponse | null; sett
                     "No disponible – el motor de reglas completa las auditorías (marcado).",
                   )
                 : tr(
-                    "Kein API-Key hinterlegt – Einstellungen › KI-Modelle.",
-                    "No API key configured – Settings › AI Models.",
-                    "Sin clave API configurada – Ajustes › Modelos de IA.",
+                    "Kein API-Key hinterlegt – Einstellungen › KI.",
+                    "No API key configured – Settings › AI.",
+                    "Sin clave API configurada – Ajustes › IA.",
                   )}
             </span>
           )}

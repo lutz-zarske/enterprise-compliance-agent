@@ -3,6 +3,26 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.6.1 – 17.11.2026
+
+**Updater und Start**
+
+- In-App-Update mit nicht schließbarer Vollbild-Sperre (`role="alertdialog"`, Hintergrund `inert`, kein Escape, Fokus gefangen) und drei Phasen: Sicherung und Code-Stand, Neustart mit Production-Build, Warten auf die neue Version. Neu geladen wird erst, wenn das Backend die Zielversion meldet und die Oberfläche selbst wieder HTTP 200 liefert; dauert es ungewöhnlich lange, erscheint eine ruhige Anleitung für den manuellen Neustart.
+- Ohne Windows-Starter (`restart_required`) kein irreführender Auto-Reload, sondern ein klarer Hinweis auf den manuellen Neustart. Meldet das Backend nach einem Verbindungsverlust eine andere Version, lädt die Oberfläche einmalig neu – nie läuft ein altes Client-Bundle gegen ein neues Backend.
+- Windows-Starter ohne Flackern (`$ProgressPreference = "SilentlyContinue"` gegen den blauen Fortschrittsbalken von `Invoke-WebRequest`), mit Fenstertitel, ruhigem Statuslayout und zwei Sekunden Lesepause vor dem Schließen.
+
+**Oberfläche**
+
+- Neue Vektor-Bildmarke (Schild mit Prüfhaken) statt der Rastergrafik; SVG-Favicon und Apple-Touch-Icon.
+- Light Mode überarbeitet: kühles Papiergrau als Grund, klarere Konturen, neutrale KPI-Kacheln, sichtbare Navigationskapsel.
+- Schaltflächen ohne Klick-Versatz; Modellnamen in Produktschreibweise („Gemini 3.8 Flash“ statt Versalien).
+- Einstellungen mit fünf Ein-Wort-Kategorien: KI (Modelle | Ausweich-Kaskade), Compliance, Darstellung, Verbindung (Status, Zugangsschutz, Schlüssel nur bei Bedarf), Über (Release-Status sofort beim Öffnen).
+- Protokoll-Zusammenfassungen, Anbieter-Fehler und Hinweise in der Anzeige übersetzt (EN/ES); gespeichert bleiben sie unverändert, die Hash-Kette bleibt gültig.
+
+**Qualität**
+
+- Ungenutzte Komponenten, Konstanten und Logo-Dateien entfernt, Versionsvermerke aus Kommentaren bereinigt, Tests nach Themen benannt; Test für das Neustart-Verhalten des Release-Assistenten.
+
 ## v2.6.0 – 17.11.2026
 
 **Mehrsprachigkeit (DE / EN / ES)**
