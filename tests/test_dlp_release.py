@@ -68,7 +68,7 @@ def test_redact_endpunkt(client: TestClient) -> None:
 
 
 def test_sperrbegriffe_aus_den_settings(make_client) -> None:
-    """DLP_TERMS aus der .env landet ueber die Settings im Gateway, nicht nur ueber os.environ."""
+    """DLP_TERMS aus der .env landet über die Settings im Gateway, nicht nur über os.environ."""
     client = make_client(dlp_terms="Projekt Nordlicht, Quartalsziel")
     body = client.post("/api/v1/redact", json={"text": "Projekt Nordlicht erreicht das Quartalsziel."}).json()
     assert "Nordlicht" not in body["redacted_text"] and "Quartalsziel" not in body["redacted_text"]
@@ -183,7 +183,7 @@ def test_neustart_nur_ueber_den_windows_starter(tmp_path: Path, monkeypatch: pyt
     encoded = re.search(r"-EncodedCommand (\S+)", calls[-1][-1])
     assert encoded is not None
     inner = base64.b64decode(encoded.group(1)).decode("utf-16-le")
-    # Erst stoppen, dann ohne neues Browserfenster starten - die Updater-Sperre laedt selbst neu.
+    # Erst stoppen, dann ohne neues Browserfenster starten - die Updater-Sperre lädt selbst neu.
     assert inner.index("Stop_Compliance_Agent.ps1") < inner.index("Start_Compliance_Agent.ps1")
     assert inner.rstrip().endswith("-NoBrowser")
     # Unsichtbar starten: SW_HIDE, sonst öffnet Windows 11 ein Terminal-Fenster.
@@ -210,7 +210,7 @@ def test_i18n_reports_procedural_doc_and_copilot(make_full_client: Callable[...,
     doc = next(item for item in seed["items"] if "Steuerfalle" in item["filename"])
     doc_id = doc["id"]
 
-    # Default (de) unveraendert
+    # Default (de) unverändert
     r_de = client.get(f"/documents/{doc_id}/report", params={"format": "html"})
     assert r_de.status_code == 200 and '<html lang="de">' in r_de.text and "Compliance-Prüfzertifikat" in r_de.text
 
@@ -260,7 +260,7 @@ def test_i18n_reports_procedural_doc_and_copilot(make_full_client: Callable[...,
                 for match in re.finditer(r"\[Z\.\s*(\d+)\]", answer):
                     assert 1 <= int(match.group(1)) <= len(lines), f"{item['filename']}: {match.group(0)}"
 
-    # Nicht-Latin-1-Dateiname (z. B. Polnisch/Tschechisch) stuerzt bei JSON/Markdown-Report nicht ab
+    # Nicht-Latin-1-Dateiname (z. B. Polnisch/Tschechisch) stürzt bei JSON/Markdown-Report nicht ab
     upload = client.post(
         "/documents/upload",
         files={"file": ("Rechnung_Łódź_2026.pdf", build_hybrid_pdf(HYBRID_INVOICE), "application/pdf")},

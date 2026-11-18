@@ -1,18 +1,18 @@
-"""Lokale KI erkennen, starten und stoppen - ohne Terminal, aus der Oberflaeche heraus.
+"""Lokale KI erkennen, starten und stoppen - ohne Terminal, aus der Oberfläche heraus.
 
-Statt "bitte 'ollama serve' im Terminal ausfuehren" bietet die Oberflaeche an:
-"Ollama ist installiert, laeuft aber nicht - jetzt starten?".  Dafuer erkennt
+Statt "bitte 'ollama serve' im Terminal ausführen" bietet die Oberfläche an:
+"Ollama ist installiert, läuft aber nicht - jetzt starten?".  Dafür erkennt
 dieses Modul, welche lokale KI installiert ist (Ollama, LM Studio) und ob ihr
 Port antwortet, und startet bzw. stoppt Ollama im Hintergrund.
 
-Sicherheit: Gestartet und beendet wird ausschliesslich ein Programm aus der
-festen Liste unten, mit festem Aufruf.  Es gibt keinen Parameter, ueber den ein
+Sicherheit: Gestartet und beendet wird ausschließlich ein Programm aus der
+festen Liste unten, mit festem Aufruf.  Es gibt keinen Parameter, über den ein
 Aufrufer einen eigenen Pfad, eigene Argumente oder einen Prozessnamen setzen
-koennte.  Die Routen sind zusaetzlich auf Anfragen direkt am Server (localhost)
-beschraenkt (``LOCAL_AI_CONTROL_LOCAL_ONLY``).
+könnte.  Die Routen sind zusätzlich auf Anfragen direkt am Server (localhost)
+beschränkt (``LOCAL_AI_CONTROL_LOCAL_ONLY``).
 
 Im Docker-Container gibt es kein lokales Ollama-Programm: Dort meldet die
-Erkennung sauber "nicht verfuegbar" und verweist auf den Ollama-Dienst der
+Erkennung sauber "nicht verfügbar" und verweist auf den Ollama-Dienst der
 Compose-Datei.
 """
 
@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-#: Speicher-Einstellungen fuer ein hier gestartetes Ollama: 32k Kontext eines 14B-Modells
+#: Speicher-Einstellungen für ein hier gestartetes Ollama: 32k Kontext eines 14B-Modells
 #: passen nur mit Flash Attention und 8-Bit-KV-Cache in 16 GB VRAM.  Gesetzte Werte bleiben.
 OLLAMA_ENVIRONMENT = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0"}
 START_WAIT_SECONDS = 25.0
@@ -93,7 +93,7 @@ def _is_local_url(url: str) -> bool:
 
 
 def detect(ollama_base_url: str) -> dict[str, object]:
-    """Welche lokale KI laeuft, welche liegt installiert bereit - und darf sie hier gesteuert werden?"""
+    """Welche lokale KI läuft, welche liegt installiert bereit - und darf sie hier gesteuert werden?"""
     found: list[dict[str, object]] = []
     for service in SERVICES:
         program = _program(service)

@@ -1,4 +1,4 @@
-"""End-to-End-Tests der fuenf Endpunkte gegen den gemockten Ollama-Dienst."""
+"""End-to-End-Tests der fünf Endpunkte gegen den gemockten Ollama-Dienst."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def test_health_meldet_datenbank_und_modell(client: TestClient) -> None:
 def test_health_bleibt_erreichbar_wenn_ollama_ausfaellt(
     client: TestClient, fake_ollama: FakeOllama
 ) -> None:
-    """Monitoring muss "Abhaengigkeit gestoert" von "Anwendung tot" unterscheiden."""
+    """Monitoring muss "Abhängigkeit gestört" von "Anwendung tot" unterscheiden."""
     fake_ollama.offline = True
     body = client.get("/health").json()
 
@@ -184,7 +184,7 @@ def test_pii_wird_nur_maskiert_persistiert(client: TestClient, invoice_pdf: byte
     assert gdpr["risk_level"] == "high"
     assert gdpr["contains_special_categories"] is True
 
-    # Regel- und Modellbefund zum selben Konto wurden zusammengefuehrt.
+    # Regel- und Modellbefund zum selben Konto wurden zusammengeführt.
     bank = [f for f in gdpr["findings"] if f["category"] == "bank_account"]
     assert len(bank) == 1
     assert bank[0]["source"] == "both"
@@ -247,7 +247,7 @@ def test_extraktion_ohne_regelwerk_fallback_meldet_ollama_ausfall_als_503(
     assert error["code"] == "ollama_unavailable"
     assert "ollama serve" in error["hint"]
 
-    # Der Fehler ist am Dokument dokumentiert - verstaendlich, ohne Klassennamen.
+    # Der Fehler ist am Dokument dokumentiert - verständlich, ohne Klassennamen.
     detail = client.get(f"/documents/{document_id}").json()
     assert detail["status"] == "failed"
     assert "nicht erreichbar" in detail["error"]
@@ -257,7 +257,7 @@ def test_extraktion_ohne_regelwerk_fallback_meldet_ollama_ausfall_als_503(
 def test_extraktion_ohne_modell_schliesst_mit_regelwerk_ab(
     client: TestClient, invoice_pdf: bytes, fake_ollama: FakeOllama
 ) -> None:
-    """Zero-Failure: Faellt jede KI-Stufe aus, liefert das Regelwerk ein valides, gekennzeichnetes Ergebnis."""
+    """Zero-Failure: Fällt jede KI-Stufe aus, liefert das Regelwerk ein valides, gekennzeichnetes Ergebnis."""
     document_id = uploaded_document_id(client, invoice_pdf)
     fake_ollama.offline = True
 
@@ -407,8 +407,8 @@ def test_api_key_schuetzt_dokumentendpunkte(
 def test_openapi_dokumentiert_alle_fuenf_endpunkte(client: TestClient) -> None:
     schema = client.get("/openapi.json").json()
 
-    # Weitere Endpunkte kommen hinzu; die fuenf Kernendpunkte
-    # muessen unveraendert dokumentiert bleiben.
+    # Weitere Endpunkte kommen hinzu; die fünf Kernendpunkte
+    # müssen unverändert dokumentiert bleiben.
     assert set(schema["paths"]) >= {
         "/health",
         "/documents/upload",
@@ -422,7 +422,7 @@ def test_openapi_dokumentiert_alle_fuenf_endpunkte(client: TestClient) -> None:
 
 
 def build_second_pdf() -> bytes:
-    """Zweites, inhaltlich abweichendes PDF (andere Pruefsumme)."""
+    """Zweites, inhaltlich abweichendes PDF (andere Prüfsumme)."""
     from tests.conftest import build_pdf
 
     return build_pdf([["Mietvertrag Nr. MV-2024-77", "Monatsmiete: 1.450,00 EUR"]])

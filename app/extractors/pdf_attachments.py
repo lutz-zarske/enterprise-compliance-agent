@@ -1,11 +1,11 @@
 """Eingebettete Dateien aus PDF/A-3-Containern (ZUGFeRD, Factur-X, XRechnung).
 
 Hybride Rechnungen tragen ihren XML-Datensatz als Dateianhang im PDF
-(``/EmbeddedFiles``-Namensbaum, ``/AF``-Verweis).  Gelesen wird ueber
-pypdfium2 (Apache-2.0/BSD, ohnehin Abhaengigkeit von pdfplumber).
+(``/EmbeddedFiles``-Namensbaum, ``/AF``-Verweis).  Gelesen wird über
+pypdfium2 (Apache-2.0/BSD, ohnehin Abhängigkeit von pdfplumber).
 
 Der Reader ist defensiv: Ein defekter Anhang darf den Upload des PDFs nicht
-verhindern - das Dokument faellt dann auf die reine Textanalyse zurueck.
+verhindern - das Dokument fällt dann auf die reine Textanalyse zurück.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 #: xrechnung.xml: ZUGFeRD-Profil XRECHNUNG; ZUGFeRD-invoice.xml: ZUGFeRD 1.0.
 EINVOICE_ATTACHMENT_NAMES = ("factur-x.xml", "zugferd-invoice.xml", "xrechnung.xml")
 
-#: Obergrenzen gegen Ressourcenmissbrauch durch praeparierte PDFs.
+#: Obergrenzen gegen Ressourcenmissbrauch durch präparierte PDFs.
 MAX_ATTACHMENTS = 50
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
@@ -39,7 +39,7 @@ class EmbeddedFile:
 
 
 def list_embedded_files(pdf_bytes: bytes) -> list[EmbeddedFile]:
-    """Liest alle Dateianhaenge; zu grosse oder defekte Anhaenge werden uebersprungen."""
+    """Liest alle Dateianhänge; zu große oder defekte Anhänge werden übersprungen."""
     try:
         import pypdfium2 as pdfium
     except ImportError:  # pragma: no cover - pypdfium2 kommt mit pdfplumber
@@ -49,7 +49,7 @@ def list_embedded_files(pdf_bytes: bytes) -> list[EmbeddedFile]:
     files: list[EmbeddedFile] = []
     try:
         document = pdfium.PdfDocument(pdf_bytes)
-    except Exception:  # noqa: BLE001 - verschluesselte/defekte PDFs behandelt pdf_reader
+    except Exception:  # noqa: BLE001 - verschlüsselte/defekte PDFs behandelt pdf_reader
         return []
     try:
         count = min(document.count_attachments(), MAX_ATTACHMENTS)

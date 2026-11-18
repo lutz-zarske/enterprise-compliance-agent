@@ -34,7 +34,7 @@ export function setActiveLocale(next: Locale): void {
   }
 }
 
-/** Typsichere Dreifach-Auswahl (DE / EN / ES) fuer Inline-Texte und Attribute. */
+/** Typsichere Dreifach-Auswahl (DE / EN / ES) für Inline-Texte und Attribute. */
 export function tr(de: string, en: string, es: string, locale: Locale = getActiveLocale()): string {
   if (locale === "en") return en;
   if (locale === "es") return es;
@@ -42,7 +42,7 @@ export function tr(de: string, en: string, es: string, locale: Locale = getActiv
 }
 
 // ---------------------------------------------------------------------------
-// Uebersetzung dynamischer Backend-Texte (Scorecard, Checks, Ledger, E-Invoice)
+// Übersetzung dynamischer Backend-Texte (Scorecard, Checks, Ledger, E-Invoice)
 // ---------------------------------------------------------------------------
 
 const EXACT_EN: Record<string, string> = {
@@ -54,6 +54,9 @@ const EXACT_EN: Record<string, string> = {
   "Freigabe unter Vorbehalt — Abweichung zwischen XML und PDF klären (XML maßgeblich)":
     "Conditional approval — clarify discrepancy between XML and PDF (XML prevails)",
   "Freigabe unter Vorbehalt — Nachbesserung empfohlen": "Conditional approval — remediation recommended",
+  "Freigabe unter Vorbehalt — XRechnung-Standard nicht eingehalten": "Conditional approval — XRechnung standard not met",
+  "Pflichtangaben nach § 14 UStG erfüllt, aber nicht konform zum angegebenen XRechnung-Standard; Eingangsplattformen öffentlicher Auftraggeber prüfen gegen diese Regeln. Daher Freigabe unter Vorbehalt, ohne Punktabzug.":
+    "Mandatory details under Sec. 14 UStG are met, but the invoice does not conform to the XRechnung standard it declares; public-sector receiving platforms validate against these rules. Hence conditional approval, without score deduction.",
   "Vollständig verkehrsfähig & konform": "Fully compliant & valid",
   "Nachbesserung erforderlich": "Remediation required",
   "Revisionssperre / schwerer Rechtsverstoß": "Audit lock / severe compliance violation",
@@ -323,6 +326,9 @@ const EXACT_ES: Record<string, string> = {
   "Freigabe unter Vorbehalt — Abweichung zwischen XML und PDF klären (XML maßgeblich)":
     "Aprobación condicional — aclarar discrepancia entre XML y PDF (prevalece el XML)",
   "Freigabe unter Vorbehalt — Nachbesserung empfohlen": "Aprobación condicional — se recomienda subsanación",
+  "Freigabe unter Vorbehalt — XRechnung-Standard nicht eingehalten": "Aprobación condicional — no cumple el estándar XRechnung",
+  "Pflichtangaben nach § 14 UStG erfüllt, aber nicht konform zum angegebenen XRechnung-Standard; Eingangsplattformen öffentlicher Auftraggeber prüfen gegen diese Regeln. Daher Freigabe unter Vorbehalt, ohne Punktabzug.":
+    "Se cumplen los datos obligatorios del § 14 UStG, pero la factura no se ajusta al estándar XRechnung que declara; las plataformas de recepción públicas validan contra estas reglas. Por ello, aprobación condicional, sin penalización.",
   "Vollständig verkehrsfähig & konform": "Totalmente conforme y válido",
   "Nachbesserung erforderlich": "Subsanación necesaria",
   "Revisionssperre / schwerer Rechtsverstoß": "Bloqueo de auditoría / infracción grave",
@@ -585,8 +591,8 @@ const EXACT_ES: Record<string, string> = {
 
 /**
  * Protokoll-Zusammenfassungen und Anbieter-Meldungen.  Gespeichert bleiben sie deutsch
- * (Teil der Hash-Kette); uebersetzt wird nur die Anzeige.  Muster gelten auch mitten
- * in aneinandergereihten Saetzen (fallback_reason = Ursache + Hinweis).
+ * (Teil der Hash-Kette); übersetzt wird nur die Anzeige.  Muster gelten auch mitten
+ * in aneinandergereihten Sätzen (fallback_reason = Ursache + Hinweis).
  */
 const MESSAGE_RULES: [RegExp, string, string][] = [
   [/^(.+) erreichbar, Modell (\S+) verfügbar\.$/, "$1 reachable, model $2 available.", "$1 disponible, modelo $2 disponible."],
@@ -678,7 +684,7 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
   if (locale === "de") return text;
   const map = locale === "en" ? EXACT_EN : EXACT_ES;
   if (map[text]) return map[text];
-  // Zusammengesetzte Protokoll-Zeilen ("A | B | C") Teil fuer Teil uebersetzen.
+  // Zusammengesetzte Protokoll-Zeilen ("A | B | C") Teil für Teil übersetzen.
   if (text.includes(" | ")) return text.split(" | ").map((part) => translateDynamic(part, locale)).join(" | ");
 
   let out = text;

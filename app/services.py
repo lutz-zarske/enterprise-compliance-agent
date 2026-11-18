@@ -6,10 +6,10 @@ einen ``StructuredLLMClient``).  Dadurch ist sie
 isoliert testbar, und die Endpunkte in ``main.py`` bleiben duenn.
 
 Der Ablauf von ``extract_and_audit`` ist bewusst zweistufig: ein LLM-Aufruf
-fuer die fachliche Extraktion, ein zweiter fuer das Compliance-Audit.  Zwei
+für die fachliche Extraktion, ein zweiter für das Compliance-Audit.  Zwei
 fokussierte Prompts liefern bei einem 14B-Modell deutlich stabilere Ergebnisse
-als ein einziger Prompt, der beide Aufgaben vermischt.  Anschliessend laufen
-deterministische Kontrollen (IBAN-Pruefsumme, Regex-PII-Scan, Eskalations-
+als ein einziger Prompt, der beide Aufgaben vermischt.  Anschließend laufen
+deterministische Kontrollen (IBAN-Prüfsumme, Regex-PII-Scan, Eskalations-
 regeln), die das Modellergebnis korrigieren statt ihm blind zu vertrauen.
 """
 
@@ -40,7 +40,7 @@ from app.extractors import (
     render_reading_text,
     to_extraction,
 )
-from app.extractors.einvoice import looks_like_xml
+from app.extractors.einvoice import PARSER_VERSION, looks_like_xml
 from app.heuristics import (
     HEURISTIC_LABEL,
     HEURISTIC_MODEL,
@@ -50,7 +50,7 @@ from app.heuristics import (
     heuristic_extraction,
 )
 from app.inference import STAGE_LABELS, is_failover_error
-from app.jobs import PHASES
+from app.jobs import PHASES, JobCancelled
 from app.llm import PROMPT_HASH, ComplianceAuditPayload, LLMError, StructuredLLMClient
 from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import PrivacyVault
@@ -83,7 +83,7 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 
-#: Erlaubte Dateiendungen und MIME-Typen fuer den Upload (je Endung).
+#: Erlaubte Dateiendungen und MIME-Typen für den Upload (je Endung).
 ALLOWED_CONTENT_TYPES = frozenset({"application/pdf", "application/x-pdf", "application/octet-stream"})
 XML_CONTENT_TYPES = frozenset({"application/xml", "text/xml", "application/octet-stream"})
 ALLOWED_SUFFIXES = frozenset({".pdf", ".xml"})
@@ -92,7 +92,7 @@ ALLOWED_SUFFIXES = frozenset({".pdf", ".xml"})
 STRUCTURED_MODEL = "en16931-parser"
 STRUCTURED_PROVIDER = "structured"
 
-#: Laenge der Textvorschau in der Detailansicht.
+#: Länge der Textvorschau in der Detailansicht.
 TEXT_PREVIEW_CHARS = 1200
 
 _UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ]+", re.UNICODE)
@@ -104,7 +104,7 @@ _UNSAFE_FILENAME_CHARS = re.compile(r"[^\w.\- ]+", re.UNICODE)
 
 
 class ServiceError(Exception):
-    """Basisklasse fuer fachliche Fehler mit stabilem Fehlercode."""
+    """Basisklasse für fachliche Fehler mit stabilem Fehlercode."""
 
     code = "service_error"
     hint: str | None = None
@@ -112,21 +112,21 @@ class ServiceError(Exception):
 
 
 class UploadValidationError(ServiceError):
-    """Der Upload verletzt Typ-, Groessen- oder Formatvorgaben."""
+    """Der Upload verletzt Typ-, Größen- oder Formatvorgaben."""
 
     code = "invalid_upload"
     status_code = 415
 
 
 class UploadTooLargeError(UploadValidationError):
-    """Die Datei ueberschreitet das konfigurierte Groessenlimit."""
+    """Die Datei überschreitet das konfigurierte Größenlimit."""
 
     code = "file_too_large"
     status_code = 413
 
 
 class ReleaseUpdateRunningError(ServiceError):
-    """Waehrend eines Release-Wechsels startet keine neue Analyse."""
+    """Während eines Release-Wechsels startet keine neue Analyse."""
 
     code = "release_update_running"
     status_code = 409
@@ -187,7 +187,7 @@ class NoTextAvailableError(ServiceError):
 
 
 def sanitize_filename(filename: str) -> str:
-    """Entschaerft einen Dateinamen fuer Anzeige und Ablage."""
+    """Entschärft einen Dateinamen für Anzeige und Ablage."""
     name = unicodedata.normalize("NFKC", filename or "").strip()
     name = Path(name.replace("\\", "/")).name  # Pfadanteile entfernen
     name = _UNSAFE_FILENAME_CHARS.sub("_", name)
@@ -199,13 +199,13 @@ def compute_sha256(data: bytes) -> str:
 
 
 def describe_failure(exc: BaseException) -> str:
-    """Ruhige, verstaendliche Fehlermeldung fuer Beleg und Oberflaeche - nie ein Klassenname."""
+    """Ruhige, verständliche Fehlermeldung für Beleg und Oberfläche - nie ein Klassenname."""
     if isinstance(exc, (LLMError, ServiceError)):
         return str(exc)
     return "Unerwarteter Fehler bei der Analyse – Details stehen im Serverprotokoll."
 
 
-#: Kurzbezeichnung der Scorecard-Kacheln fuer die Ledger-Zusammenfassung.
+#: Kurzbezeichnung der Scorecard-Kacheln für die Ledger-Zusammenfassung.
 TILE_SHORT_LABELS: dict[str, str] = {
     "formal": "§ 14 UStG",
     "regulatory": "EU AI Act",
@@ -221,7 +221,7 @@ SIGN_OFF_LABELS: dict[SignOffDecision, str] = {
 
 
 def fallback_explanation(exc: BaseException, stages: int) -> str:
-    """Ursache plus naechster Schritt fuer das Regelwerk-Audit.
+    """Ursache plus nächster Schritt für das Regelwerk-Audit.
 
     Ohne Ausweich-Stufe hilft der Hinweis des Fehlers (z. B. Ausweichmodell oder
     zweiten Key hinterlegen); mit Kaskade ist wichtig, dass alle Stufen scheiterten.
@@ -239,7 +239,7 @@ def analysis_summary(scorecard: Scorecard, compliance: ComplianceAudit) -> str:
     """Kurzfassung des ``analysis``-Ledger-Eintrags ohne Widerspruch zum Score.
 
     ``ComplianceAudit.headline`` betrachtet nur EU AI Act und DSGVO.  Bei formalen
-    oder rechnerischen Abzuegen (z. B. Steuerfalle mit Score 45) stuende dort sonst
+    oder rechnerischen Abzügen (z. B. Steuerfalle mit Score 45) stünde dort sonst
     „Keine Compliance-Auffälligkeiten“ neben „Freigabe gesperrt“ - stattdessen
     nennt die Zusammenfassung Score und betroffene Kacheln.
     """
@@ -257,7 +257,7 @@ def analysis_summary(scorecard: Scorecard, compliance: ComplianceAudit) -> str:
 
 
 def _truncate_for_prompt(text: str, limit: int) -> str:
-    """Kuerzt lange Dokumente auf das Kontextbudget des Modells."""
+    """Kürzt lange Dokumente auf das Kontextbudget des Modells."""
     if len(text) <= limit:
         return text
     head = text[: int(limit * 0.7)]
@@ -274,7 +274,7 @@ def _truncate_for_prompt(text: str, limit: int) -> str:
 
 
 def augment_extraction_issues(extraction: ExtractionResult) -> ExtractionResult:
-    """Ergaenzt regelbasierte Befunde, die das Modell uebersehen haben koennte."""
+    """Ergänzt regelbasierte Befunde, die das Modell übersehen haben könnte."""
     issues = list(extraction.issues)
 
     def add(message: str) -> None:
@@ -309,7 +309,7 @@ def augment_extraction_issues(extraction: ExtractionResult) -> ExtractionResult:
 def _derive_gdpr_risk(findings_categories: set[PIICategory], model_risk: RiskLevel) -> RiskLevel:
     """Hebt die DSGVO-Risikostufe an, wenn deterministisch mehr gefunden wurde.
 
-    Abgesenkt wird nie - das Modell darf die Einstufung verschaerfen, aber eine
+    Abgesenkt wird nie - das Modell darf die Einstufung verschärfen, aber eine
     regelbasiert belegte besondere Kategorie nach Art. 9/10 kann es nicht
     wegargumentieren.
     """
@@ -337,7 +337,7 @@ def escalate_ai_act(assessment: AIActAssessment) -> AIActAssessment:
     """Erzwingt "high", wenn eine Anhang-III-Kategorie belegt ist.
 
     Ein Modell benennt gelegentlich korrekt die Hochrisiko-Kategorie, stuft die
-    Gesamtrisikostufe aber zu niedrig ein.  Diese Regel schliesst die Luecke.
+    Gesamtrisikostufe aber zu niedrig ein.  Diese Regel schließt die Lücke.
     """
     has_annex_iii = any(system.annex_iii_categories for system in assessment.systems)
     if not has_annex_iii:
@@ -367,8 +367,8 @@ def escalate_ai_act(assessment: AIActAssessment) -> AIActAssessment:
 def read_embedded_einvoice(pdf_bytes: bytes, visual_text: str) -> EInvoiceData | None:
     """Liest den eingebetteten XML-Datensatz einer hybriden Rechnung (falls vorhanden).
 
-    Ein defektes oder nicht unterstuetztes XML verhindert den Upload nicht: Es
-    wird mit ``error`` vermerkt, und das Dokument laeuft ueber die Textanalyse.
+    Ein defektes oder nicht unterstütztes XML verhindert den Upload nicht: Es
+    wird mit ``error`` vermerkt, und das Dokument läuft über die Textanalyse.
     """
     attachment = find_einvoice_attachment(pdf_bytes)
     if attachment is None:
@@ -399,22 +399,22 @@ def parse_einvoice(record: DocumentRecord) -> EInvoiceData | None:
 
 
 def uses_structured_path(einvoice: EInvoiceData | None) -> bool:
-    """XML ist massgeblich, wenn es auswertbar ist und - bei hybriden Rechnungen - ein
-    E-Rechnungs-Profil traegt.  MINIMUM/BASIC WL sind keine E-Rechnungen: Dort ist
-    der Bildteil die Rechnung, und die Analyse laeuft ueber den Text."""
+    """XML ist maßgeblich, wenn es auswertbar ist und - bei hybriden Rechnungen - ein
+    E-Rechnungs-Profil trägt.  MINIMUM/BASIC WL sind keine E-Rechnungen: Dort ist
+    der Bildteil die Rechnung, und die Analyse läuft über den Text."""
     if einvoice is None or einvoice.error:
         return False
     return einvoice.source == "standalone" or einvoice.is_einvoice
 
 
 # ---------------------------------------------------------------------------
-# Fortschritt der Pipeline (fuer den Live-Audit-Stepper im Frontend)
+# Fortschritt der Pipeline (für den Live-Audit-Stepper im Frontend)
 # ---------------------------------------------------------------------------
 
 #: Reihenfolge der echten Verarbeitungsschritte in ``extract_and_audit`` (eine Quelle: ``app.jobs``).
 PIPELINE_STAGES: tuple[tuple[str, str], ...] = tuple((key, label) for key, label, _weight in PHASES)
 
-#: Rueckrufe fuer Live-Fortschritt: Phase (Job-Monitor) und Kaskaden-Ereignis (Neuversuch, Wechsel).
+#: Rückrufe für Live-Fortschritt: Phase (Job-Monitor) und Kaskaden-Ereignis (Neuversuch, Wechsel).
 StageHook = Callable[[str], None]
 EventHook = Callable[[str, dict[str, Any]], None]
 
@@ -450,7 +450,7 @@ PROGRESS = ProgressTracker()
 
 @dataclass(slots=True)
 class ExtractionOutcome:
-    """Ergebnis eines vollstaendigen Extraktions- und Auditlaufs."""
+    """Ergebnis eines vollständigen Extraktions- und Auditlaufs."""
 
     record: DocumentRecord
     extraction: ExtractionResult
@@ -506,7 +506,7 @@ class DocumentService:
         return self._settings.pii_strictness
 
     def _flags(self) -> tuple[bool, bool]:
-        """(Paragraf-14-Pruefung erzwingen, AI-Act-Eskalation aktiv)."""
+        """(Paragraf-14-Prüfung erzwingen, AI-Act-Eskalation aktiv)."""
         if self._runtime is None:
             return True, True
         snap = self._runtime.snapshot()
@@ -520,7 +520,7 @@ class DocumentService:
             return None
 
     async def read_original(self, record: DocumentRecord) -> bytes:
-        """Originalbeleg bitgenau; die Pruefsumme muss zur Datenbank passen."""
+        """Originalbeleg bitgenau; die Prüfsumme muss zur Datenbank passen."""
         data = await anyio.to_thread.run_sync(self._read_pdf, record)
         if data is None:
             raise OriginalMissingError(f"Originaldatei zu Dokument {record.id} nicht gefunden.")
@@ -532,7 +532,7 @@ class DocumentService:
 
     @staticmethod
     def embedded_xml(record: DocumentRecord, original: bytes) -> tuple[str, bytes] | None:
-        """Eingebetteter E-Rechnungs-Datensatz einer hybriden Rechnung (fuer das Pruefpaket)."""
+        """Eingebetteter E-Rechnungs-Datensatz einer hybriden Rechnung (für das Prüfpaket)."""
         einvoice = parse_einvoice(record)
         if einvoice is None or einvoice.source != "embedded":
             return None
@@ -548,12 +548,12 @@ class DocumentService:
         """Validiert, parst und persistiert ein hochgeladenes PDF oder XML.
 
         PDFs werden auf einen eingebetteten E-Rechnungs-Datensatz (ZUGFeRD,
-        Factur-X, XRechnung) untersucht; reine XML-Dateien muessen eine
+        Factur-X, XRechnung) untersucht; reine XML-Dateien müssen eine
         EN-16931-Rechnung in CII- oder UBL-Syntax sein.
 
         Returns:
             Das angelegte Dokument und - falls vorhanden - die ID eines bereits
-            gespeicherten Dokuments mit identischer Pruefsumme.
+            gespeicherten Dokuments mit identischer Prüfsumme.
         """
         safe_name = sanitize_filename(filename)
         suffix = Path(safe_name).suffix.lower()
@@ -627,6 +627,39 @@ class DocumentService:
             raise InvalidEInvoiceUploadError(str(exc)) from exc
         return einvoice, render_reading_text(einvoice), 0
 
+    async def _reread_original(self, record: DocumentRecord) -> tuple[DocumentRecord, bool]:
+        """Liest den gespeicherten Originalbeleg mit dem aktuellen Parser neu ein.
+
+        So wirkt jede Neuprüfung mit dem aktuellen Parser und XML-↔-PDF-Abgleich,
+        auch bei Belegen, die unter einer älteren Version hochgeladen wurden.
+        Fehlt das Original oder passt die Prüfsumme nicht, bleibt der
+        gespeicherte Stand – die Prüfung läuft wie bisher weiter.
+        """
+        data = await anyio.to_thread.run_sync(self._read_pdf, record)
+        if data is None or compute_sha256(data) != record.sha256:
+            logger.warning("Original zu Dokument %s nicht lesbar – gespeicherter Stand wird geprüft.", record.id)
+            return record, False
+        text = record.raw_text or ""
+        try:
+            if record.content_type == "application/xml":
+                einvoice: EInvoiceData | None = await anyio.to_thread.run_sync(
+                    lambda: parse_einvoice_xml(data, source="standalone")
+                )
+                text = render_reading_text(einvoice)  # type: ignore[arg-type]
+            else:
+                einvoice = await anyio.to_thread.run_sync(lambda: read_embedded_einvoice(data, text))
+        except Exception:  # noqa: BLE001 - ein Parserfehler darf die Neuprüfung nicht verhindern
+            logger.warning("Original zu Dokument %s nicht neu auswertbar.", record.id, exc_info=True)
+            return record, False
+        dumped = einvoice.model_dump(mode="json") if einvoice else None
+        if dumped == record.einvoice and text == (record.raw_text or ""):
+            return record, False
+        updated = await self._repository.update_source(
+            record.id, einvoice=dumped, raw_text=text, char_count=len(text)
+        )
+        logger.info("Dokument %s mit Parser %s neu eingelesen.", record.id, PARSER_VERSION)
+        return updated, True
+
     # --- Extraktion & Audit ------------------------------------------------
     async def extract_and_audit(
         self,
@@ -637,13 +670,13 @@ class DocumentService:
     ) -> ExtractionOutcome:
         """Vier echte Pipeline-Stufen; jede Stufe meldet sich im ProgressTracker und beim Job.
 
-        1. Text-Layer & XML-Vorrang (E-Rechnungen laufen deterministisch ueber den Datensatz)
+        1. Text-Layer & XML-Vorrang (E-Rechnungen laufen deterministisch über den Datensatz)
         2. Regelbasierter PII-Scan; bei Cloud-Inferenz Pseudonymisierung im Vault
         3. LLM-Extraktion + Paragraf-14-Kontrollen
         4. LLM-Audit (EU AI Act, DSGVO), Eskalationsregeln, Scorecard, Ledger
 
-        Scheitern alle KI-Stufen an Ueberlast oder Ausfall, schliesst das Regelwerk
-        die Pruefung ab (``heuristic_fallback``) - gekennzeichnet in UI und Ledger.
+        Scheitern alle KI-Stufen an Überlast oder Ausfall, schließt das Regelwerk
+        die Prüfung ab (``heuristic_fallback``) - gekennzeichnet in UI und Ledger.
         Ein Abbruch stellt den vorherigen Status wieder her; ein vorhandenes
         Ergebnis bleibt unangetastet.
         """
@@ -658,6 +691,7 @@ class DocumentService:
                 on_stage(key)
 
         stage("text_check")
+        record, reread = await self._reread_original(record)
         text = record.raw_text or ""
         if len(text.strip()) < 1:
             progress.clear(record.id)
@@ -667,7 +701,7 @@ class DocumentService:
 
         einvoice = parse_einvoice(record)
         if uses_structured_path(einvoice):
-            return await self._structured_analysis(record, einvoice, stage)  # type: ignore[arg-type]
+            return await self._structured_analysis(record, einvoice, stage, reread=reread)  # type: ignore[arg-type]
 
         prompt_text = _truncate_for_prompt(text, self._settings.max_prompt_chars)
         enforce_ustg, escalate = self._flags()
@@ -677,15 +711,14 @@ class DocumentService:
         except Exception:
             progress.clear(record.id)
             raise
-        await self._repository.mark_processing(record.id)
-
         vault = _vault_of(client)
         rule_findings: list[PIIFinding] = []
         try:
+            await self._repository.mark_processing(record.id)
             stage("pii_scan")
             rule_findings = scan_text(text)
             if vault is not None:
-                # Mapping vorab aufbauen: gleiche Platzhalter fuer beide LLM-Aufrufe.
+                # Mapping vorab aufbauen: gleiche Platzhalter für beide LLM-Aufrufe.
                 vault.pseudonymize(prompt_text)
 
             stage("ustg_check")
@@ -694,7 +727,7 @@ class DocumentService:
 
             stage("ai_act")
             audit_payload, audit_ms = await client.audit_document(prompt_text)
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, JobCancelled):
             if vault is not None:
                 vault.clear()
             await self._repository.restore_status(record.id, previous_status)
@@ -782,7 +815,7 @@ class DocumentService:
         )
 
     async def _log_failover(self, record: DocumentRecord, client: object) -> list[dict[str, str]]:
-        """Schreibt jeden Provider-Wechsel als eigenen Ledger-Eintrag (auch bei spaeterem Fehlschlag)."""
+        """Schreibt jeden Provider-Wechsel als eigenen Ledger-Eintrag (auch bei späterem Fehlschlag)."""
         switches: list[dict[str, str]] = list(getattr(client, "switches", None) or [])
         if self._ledger is not None:
             for switch in switches:
@@ -802,20 +835,26 @@ class DocumentService:
         return switches
 
     async def _structured_analysis(
-        self, record: DocumentRecord, einvoice: EInvoiceData, stage: StageHook | None = None
+        self,
+        record: DocumentRecord,
+        einvoice: EInvoiceData,
+        stage: StageHook | None = None,
+        *,
+        reread: bool = False,
     ) -> ExtractionOutcome:
-        """Deterministischer Pfad fuer E-Rechnungen: XML ist massgeblich, kein Sprachmodell.
+        """Deterministischer Pfad für E-Rechnungen: XML ist maßgeblich, kein Sprachmodell.
 
-        Die Rechnungsdaten stammen vollstaendig aus dem EN-16931-Datensatz; der
+        Die Rechnungsdaten stammen vollständig aus dem EN-16931-Datensatz; der
         DSGVO-Teil beruht auf dem Regex-Scanner.  Eine KI-Einstufung nach dem
-        AI Act findet nicht statt - eine Rechnung begruendet keine Anbieter-
-        oder Betreiberpflichten; massgeblich ist der zugrunde liegende Vertrag.
+        AI Act findet nicht statt - eine Rechnung begründet keine Anbieter-
+        oder Betreiberpflichten; maßgeblich ist der zugrunde liegende Vertrag.
         """
         progress = self._progress
         mark = stage or (lambda key: progress.set(record.id, key))
         enforce_ustg, escalate = self._flags()
-        await self._repository.mark_processing(record.id)
+        previous_status = DocumentStatus.EXTRACTED.value if record.scorecard else DocumentStatus.UPLOADED.value
         try:
+            await self._repository.mark_processing(record.id)
             mark("pii_scan")
             rule_findings = scan_text(record.raw_text or "")
             mark("ustg_check")
@@ -843,10 +882,12 @@ class DocumentService:
                     },
                 }
             )
+        except (asyncio.CancelledError, JobCancelled):
+            await self._repository.restore_status(record.id, previous_status)
+            progress.clear(record.id)
+            raise
         except Exception as exc:
-            await self._record_failure(
-                record, DocumentStatus.EXTRACTED.value if record.scorecard else DocumentStatus.UPLOADED.value, exc
-            )
+            await self._record_failure(record, previous_status, exc)
             progress.clear(record.id)
             raise
         return await self._finalize_analysis(
@@ -867,6 +908,7 @@ class DocumentService:
                 "einvoice_profile": einvoice.profile,
                 "einvoice_syntax": einvoice.syntax,
                 "xml_sha256": einvoice.xml_sha256,
+                **({"einvoice_reread": True} if reread else {}),
             },
         )
 
@@ -889,17 +931,17 @@ class DocumentService:
         failover: list[dict[str, str]] | None = None,
         heuristic_reason: str | None = None,
     ) -> ExtractionOutcome:
-        """Gemeinsamer Abschluss fuer Live- und Referenz-Audits.
+        """Gemeinsamer Abschluss für Live- und Referenz-Audits.
 
         Maskierungszwang, Regex-Zweitmeinung, Eskalationsregeln, Scorecard und
-        Ledger-Eintrag sind fuer beide Wege identisch - nur die Herkunft der
+        Ledger-Eintrag sind für beide Wege identisch - nur die Herkunft der
         Modellantwort unterscheidet sich.
         """
-        # Deterministische Gegenprobe auf dem vollstaendigen Text.  Die
-        # Maskierung laeuft vor dem Zusammenfuehren: nur so treffen sich ein
+        # Deterministische Gegenprobe auf dem vollständigen Text.  Die
+        # Maskierung läuft vor dem Zusammenführen: nur so treffen sich ein
         # vom Modell im Klartext gemeldeter Wert und derselbe, vom
         # Regelscanner bereits maskierte Wert im selben Deduplizierungs-
-        # schluessel und werden als ein Treffer (source="both") erkannt.
+        # schlüssel und werden als ein Treffer (source="both") erkannt.
         text = record.raw_text or ""
         llm_findings = enforce_masking(
             audit_payload.gdpr.findings, enabled=self._settings.mask_pii_in_storage
@@ -967,6 +1009,7 @@ class DocumentService:
                     "provider": provider,
                     "score_band": scorecard.band.value,
                     "ruleset_version": scorecard.ruleset_version,
+                    **({"einvoice_parser": einvoice.parser_version} if einvoice is not None else {}),
                     "pii_findings": len(masked),
                     "privacy_gateway": vault_report,
                     **({"failover": failover} if failover else {}),
@@ -1029,11 +1072,11 @@ class DocumentService:
         Die drei PDF-Musterdokumente erhalten Referenz-Audits (vorberechnete
         Modellantwort aus ``app/demo.py``, Score, Maskierung und Ledger aus dem
         echten Regelwerk).  Die hybride ZUGFeRD-Rechnung braucht keine
-        Vorberechnung: Sie laeuft ueber den deterministischen XML-Pfad.
-        Idempotent ueber die SHA-256: Vorhandene Dokumente werden nur
-        analysiert, wenn sie es noch nicht sind - ein spaeteres Live-Audit wird
-        nie ueberschrieben.  Die gueltige Rechnung erhaelt zusaetzlich ein
-        ausdruecklich als Demo gekennzeichnetes Siegel.
+        Vorberechnung: Sie läuft über den deterministischen XML-Pfad.
+        Idempotent über die SHA-256: Vorhandene Dokumente werden nur
+        analysiert, wenn sie es noch nicht sind - ein späteres Live-Audit wird
+        nie überschrieben.  Die gültige Rechnung erhält zusätzlich ein
+        ausdrücklich als Demo gekennzeichnetes Siegel.
         """
         from app.demo import DEMO_AUDITOR, DEMO_SEAL_NOTE, REFERENCE_AUDITS, demo_documents
 
@@ -1054,7 +1097,7 @@ class DocumentService:
                     outcome = await self.apply_reference_audit(record)
                     audited = True
                 else:
-                    # E-Rechnung: echter, deterministischer Lauf ueber den XML-Datensatz.
+                    # E-Rechnung: echter, deterministischer Lauf über den XML-Datensatz.
                     outcome = await self.extract_and_audit(record)
                     structured = outcome.provider == STRUCTURED_PROVIDER
                 record = outcome.record
@@ -1086,7 +1129,7 @@ class DocumentService:
             await self._repository.mark_failed(record.id, message)
 
     async def sign_off(self, record: DocumentRecord, request: SignOffRequest) -> DocumentRecord:
-        """Versiegelt das Pruefergebnis durch eine natuerliche Person."""
+        """Versiegelt das Prüfergebnis durch eine natürliche Person."""
         if record.status != DocumentStatus.EXTRACTED.value or not record.scorecard:
             raise DocumentNotAnalyzedError(
                 f"Dokument {record.id} ist noch nicht analysiert - kein Siegel möglich."
@@ -1119,11 +1162,11 @@ class DocumentService:
         return await self._repository.save_sign_off(record.id, sign_off.model_dump(mode="json"))
 
     async def override(self, record: DocumentRecord, request: OverrideRequest) -> DocumentRecord:
-        """Uebersteuert die EU-AI-Act-Einstufung (Art. 14 Abs. 4 lit. d) und rechnet den Score neu.
+        """Übersteuert die EU-AI-Act-Einstufung (Art. 14 Abs. 4 lit. d) und rechnet den Score neu.
 
-        Der Score bleibt deterministisch: Die Pruefperson aendert die Eingabe
+        Der Score bleibt deterministisch: Die Prüfperson ändert die Eingabe
         (Risikostufe), nicht das Ergebnis.  Der Ledger-Eintrag ``human_override``
-        haelt Person, Begruendung, Rechtsnorm sowie Score vorher/nachher fest und
+        hält Person, Begründung, Rechtsnorm sowie Score vorher/nachher fest und
         wird Ed25519-signiert.  Ein bestehendes Siegel verliert seinen Gegenstand;
         eine erneute Analyse verwirft den Override (die Historie bleibt im Ledger).
         """
@@ -1216,10 +1259,10 @@ class DocumentService:
         return await self._repository.set_pinned(record.id, pinned)
 
     async def set_archived(self, record: DocumentRecord, archived: bool) -> DocumentRecord:
-        """Blendet einen Beleg aus der Arbeitsliste aus bzw. holt ihn zurueck.
+        """Blendet einen Beleg aus der Arbeitsliste aus bzw. holt ihn zurück.
 
-        Archivieren loescht nichts (GoBD-Unveraenderbarkeit): Beleg, Ergebnis und
-        Ledger bleiben vollstaendig erhalten; der Wechsel selbst wird protokolliert.
+        Archivieren löscht nichts (GoBD-Unveränderbarkeit): Beleg, Ergebnis und
+        Ledger bleiben vollständig erhalten; der Wechsel selbst wird protokolliert.
         """
         if record.archived == archived:
             return record
@@ -1272,11 +1315,11 @@ class DocumentService:
         lang: str = "de",
         progress_id: str | None = None,
     ) -> dict[str, object]:
-        """Beantwortet eine Pruefer-Frage, geerdet auf Dokumenttext und Pruefergebnis.
+        """Beantwortet eine Prüfer-Frage, geerdet auf Dokumenttext und Prüfergebnis.
 
         ``progress_id`` meldet die Arbeitsschritte live (``GET /api/v1/copilot/progress/{id}``),
-        inklusive Neuversuch und Wechsel auf ein Ausweichmodell.  Faellt die ganze
-        Kaskade aus, antwortet das Regelwerk aus dem gespeicherten Pruefergebnis.
+        inklusive Neuversuch und Wechsel auf ein Ausweichmodell.  Fällt die ganze
+        Kaskade aus, antwortet das Regelwerk aus dem gespeicherten Prüfergebnis.
         """
         steps = COPILOT_STEPS
         steps.step(progress_id, "Belegstellen und Prüfergebnis aufbereiten")
@@ -1321,7 +1364,7 @@ class DocumentService:
                     for turn in history[-8:]
                     if turn.get("role") in {"user", "assistant"} and turn.get("content")
                 ],
-                {"role": "user", "content": f"{grounding}\n\nFRAGE DES PRUEFERS:\n{question.strip()}"},
+                {"role": "user", "content": f"{grounding}\n\nFRAGE DES PRÜFERS:\n{question.strip()}"},
             ]
             vault = _vault_of(client)
             if vault is not None:
@@ -1439,8 +1482,8 @@ Verbindliche Regeln:
    keine externen Systeme auf; Score und Einstufung berechnet das Regelwerk.
 """
 
-#: Denkstufen des Copilot: steuern Gruendlichkeit und Laenge ueber die Anweisung
-#: (anbieterunabhaengig - nicht jeder Anbieter kennt ein eigenes Reasoning-Budget).
+#: Denkstufen des Copilot: steuern Gründlichkeit und Länge über die Anweisung
+#: (anbieterunabhängig - nicht jeder Anbieter kennt ein eigenes Reasoning-Budget).
 THINKING_INSTRUCTIONS: dict[str, str] = {
     "low": "\nDENKSTUFE NIEDRIG: Antworte in höchstens fünf kurzen Punkten, nur das Wesentliche.",
     "medium": "",
@@ -1452,7 +1495,7 @@ THINKING_INSTRUCTIONS: dict[str, str] = {
 
 
 class StepTracker:
-    """Live-Arbeitsschritte je Copilot-Anfrage (die letzten 20, aelter als 15 Minuten fallen weg)."""
+    """Live-Arbeitsschritte je Copilot-Anfrage (die letzten 20, älter als 15 Minuten fallen weg)."""
 
     MAX_AGE_SECONDS = 900
 
@@ -1468,7 +1511,7 @@ class StepTracker:
             self._cancelled.discard(key)
 
     def register_task(self, progress_id: str | None, task: asyncio.Task[Any] | None) -> None:
-        """Verknuepft die laufende Coroutine mit ``progress_id`` fuer den gezielten Abbruch."""
+        """Verknüpft die laufende Coroutine mit ``progress_id`` für den gezielten Abbruch."""
         if not progress_id or task is None:
             return
         self._prune(time.time())
@@ -1533,7 +1576,7 @@ COPILOT_STEPS = StepTracker()
 
 
 def build_copilot_grounding(record: DocumentRecord, max_chars: int) -> str:
-    """Nummerierter Dokumenttext plus kompaktes Pruefergebnis als Kontext."""
+    """Nummerierter Dokumenttext plus kompaktes Prüfergebnis als Kontext."""
     lines = (record.raw_text or "").splitlines()
     numbered: list[str] = []
     used = 0
@@ -1606,7 +1649,7 @@ def parse_compliance(record: DocumentRecord) -> ComplianceAudit | None:
 
 
 def to_summary(record: DocumentRecord) -> DocumentSummary:
-    """Erzeugt eine Zeile der tabellarischen Uebersicht."""
+    """Erzeugt eine Zeile der tabellarischen Übersicht."""
     extraction = parse_extraction(record)
     compliance = parse_compliance(record)
     return DocumentSummary(
@@ -1661,9 +1704,9 @@ def parse_sign_off(record: DocumentRecord) -> SignOff | None:
 def to_detail(record: DocumentRecord, *, pii_level: str = "standard") -> DocumentDetail:
     """Erzeugt die Detailansicht inklusive Compliance-Audit.
 
-    Textvorschau und Textansicht werden gemaess der aktiven PII-Strenge
-    geschwaerzt; der Rohtext verlaesst die API nie ungefiltert, ausser im
-    ausdruecklich gewaehlten Modus ``audit_only``.
+    Textvorschau und Textansicht werden gemäß der aktiven PII-Strenge
+    geschwärzt; der Rohtext verlässt die API nie ungefiltert, außer im
+    ausdrücklich gewählten Modus ``audit_only``.
     """
     compliance = parse_compliance(record)
     preview: str | None = None

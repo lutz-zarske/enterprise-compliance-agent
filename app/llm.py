@@ -5,14 +5,14 @@ Bewusst ohne LangChain oder CrewAI: ein transparenter HTTP-Aufruf gegen
 gegen ein Pydantic-Modell.  Der komplette Pfad zwischen Dokument und
 Datenbank ist damit lesbar, testbar und ohne Framework-Magie nachvollziehbar.
 
-Robustheitsmassnahmen:
+Robustheitsmaßnahmen:
 
 * ``temperature=0`` und ein fester ``seed`` - dieselbe Eingabe liefert dieselbe
-  Bewertung, was fuer ein Compliance-Audit die Mindestanforderung ist.
-* Ein Reparaturversuch: schlaegt die Schemavalidierung fehl, bekommt das
-  Modell seine eigenen Validierungsfehler zurueck und korrigiert.
-* Klar getrennte Ausnahmen fuer "Dienst nicht erreichbar", "Modell fehlt",
-  "Zeitueberschreitung" und "unbrauchbare Antwort".
+  Bewertung, was für ein Compliance-Audit die Mindestanforderung ist.
+* Ein Reparaturversuch: schlägt die Schemavalidierung fehl, bekommt das
+  Modell seine eigenen Validierungsfehler zurück und korrigiert.
+* Klar getrennte Ausnahmen für "Dienst nicht erreichbar", "Modell fehlt",
+  "Zeitüberschreitung" und "unbrauchbare Antwort".
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ T = TypeVar("T", bound=BaseModel)
 #: Fester Seed - macht Bewertungen reproduzierbar und damit auditierbar.
 DEFAULT_SEED = 42
 
-#: Kurzes Timeout fuer Verfuegbarkeitspruefungen, damit /health schnell bleibt.
+#: Kurzes Timeout für Verfügbarkeitsprüfungen, damit /health schnell bleibt.
 HEALTH_TIMEOUT_SECONDS = 1.5
 
 #: Fehlt das eingestellte lokale Modell, wird das erste installierte aus dieser Liste
@@ -78,8 +78,8 @@ def suggest_local_model(configured: str, installed: list[str]) -> str | None:
 class LLMError(Exception):
     """Basisklasse aller Inferenzfehler.
 
-    ``failover``: Die naechste Stufe der Kaskade darf uebernehmen (Ueberlast, Ausfall,
-    Zeitueberschreitung, Budget).  ``retry``: Vorher lohnt eine kurze Wiederholung
+    ``failover``: Die nächste Stufe der Kaskade darf übernehmen (Überlast, Ausfall,
+    Zeitüberschreitung, Budget).  ``retry``: Vorher lohnt eine kurze Wiederholung
     derselben Stufe.  Abgelehnte Keys (401/403) und Schemafehler setzen beides nicht -
     eine Fehlkonfiguration soll sichtbar bleiben statt still umgangen zu werden.
     """
@@ -91,7 +91,7 @@ class LLMError(Exception):
 
 
 class OllamaUnavailableError(LLMError):
-    """Der Ollama-Dienst ist nicht erreichbar oder ueberlastet."""
+    """Der Ollama-Dienst ist nicht erreichbar oder überlastet."""
 
     code = "ollama_unavailable"
     hint = (
@@ -110,9 +110,9 @@ class OllamaModelNotFoundError(LLMError):
 
 
 class OllamaTimeoutError(LLMError):
-    """Die Inferenz hat das konfigurierte Zeitlimit ueberschritten.
+    """Die Inferenz hat das konfigurierte Zeitlimit überschritten.
 
-    Lokal keine Wiederholung: Ein Modell, das fuer diesen Beleg zu langsam ist,
+    Lokal keine Wiederholung: Ein Modell, das für diesen Beleg zu langsam ist,
     wird beim zweiten Versuch nicht schneller - die Kaskade geht weiter.
     """
 
@@ -143,7 +143,7 @@ Du bist ein präziser Extraktionsagent für deutschsprachige Geschäftsdokumente
 (Rechnungen, Verträge, Angebote, Mahnungen).
 
 Verbindliche Regeln:
-1. Antworte ausschließlich mit genau einem JSON-Objekt. Kein Fliesstext, keine
+1. Antworte ausschließlich mit genau einem JSON-Objekt. Kein Fließtext, keine
    Erklärungen, keine Markdown-Codeblöcke.
 2. Extrahiere nur, was tatsächlich im Dokument steht. Rate niemals. Fehlt eine
    Angabe, setze null (bzw. eine leere Liste).
@@ -167,7 +167,7 @@ Verbindliche Regeln:
 13. "items_description" beschreibt Menge und Art der Lieferung bzw. Art und
    Umfang der Leistung in einem Satz.
 
-Antwortschema (exakt diese Schluessel, keine zusätzlichen):
+Antwortschema (exakt diese Schlüssel, keine zusätzlichen):
 {{
   "doc_type": einer von [{_DOC_TYPES}],
   "sender": string oder null,
@@ -198,7 +198,7 @@ Du bist ein Compliance-Prüfer für die KI-Verordnung der EU (VO (EU) 2024/1689,
 "EU AI Act") und die Datenschutz-Grundverordnung (DSGVO).
 
 Verbindliche Regeln:
-1. Antworte ausschließlich mit genau einem JSON-Objekt. Kein Fliesstext, keine
+1. Antworte ausschließlich mit genau einem JSON-Objekt. Kein Fließtext, keine
    Erklärungen, keine Markdown-Codeblöcke.
 2. Alle Freitexte auf Deutsch.
 3. Bewerte ausschließlich das vorgelegte Dokument. Erfinde keine Sachverhalte.
@@ -241,10 +241,10 @@ Genetik, Sexualleben) sowie strafrechtliche Daten nach Artikel 10.
   Beispiel: "DE89****3000", "M***@example.com", "geb. **.**.1985".
 - "context" ist ein kurzer, ebenfalls entschärfter Umgebungstext.
 - Risikostufe: "high" bei besonderen Kategorien nach Art. 9/10, "medium" bei
-  Ausweis-, Konto- oder Sozialdaten, "low" bei blossen Kontaktdaten von
+  Ausweis-, Konto- oder Sozialdaten, "low" bei bloßen Kontaktdaten von
   Ansprechpartnern, "none" wenn ausschließlich Firmendaten vorliegen.
 
-Antwortschema (exakt diese Schluessel, keine zusätzlichen):
+Antwortschema (exakt diese Schlüssel, keine zusätzlichen):
 {{
   "ai_act": {{
     "describes_ai_system": true oder false,
@@ -280,7 +280,7 @@ Antwortschema (exakt diese Schluessel, keine zusätzlichen):
 
 
 #: Fingerabdruck der Prompt-Version - geht in jeden Audit-Ledger-Eintrag ein.
-#: Aendert sich ein Prompt, aendert sich der Hash; damit ist nachweisbar,
+#: Ändert sich ein Prompt, ändert sich der Hash; damit ist nachweisbar,
 #: mit welcher Anweisung eine historische Bewertung entstanden ist.
 PROMPT_HASH = hashlib.sha256(
     (EXTRACTION_SYSTEM_PROMPT + "\n---\n" + COMPLIANCE_SYSTEM_PROMPT).encode("utf-8")
@@ -288,7 +288,7 @@ PROMPT_HASH = hashlib.sha256(
 
 
 class ComplianceAuditPayload(BaseModel):
-    """Wrapper fuer die kombinierte Compliance-Antwort des Modells."""
+    """Wrapper für die kombinierte Compliance-Antwort des Modells."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -371,17 +371,17 @@ def extract_json_object(content: str) -> dict[str, Any]:
 class StructuredLLMClient:
     """Gemeinsame Basis aller Provider: JSON-Vertrag, Reparaturrunde, Fachaufrufe.
 
-    Ein Provider implementiert ausschliesslich ``_post_chat``; Prompts,
-    JSON-Extraktion, Schemavalidierung und Reparaturrunde sind fuer Ollama,
+    Ein Provider implementiert ausschließlich ``_post_chat``; Prompts,
+    JSON-Extraktion, Schemavalidierung und Reparaturrunde sind für Ollama,
     Gemini, Claude und GPT identisch.  Damit ist ein Provider-Wechsel ein
-    reiner Transportwechsel - die fachliche Pruefung bleibt gleich.
+    reiner Transportwechsel - die fachliche Prüfung bleibt gleich.
     """
 
     #: Kennung des Providers (local | gemini | anthropic | openai).
     provider: str = "local"
 
     @property
-    def model(self) -> str:  # pragma: no cover - von Unterklassen ueberschrieben
+    def model(self) -> str:  # pragma: no cover - von Unterklassen überschrieben
         raise NotImplementedError
 
     async def aclose(self) -> None:  # pragma: no cover - optional
@@ -398,7 +398,7 @@ class StructuredLLMClient:
         schema: type[T],
         max_attempts: int = 2,
     ) -> tuple[T, int]:
-        """Fuehrt eine JSON-Inferenz aus und validiert sie gegen ``schema``.
+        """Führt eine JSON-Inferenz aus und validiert sie gegen ``schema``.
 
         Returns:
             Tupel aus validiertem Modell und Dauer in Millisekunden.
@@ -425,7 +425,7 @@ class StructuredLLMClient:
                 )
                 if attempt == max_attempts:
                     break
-                # Reparaturrunde: das Modell bekommt seine eigenen Fehler zurueck.
+                # Reparaturrunde: das Modell bekommt seine eigenen Fehler zurück.
                 messages = [
                     *messages,
                     {"role": "assistant", "content": content[:4000]},
@@ -469,7 +469,7 @@ class StructuredLLMClient:
         )
 
     async def audit_document(self, text: str) -> tuple[ComplianceAuditPayload, int]:
-        """Fuehrt die EU-AI-Act- und DSGVO-Pruefung durch."""
+        """Führt die EU-AI-Act- und DSGVO-Prüfung durch."""
         return await self.chat_structured(
             system_prompt=COMPLIANCE_SYSTEM_PROMPT,
             user_prompt=build_compliance_prompt(text),
@@ -478,7 +478,7 @@ class StructuredLLMClient:
 
 
 class OllamaClient(StructuredLLMClient):
-    """Schmaler, vollstaendig asynchroner Client fuer die Ollama-REST-API."""
+    """Schmaler, vollständig asynchroner Client für die Ollama-REST-API."""
 
     provider = "local"
 
@@ -502,7 +502,7 @@ class OllamaClient(StructuredLLMClient):
         if self._owns_client:
             await self._client.aclose()
 
-    # --- Verfuegbarkeit ----------------------------------------------------
+    # --- Verfügbarkeit ----------------------------------------------------
     async def list_models(self) -> list[str]:
         """Namen aller auf dem Ollama-Host installierten Modelle."""
         try:
@@ -530,7 +530,7 @@ class OllamaClient(StructuredLLMClient):
         return [entry["name"] for entry in models if isinstance(entry, dict) and entry.get("name")]
 
     async def is_model_available(self, models: list[str] | None = None) -> bool:
-        """Prueft das konfigurierte Modell inklusive impliziter ``:latest``-Tags."""
+        """Prüft das konfigurierte Modell inklusive impliziter ``:latest``-Tags."""
         names = models if models is not None else await self.list_models()
         wanted = self.model
         candidates = {wanted, f"{wanted}:latest", wanted.removesuffix(":latest")}

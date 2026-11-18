@@ -1,19 +1,19 @@
 """Persistenzschicht - bewusst entkoppelt und austauschbar.
 
-Die Anwendung spricht ausschliesslich ueber das ``DocumentRepository``-Protocol
+Die Anwendung spricht ausschließlich über das ``DocumentRepository``-Protocol
 mit der Datenbank.  Die mitgelieferte Implementierung nutzt SQLAlchemy Core
-2.0; das Schema ist portabel definiert (keine SQLite-Spezialitaeten), sodass
-der Wechsel auf PostgreSQL/Supabase allein ueber ``DATABASE_URL`` erfolgt:
+2.0; das Schema ist portabel definiert (keine SQLite-Spezialitäten), sodass
+der Wechsel auf PostgreSQL/Supabase allein über ``DATABASE_URL`` erfolgt:
 
     DATABASE_URL=postgresql+psycopg://user:pass@host:5432/compliance
 
-Fuer pgvector genuegt es spaeter, der Tabelle eine ``embedding``-Spalte
-hinzuzufuegen - das bestehende Schema bleibt unveraendert.
+Für pgvector genügt es später, der Tabelle eine ``embedding``-Spalte
+hinzuzufügen - das bestehende Schema bleibt unverändert.
 
 SQLAlchemy Core ist synchron; alle Repository-Methoden sind dennoch ``async``
 und lagern die Datenbankarbeit in einen Threadpool aus.  Damit bleibt der
-Event-Loop frei und der spaetere Umstieg auf einen echten Async-Treiber
-(``asyncpg``) ist ohne Aenderung an den Aufrufern moeglich.
+Event-Loop frei und der spätere Umstieg auf einen echten Async-Treiber
+(``asyncpg``) ist ohne Änderung an den Aufrufern möglich.
 """
 
 from __future__ import annotations
@@ -50,29 +50,29 @@ documents_table: Table = Table(
     sa.Column("status", sa.String(32), nullable=False, index=True),
     sa.Column("page_count", sa.Integer, nullable=True),
     sa.Column("char_count", sa.Integer, nullable=True),
-    # Volltext fuer erneute Extraktion ohne wiederholtes PDF-Parsing.
+    # Volltext für erneute Extraktion ohne wiederholtes PDF-Parsing.
     sa.Column("raw_text", sa.Text, nullable=True),
     sa.Column("model", sa.String(120), nullable=True),
-    # sa.JSON bildet auf SQLite TEXT und auf PostgreSQL JSONB-faehiges JSON ab.
+    # sa.JSON bildet auf SQLite TEXT und auf PostgreSQL JSONB-fähiges JSON ab.
     sa.Column("extraction", sa.JSON, nullable=True),
     sa.Column("compliance", sa.JSON, nullable=True),
     sa.Column("error", sa.Text, nullable=True),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, index=True),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("extracted_at", sa.DateTime(timezone=True), nullable=True),
-    # --- per _migrate_columns nachgeruestet ---
+    # --- per _migrate_columns nachgerüstet ---
     sa.Column("provider", sa.String(32), nullable=True),
     sa.Column("scorecard", sa.JSON, nullable=True),
     sa.Column("sign_off", sa.JSON, nullable=True),
     sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
     # --- EN-16931-Datensatz (ZUGFeRD/Factur-X/XRechnung) ---
     sa.Column("einvoice", sa.JSON, nullable=True),
-    # --- Archiv (nur ausgeblendet, nie geloescht - GoBD) ---
+    # --- Archiv (nur ausgeblendet, nie gelöscht - GoBD) ---
     sa.Column("archived", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
 )
 
-#: Append-only-Pruefprotokoll (siehe app/audit_ledger.py).
+#: Append-only-Prüfprotokoll (siehe app/audit_ledger.py).
 audit_trails_table: Table = Table(
     "audit_trails",
     metadata,
@@ -94,7 +94,7 @@ audit_trails_table: Table = Table(
     sqlite_autoincrement=True,
 )
 
-#: Laufzeit-Einstellungen (Inferenz-Modus, verschluesselte Provider-Schluessel).
+#: Laufzeit-Einstellungen (Inferenz-Modus, verschlüsselte Provider-Schlüssel).
 app_settings_table: Table = Table(
     "app_settings",
     metadata,
@@ -103,7 +103,7 @@ app_settings_table: Table = Table(
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
 )
 
-#: Spalten, die bestehenden Datenbanken beim Start ergaenzt werden.
+#: Spalten, die bestehenden Datenbanken beim Start ergänzt werden.
 _MIGRATED_COLUMNS: dict[str, str] = {
     "provider": "VARCHAR(32)",
     "scorecard": "JSON",
@@ -121,7 +121,7 @@ def utcnow() -> datetime:
 
 
 def _ensure_utc(value: datetime | None) -> datetime | None:
-    """SQLite liefert naive Zeitstempel zurueck - hier wieder UTC anheften."""
+    """SQLite liefert naive Zeitstempel zurück - hier wieder UTC anheften."""
     if value is None:
         return None
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
@@ -134,7 +134,7 @@ def _ensure_utc(value: datetime | None) -> datetime | None:
 
 @dataclass(slots=True)
 class DocumentRecord:
-    """Ein Datenbankdatensatz, losgeloest von SQLAlchemy-Typen."""
+    """Ein Datenbankdatensatz, losgelöst von SQLAlchemy-Typen."""
 
     id: str
     original_filename: str
@@ -194,7 +194,7 @@ class DocumentRecord:
 
 @dataclass(slots=True)
 class NewDocument:
-    """Eingabedaten fuer das Anlegen eines Dokuments."""
+    """Eingabedaten für das Anlegen eines Dokuments."""
 
     original_filename: str
     stored_filename: str
@@ -218,7 +218,7 @@ class DocumentRepository(Protocol):
     """Alles, was die Anwendung von der Datenbank erwartet.
 
     Eine PostgreSQL-, Supabase- oder In-Memory-Implementierung muss lediglich
-    dieses Protocol erfuellen - ``main.py`` bleibt unveraendert.
+    dieses Protocol erfüllen - ``main.py`` bleibt unverändert.
     """
 
     async def create(self, document: NewDocument) -> DocumentRecord: ...
@@ -259,6 +259,10 @@ class DocumentRepository(Protocol):
     async def mark_failed(self, document_id: str, error: str) -> None: ...
 
     async def mark_recheck_failed(self, document_id: str, status: str, error: str) -> None: ...
+
+    async def update_source(
+        self, document_id: str, *, einvoice: dict[str, Any] | None, raw_text: str, char_count: int
+    ) -> DocumentRecord: ...
 
     async def restore_status(self, document_id: str, status: str) -> None: ...
 
@@ -362,7 +366,7 @@ class SqlDocumentRepository:
             ).scalar_one()
         return {"dialect": self._engine.dialect.name, "documents": int(count)}
 
-    # --- oeffentliche, asynchrone API --------------------------------------
+    # --- öffentliche, asynchrone API --------------------------------------
     async def create(self, document: NewDocument) -> DocumentRecord:
         return await anyio.to_thread.run_sync(partial(self._insert, document))
 
@@ -401,7 +405,7 @@ class SqlDocumentRepository:
             "compliance": compliance,
             "scorecard": scorecard,
             "provider": provider,
-            # Eine neue Analyse ersetzt den Pruefgegenstand: ein altes Siegel
+            # Eine neue Analyse ersetzt den Prüfgegenstand: ein altes Siegel
             # gilt nicht mehr (die Historie bleibt im Audit-Ledger erhalten).
             "sign_off": None,
             "error": None,
@@ -415,8 +419,8 @@ class SqlDocumentRepository:
     async def save_override(
         self, document_id: str, *, compliance: dict[str, Any], scorecard: dict[str, Any]
     ) -> DocumentRecord:
-        # Ein Override aendert das Pruefergebnis: ein bestehendes Siegel verliert
-        # seinen Gegenstand.  Analysezeitpunkt und Modell bleiben unveraendert.
+        # Ein Override ändert das Prüfergebnis: ein bestehendes Siegel verliert
+        # seinen Gegenstand.  Analysezeitpunkt und Modell bleiben unverändert.
         return await self._update_and_get(
             document_id, {"compliance": compliance, "scorecard": scorecard, "sign_off": None}
         )
@@ -436,7 +440,7 @@ class SqlDocumentRepository:
     async def _update_and_get(self, document_id: str, values: dict[str, Any]) -> DocumentRecord:
         await anyio.to_thread.run_sync(partial(self._update, document_id, values))
         record = await self.get(document_id)
-        if record is None:  # pragma: no cover - nur bei parallelem Loeschen erreichbar
+        if record is None:  # pragma: no cover - nur bei parallelem Löschen erreichbar
             raise LookupError(f"Dokument {document_id} nach dem Speichern nicht auffindbar.")
         return record
 
@@ -449,6 +453,14 @@ class SqlDocumentRepository:
         """Neuprüfung gescheitert: Status und gültiges Ergebnis bleiben, der Fehler steht als Hinweis."""
         await anyio.to_thread.run_sync(
             partial(self._update, document_id, {"status": status, "error": error[:2000]})
+        )
+
+    async def update_source(
+        self, document_id: str, *, einvoice: dict[str, Any] | None, raw_text: str, char_count: int
+    ) -> DocumentRecord:
+        """Neu eingelesener Prüfgegenstand (E-Rechnungs-Datensatz, Lesefassung) aus dem Original."""
+        return await self._update_and_get(
+            document_id, {"einvoice": einvoice, "raw_text": raw_text, "char_count": char_count}
         )
 
     async def restore_status(self, document_id: str, status: str) -> None:
@@ -470,7 +482,7 @@ def create_engine_from_settings(settings: Settings) -> Engine:
     kwargs: dict[str, Any] = {"future": True, "pool_pre_ping": True}
 
     if url.startswith("sqlite"):
-        # FastAPI bedient Requests aus einem Threadpool -> Thread-Bindung loesen.
+        # FastAPI bedient Requests aus einem Threadpool -> Thread-Bindung lösen.
         kwargs["connect_args"] = {"check_same_thread": False}
 
     engine = sa.create_engine(url, **kwargs)
@@ -479,7 +491,7 @@ def create_engine_from_settings(settings: Settings) -> Engine:
 
         @sa.event.listens_for(engine, "connect")
         def _configure_sqlite(dbapi_connection: Any, _record: Any) -> None:
-            """WAL + Fremdschluesselpruefung: mehr Nebenlaeufigkeit, mehr Integritaet."""
+            """WAL + Fremdschlüsselprüfung: mehr Nebenläufigkeit, mehr Integrität."""
             cursor = dbapi_connection.cursor()
             try:
                 cursor.execute("PRAGMA journal_mode=WAL")
@@ -492,10 +504,10 @@ def create_engine_from_settings(settings: Settings) -> Engine:
 
 
 def _migrate_columns(engine: Engine) -> None:
-    """Ergaenzt neue Spalten in bestehenden Datenbanken (additiv, ohne Datenverlust).
+    """Ergänzt neue Spalten in bestehenden Datenbanken (additiv, ohne Datenverlust).
 
-    Fuer ein Projekt dieser Groesse genuegt diese idempotente Additiv-Migration;
-    bei echten Schemaaenderungen (Umbenennen, Typwechsel) gehoert Alembic dazu.
+    Für ein Projekt dieser Größe genügt diese idempotente Additiv-Migration;
+    bei echten Schemaänderungen (Umbenennen, Typwechsel) gehört Alembic dazu.
     """
     existing = {column["name"] for column in sa.inspect(engine).get_columns("documents")}
     missing = {name: ddl for name, ddl in _MIGRATED_COLUMNS.items() if name not in existing}
@@ -523,7 +535,7 @@ _POSTGRES_IMMUTABILITY_TRIGGERS = (
 
 
 def _install_immutability_triggers(engine: Engine) -> None:
-    """Verhindert UPDATE/DELETE auf dem Pruefprotokoll bereits auf Datenbankebene."""
+    """Verhindert UPDATE/DELETE auf dem Prüfprotokoll bereits auf Datenbankebene."""
     statements = {
         "sqlite": _SQLITE_IMMUTABILITY_TRIGGERS,
         "postgresql": _POSTGRES_IMMUTABILITY_TRIGGERS,
@@ -575,7 +587,7 @@ def init_database(engine: Engine) -> None:
 
 
 def build_repository(settings: Settings) -> tuple[Engine, SqlDocumentRepository]:
-    """Bequemer Einstiegspunkt fuer Anwendung und Tests."""
+    """Bequemer Einstiegspunkt für Anwendung und Tests."""
     settings.ensure_directories()
     engine = create_engine_from_settings(settings)
     init_database(engine)

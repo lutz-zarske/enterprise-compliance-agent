@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""Prueft ein Pruefdatenpaket (ZIP) unabhaengig vom laufenden Server.
+"""Prüft ein Prüfdatenpaket (ZIP) unabhängig vom laufenden Server.
 
-Geprueft werden die SHA-256 jeder Datei laut ``manifest.json`` und die
-Ed25519-Signatur des Manifests.  Mit ``--fingerprint`` wird zusaetzlich der
-Schluessel gegen den bekannten System-Schluessel abgeglichen
+Geprüft werden die SHA-256 jeder Datei laut ``manifest.json`` und die
+Ed25519-Signatur des Manifests.  Mit ``--fingerprint`` wird zusätzlich der
+Schlüssel gegen den bekannten System-Schlüssel abgeglichen
 (``GET /api/audit/signing-key``) - erst das belegt die Herkunft.
 
 Aufruf::
@@ -11,7 +11,7 @@ Aufruf::
     python scripts/verify_pruefpaket.py Pruefdatenpaket_Rechnung.zip
     python scripts/verify_pruefpaket.py paket.zip --fingerprint a0df:3ccf:...
 
-Exitcodes: 0 = Paket unveraendert und Signatur gueltig, 1 = Befund.
+Exitcodes: 0 = Paket unverändert und Signatur gültig, 1 = Befund.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def main() -> int:
     print(f"Signatur: {result['signature']} (Schlüssel {result['fingerprint']})")
     if not args.fingerprint:
         print("Hinweis: Ohne --fingerprint ist nur die Unverändertheit belegt, nicht die Herkunft.")
-    print("ERGEBNIS: gültig" if result["valid"] else "ERGEBNIS: UNGUELTIG")
+    print("ERGEBNIS: gültig" if result["valid"] else "ERGEBNIS: UNGÜLTIG")
     return 0 if result["valid"] else 1
 
 

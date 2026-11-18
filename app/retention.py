@@ -2,19 +2,19 @@
 
 * Buchungsbelege und Rechnungen: **8 Jahre** (§ 147 Abs. 1 Nr. 4, Abs. 3 AO,
   § 14b Abs. 1 UStG, § 257 Abs. 4 HGB i. d. F. des BEG IV, ab 01.01.2025; gilt
-  auch fuer Belege, deren Frist am 31.12.2024 noch nicht abgelaufen war).
+  auch für Belege, deren Frist am 31.12.2024 noch nicht abgelaufen war).
 * Ausnahme Finanzsektor: Kreditinstitute, Versicherungsunternehmen und
   Wertpapierinstitute bewahren Buchungsbelege wieder **10 Jahre** auf (Gesetz zur
-  Modernisierung und Digitalisierung der Schwarzarbeitsbekaempfung, Bundesrat
+  Modernisierung und Digitalisierung der Schwarzarbeitsbekämpfung, Bundesrat
   19.12.2025).
-* Buecher, Jahresabschluesse, Inventare, Arbeitsanweisungen und sonstige
+* Bücher, Jahresabschlüsse, Inventare, Arbeitsanweisungen und sonstige
   Organisationsunterlagen - also auch die **Verfahrensdokumentation** - bleiben
   bei **10 Jahren** (§ 147 Abs. 1 Nr. 1, Abs. 3 AO).
-* Empfangene Handels- und Geschaeftsbriefe: 6 Jahre (§ 147 Abs. 1 Nr. 2, Abs. 3 AO).
+* Empfangene Handels- und Geschäftsbriefe: 6 Jahre (§ 147 Abs. 1 Nr. 2, Abs. 3 AO).
 
 Die Frist beginnt mit dem Schluss des Kalenderjahres, in dem der Beleg
 entstanden ist (§ 147 Abs. 4 AO), und endet nicht, solange die Festsetzungsfrist
-fuer die betroffenen Steuern laeuft (§ 147 Abs. 3 Satz 5 AO).
+für die betroffenen Steuern läuft (§ 147 Abs. 3 Satz 5 AO).
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def retention_end(document_date: date, years: int) -> date:
 
 @dataclass(frozen=True, slots=True)
 class DocumentRetention:
-    """Fristen fuer einen konkreten Beleg."""
+    """Fristen für einen konkreten Beleg."""
 
     years: int
     until: date
@@ -84,7 +84,7 @@ class DocumentRetention:
 
 
 def invoice_retention(document_date: date | None) -> DocumentRetention | None:
-    """Fristende fuer eine Rechnung; ``None`` ohne Belegdatum."""
+    """Fristende für eine Rechnung; ``None`` ohne Belegdatum."""
     if document_date is None:
         return None
     return DocumentRetention(

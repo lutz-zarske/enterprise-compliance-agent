@@ -4,23 +4,23 @@ Inhalt
 ------
 1. ``original/<Dateiname>``   Originalbeleg, bitgenau wie empfangen (PDF oder XML)
 2. ``<anhang>.xml``           eingebetteter E-Rechnungs-Datensatz (nur hybride PDFs)
-3. ``ledger_audit_trail.json`` alle Ledger-Eintraege des Dokuments + Kettenpruefung
-4. ``audit_certificate.html``  druckfertiges A4-Pruefzertifikat
+3. ``ledger_audit_trail.json`` alle Ledger-Einträge des Dokuments + Kettenprüfung
+4. ``audit_certificate.html``  druckfertiges A4-Prüfzertifikat
 5. ``verfahrensdokumentation.html`` GoBD-Verfahrensdokumentation (Entwurf) mit Belegbezug
-6. ``manifest.json``           SHA-256 je Datei, Pruefzeitstempel, System-Signatur
+6. ``manifest.json``           SHA-256 je Datei, Prüfzeitstempel, System-Signatur
 
 Einordnung
 ----------
-Das Paket unterstuetzt Nachvollziehbarkeit und Unveraenderbarkeit (GoBD
-Rz. 58 ff.) fuer *einen* Beleg - etwa zur Vorlage bei einer Betriebspruefung
-oder zur Uebergabe an ein Archivsystem.  Es ist **kein** Datentraeger nach dem
-"Beschreibungsstandard fuer die Datentraegerueberlassung" (index.xml) und ersetzt
+Das Paket unterstützt Nachvollziehbarkeit und Unveränderbarkeit (GoBD
+Rz. 58 ff.) für *einen* Beleg - etwa zur Vorlage bei einer Betriebsprüfung
+oder zur Übergabe an ein Archivsystem.  Es ist **kein** Datenträger nach dem
+"Beschreibungsstandard für die Datenträgerüberlassung" (index.xml) und ersetzt
 weder revisionssichere Archivierung noch die Verfahrensdokumentation.
 
-Jeder Ledger-Eintrag ist einzeln nachpruefbar: ``entry_hash`` ist SHA-256
-ueber das kanonische JSON aller Felder ausser ``seq`` und ``entry_hash``.
-Die Verkettung (``previous_hash``) laesst sich nur gegen das Gesamtprotokoll
-pruefen - dafuer stehen Kopf-Hash und Ergebnis der Gesamtpruefung im Manifest.
+Jeder Ledger-Eintrag ist einzeln nachprüfbar: ``entry_hash`` ist SHA-256
+über das kanonische JSON aller Felder außer ``seq`` und ``entry_hash``.
+Die Verkettung (``previous_hash``) lässt sich nur gegen das Gesamtprotokoll
+prüfen - dafür stehen Kopf-Hash und Ergebnis der Gesamtprüfung im Manifest.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def _json_bytes(payload: dict[str, Any]) -> bytes:
 def build_ledger_document(
     record: DocumentRecord, entries: list[LedgerEntry], verification: ChainVerification
 ) -> dict[str, Any]:
-    """Ledger-Auszug des Dokuments, aelteste Eintraege zuerst, je Eintrag nachgerechnet."""
+    """Ledger-Auszug des Dokuments, älteste Einträge zuerst, je Eintrag nachgerechnet."""
     ordered = sorted(entries, key=lambda entry: entry.seq or 0)
     return {
         "document_id": record.id,
@@ -182,7 +182,7 @@ def build_gobd_package(
 
 
 def verify_package(data: bytes, *, expected_fingerprint: str | None = None) -> dict[str, Any]:
-    """Prueft ein Paket vollstaendig: Datei-Hashes und Signatur des Manifests."""
+    """Prüft ein Paket vollständig: Datei-Hashes und Signatur des Manifests."""
     from app.signing import verify_signed_payload
 
     with zipfile.ZipFile(io.BytesIO(data)) as archive:

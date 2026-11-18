@@ -1,17 +1,17 @@
-"""Release-Assistent: neue Versionen pruefen und kontrolliert einspielen.
+"""Release-Assistent: neue Versionen prüfen und kontrolliert einspielen.
 
-Grundsaetze - kein unkontrolliertes Auto-Pulling:
+Grundsätze - kein unkontrolliertes Auto-Pulling:
 
-* **Pruefen** liest die Tags ueber ``git fetch --tags`` mit den Git-Zugangsdaten
+* **Prüfen** liest die Tags über ``git fetch --tags`` mit den Git-Zugangsdaten
   des Rechners (kein Token, funktioniert auch bei privaten Repositories) und
-  meldet den hoechsten SemVer-Tag ueber der laufenden Version samt Commit-Hash,
-  Tag-Signatur und Aenderungen.
-* **Einspielen** nur nach ausdruecklicher Bestaetigung des exakten Commit-Hashes,
-  nur als Fast-Forward (keine Merges, kein Ueberschreiben lokaler Aenderungen),
-  nur ohne laufende Analyse und standardmaessig nur von ``localhost``.  Vorher
+  meldet den höchsten SemVer-Tag über der laufenden Version samt Commit-Hash,
+  Tag-Signatur und Änderungen.
+* **Einspielen** nur nach ausdrücklicher Bestätigung des exakten Commit-Hashes,
+  nur als Fast-Forward (keine Merges, kein Überschreiben lokaler Änderungen),
+  nur ohne laufende Analyse und standardmäßig nur von ``localhost``.  Vorher
   entsteht eine Sicherungskopie von ``data/agent.db``; der Wechsel wird im
-  Ledger protokolliert.  Abhaengigkeiten und Frontend-Build aktualisiert danach
-  der Neustart ueber ``Start_Compliance_Agent.bat``.
+  Ledger protokolliert.  Abhängigkeiten und Frontend-Build aktualisiert danach
+  der Neustart über ``Start_Compliance_Agent.bat``.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def release_notes(log: str) -> list[str]:
 
 
 class ReleaseError(Exception):
-    """Update nicht moeglich; ``code`` und Meldung gehen an die Oberflaeche."""
+    """Update nicht möglich; ``code`` und Meldung gehen an die Oberfläche."""
 
     def __init__(self, code: str, message: str, status_code: int = 409) -> None:
         super().__init__(message)
@@ -113,14 +113,14 @@ class ReleaseManager:
             return False
 
     def _signature(self, tag: str) -> str:
-        """``valid`` (geprueft), ``invalid`` (Signatur passt nicht) oder ``unsigned``."""
+        """``valid`` (geprüft), ``invalid`` (Signatur passt nicht) oder ``unsigned``."""
         raw = self._git("cat-file", "-p", tag, check=False).stdout
         if "BEGIN PGP SIGNATURE" not in raw and "BEGIN SSH SIGNATURE" not in raw:
             return "unsigned"
         return "valid" if self._git("verify-tag", tag, check=False).returncode == 0 else "invalid"
 
     def latest(self) -> dict[str, Any] | None:
-        """Hoechster SemVer-Tag ueber der laufenden Version (ohne Netzwerk)."""
+        """Höchster SemVer-Tag über der laufenden Version (ohne Netzwerk)."""
         running = semver(self.current_version) or (0, 0, 0)
         tags = [
             tag for tag in self._git("tag", "--list", "v*").stdout.split()
@@ -171,7 +171,7 @@ class ReleaseManager:
         }
 
     def backup_database(self, database_file: Path | None, backup_dir: Path, label: str) -> Path | None:
-        """Konsistente SQLite-Kopie ueber die Backup-API (auch bei offenem WAL)."""
+        """Konsistente SQLite-Kopie über die Backup-API (auch bei offenem WAL)."""
         if database_file is None or not database_file.exists():
             return None
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -182,7 +182,7 @@ class ReleaseManager:
         return target
 
     def preflight(self, tag: str, confirm_commit: str, *, active_analyses: int) -> dict[str, Any]:
-        """Prueft alle Vorbedingungen; liefert das Release oder wirft ``ReleaseError``."""
+        """Prüft alle Vorbedingungen; liefert das Release oder wirft ``ReleaseError``."""
         if self.busy:
             raise ReleaseError("release_update_running", "Ein Update läuft bereits.")
         if active_analyses:
@@ -215,13 +215,13 @@ class ReleaseManager:
             self.busy = False
 
     def schedule_restart_if_managed(self) -> bool:
-        """Startet unter Windows den Agent automatisch neu, wenn er ueber Start_Compliance_Agent.bat laeuft."""
+        """Startet unter Windows den Agent automatisch neu, wenn er über Start_Compliance_Agent.bat läuft."""
         start_ps1 = self.repo_dir / "Start_Compliance_Agent.ps1"
         stop_ps1 = self.repo_dir / "Stop_Compliance_Agent.ps1"
         pid_file = self.repo_dir / ".run" / "backend.pid"
         if os.name != "nt" or not (start_ps1.exists() and stop_ps1.exists() and pid_file.exists()):
             return False
-        # Spawnt ueber WMI (Win32_Process.Create), damit taskkill /T auf backend.pid
+        # Spawnt über WMI (Win32_Process.Create), damit taskkill /T auf backend.pid
         # den Neustart-Prozess nicht selbst abbricht.
         inner = (
             "Start-Sleep -Milliseconds 1500; "

@@ -22,7 +22,7 @@ export function useBrowserOffline(): boolean {
 }
 
 /**
- * Ruhiger Hinweis ohne Internet: Lokale Pruefungen, Regelwerk und Ledger laufen
+ * Ruhiger Hinweis ohne Internet: Lokale Prüfungen, Regelwerk und Ledger laufen
  * weiter; nur Cloud-KI, VIES und der Release-Abgleich pausieren.
  */
 export function OfflineBadge() {

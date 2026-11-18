@@ -6,15 +6,15 @@
 /*
  * Design-System "FinTech Minimal – ruhig und statisch".
  *
- * Alle Komponenten nutzen ausschliesslich diese semantischen Tokens; beide Themes
- * sind hier zentral auf WCAG AA abgestimmt (Fliesstext >= 4.5:1 gegen die jeweilige
- * Flaeche).  Farbe traegt Bedeutung, nie Dekoration: Gruen konform, Bernstein
- * Pruefhinweis, Rose Verstoss, Indigo PII; Himmelblau markiert Bedienung (Fokus,
+ * Alle Komponenten nutzen ausschließlich diese semantischen Tokens; beide Themes
+ * sind hier zentral auf WCAG AA abgestimmt (Fließtext >= 4.5:1 gegen die jeweilige
+ * Fläche).  Farbe trägt Bedeutung, nie Dekoration: Grün konform, Bernstein
+ * Prüfhinweis, Rose Verstoß, Indigo PII; Himmelblau markiert Bedienung (Fokus,
  * Auswahl, laufende Jobs).
  */
 :root {
-  /* Hell: kuehles Papiergrau als Grund, weisse Flaechen mit klarer Kontur - Tiefe ueber
-     Kontrast der Flaechen statt ueber Schatten oder Farbe. */
+  /* Hell: kühles Papiergrau als Grund, weiße Flächen mit klarer Kontur - Tiefe über
+     Kontrast der Flächen statt über Schatten oder Farbe. */
   --bg: #f3f5f8;
   --surface: #ffffff;
   --surface-2: #f1f4f8;
@@ -31,7 +31,7 @@
   --accent-soft: #e0f2fe;
   --accent-line: #7dd3fc;
 
-  /* Primaeraktion: tiefes Slate auf Weiss (dunkel: Weiss auf Tiefschwarz). */
+  /* Primäraktion: tiefes Slate auf Weiß (dunkel: Weiß auf Tiefschwarz). */
   --primary-bg: #0f172a;
   --primary-fg: #ffffff;
   --primary-hover: #1e293b;
@@ -171,7 +171,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Zahlen in der UI: Inter mit Tabellenziffern - Monospace nur fuer Hashes, XML und Beleg-Rohtext. */
+/* Zahlen in der UI: Inter mit Tabellenziffern - Monospace nur für Hashes, XML und Beleg-Rohtext. */
 .tabular,
 .tabular-nums {
   font-variant-numeric: tabular-nums;
@@ -179,7 +179,7 @@ body {
 .font-mono {
   font-variant-numeric: tabular-nums slashed-zero;
 }
-/* Grosse Kennzahlen (KPI-Leiste, Score): IBM Plex Serif mit Tabellen- und Versalziffern. */
+/* Große Kennzahlen (KPI-Leiste, Score): IBM Plex Serif mit Tabellen- und Versalziffern. */
 .zahl-display {
   font-family: var(--font-zahl);
   font-feature-settings: "tnum" 1, "lnum" 1;
@@ -189,9 +189,9 @@ body {
 
 @layer components {
   /*
-   * Karten und Panels bleiben unter dem Zeiger vollstaendig statisch: kein Anheben,
+   * Karten und Panels bleiben unter dem Zeiger vollständig statisch: kein Anheben,
    * kein Schein, kein Rand-Glow.  Eine Karte, die reagiert, verspricht eine
-   * Klickflaeche, die es nicht gibt.  Hover-Feedback nur an Bedienelementen.
+   * Klickfläche, die es nicht gibt.  Hover-Feedback nur an Bedienelementen.
    */
   .card {
     background: var(--surface);
@@ -213,7 +213,7 @@ body {
     font-size: 0.8125rem;
     font-weight: 500;
     line-height: 1.25rem;
-    /* Kein Druck-Versatz beim Klick: Schaltflaechen bleiben ortsfest, Feedback nur ueber Farbe. */
+    /* Kein Druck-Versatz beim Klick: Schaltflächen bleiben ortsfest, Feedback nur über Farbe. */
     transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
     white-space: nowrap;
   }
@@ -305,7 +305,7 @@ body {
 
   /*
    * PII-Maskierung (DSGVO): einheitlich Indigo. Art.-9-Fundstellen tragen eine
-   * kraeftigere Kontur. Ring statt Rahmen, damit die Monospace-Spalten fluchten.
+   * kräftigere Kontur. Ring statt Rahmen, damit die Monospace-Spalten fluchten.
    */
   .pii-mark {
     border-radius: 3px;
@@ -328,8 +328,8 @@ body {
   }
 
   /*
-   * Fundstellen-Hervorhebung: Zeile im Beleg, die eine Pruefung belegt.
-   * Gruen konform, Gelb Pruefhinweis/KI-Vorschlag, Rot Verstoss.
+   * Fundstellen-Hervorhebung: Zeile im Beleg, die eine Prüfung belegt.
+   * Grün konform, Gelb Prüfhinweis/KI-Vorschlag, Rot Verstoss.
    */
   .doc-line {
     display: block;
@@ -398,7 +398,7 @@ body {
     color: var(--primary-fg);
   }
 
-  /* Mindest-Trefferflaeche fuer Icon-Schaltflaechen (WCAG 2.5.8 >= 24 px, Touch >= 36 px). */
+  /* Mindest-Trefferfläche für Icon-Schaltflächen (WCAG 2.5.8 >= 24 px, Touch >= 36 px). */
   .icon-target {
     display: inline-flex;
     align-items: center;
@@ -414,8 +414,8 @@ body {
   }
 
   /*
-   * Scrollbereiche: Der Platz fuer den Scrollbalken ist immer reserviert
-   * (scrollbar-gutter), damit er nie Badges, Haken oder Text ueberdeckt.
+   * Scrollbereiche: Der Platz für den Scrollbalken ist immer reserviert
+   * (scrollbar-gutter), damit er nie Badges, Haken oder Text überdeckt.
    */
   .scroll-area {
     overflow-y: auto;
@@ -539,12 +539,12 @@ body {
   .kopf-kapsel {
     border-radius: 9999px;
     padding: 0.3125rem;
-    /* Hell: leicht abgesetzte Mulde auf der weissen Kopfzeile, der weisse Indikator hebt die Auswahl. */
+    /* Hell: leicht abgesetzte Mulde auf der weißen Kopfzeile, der weiße Indikator hebt die Auswahl. */
     background: rgba(236, 240, 245, 0.85);
     border-color: rgba(15, 23, 42, 0.1);
     box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
-    /* Nur die Standard-Eigenschaft: Das -webkit-Praefix ergaenzt der Build (Lightning CSS).
-       Beide von Hand notiert, behielt er nur das Praefix - in Chromium ohne Wirkung. */
+    /* Nur die Standard-Eigenschaft: Das -webkit-Präfix ergänzt der Build (Lightning CSS).
+       Beide von Hand notiert, behielt er nur das Präfix - in Chromium ohne Wirkung. */
     backdrop-filter: blur(24px) saturate(150%);
   }
   .dark .kopf-kapsel {
@@ -609,12 +609,12 @@ body {
   line-height: 1.45;
   text-align: left;
   box-shadow: 0 16px 36px -14px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(16px) saturate(140%); /* Praefix ergaenzt der Build */
+  backdrop-filter: blur(16px) saturate(140%); /* Präfix ergänzt der Build */
   pointer-events: none;
   animation: eca-fade-in 120ms ease-out both;
 }
 
-/* Browserflaechen aus der Palette statt Systemvorgaben. */
+/* Browserflächen aus der Palette statt Systemvorgaben. */
 ::selection {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--fg);
@@ -677,7 +677,7 @@ a,
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scroll-thumb-hover);
 }
-/* Kein weisses Eckquadrat, wo sich zwei Scrollbalken treffen (Chrome/Edge unter Windows). */
+/* Kein weißes Eckquadrat, wo sich zwei Scrollbalken treffen (Chrome/Edge unter Windows). */
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
@@ -761,7 +761,7 @@ a,
   animation: eca-shimmer 1.6s ease-in-out infinite;
 }
 
-/* Wer reduzierte Bewegung wuenscht, bekommt keine (ohnehin minimalen) Uebergaenge. */
+/* Wer reduzierte Bewegung wünscht, bekommt keine (ohnehin minimalen) Übergänge. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -848,13 +848,13 @@ a,
   to { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 
-/* --- Glas-Menues (Select, Popover, Job-Monitor) ------------------------------ */
+/* --- Glas-Menüs (Select, Popover, Job-Monitor) ------------------------------ */
 .glass-menu {
   background: var(--menu-bg);
   border: 1px solid var(--menu-line);
   border-radius: 0.75rem;
   box-shadow: 0 24px 48px -16px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(24px) saturate(150%); /* Praefix ergaenzt der Build */
+  backdrop-filter: blur(24px) saturate(150%); /* Präfix ergänzt der Build */
   transform-origin: var(--origin, top);
   animation: eca-menu-in 150ms var(--ease-out, ease-out) both;
 }
@@ -979,7 +979,7 @@ nextjs-portal [data-nextjs-dev-tools-button],
   }
 }
 
-/* Groessere Klickflaechen auf Touch-Geraeten (WCAG 2.5.8). */
+/* Größere Klickflächen auf Touch-Geräten (WCAG 2.5.8). */
 @media (pointer: coarse) {
   .btn,
   .btn-sm,

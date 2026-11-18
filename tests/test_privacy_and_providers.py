@@ -267,7 +267,7 @@ def test_verbindungstest_lokal_und_cloud(make_full_client: Callable[..., TestCli
 
 
 class FakeGemini:
-    """Antwortet wie Gemini und spiegelt die Platzhalter des Prompts zurueck."""
+    """Antwortet wie Gemini und spiegelt die Platzhalter des Prompts zurück."""
 
     def __init__(self) -> None:
         self.bodies: list[str] = []
@@ -335,7 +335,7 @@ def test_cloud_modus_ohne_key_liefert_400(full_client: TestClient, invoice_pdf: 
     response = full_client.post(f"/documents/{document_id}/extract?wait=true")
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "provider_not_configured"
-    # Das Dokument bleibt unveraendert verarbeitbar.
+    # Das Dokument bleibt unverändert verarbeitbar.
     assert full_client.get(f"/documents/{document_id}").json()["status"] == "uploaded"
 
 

@@ -14,20 +14,20 @@ htmlcov/
 .env
 .env.local
 
-# Persistierte Daten und hochgeladene Dokumente (koennen PII enthalten!)
+# Persistierte Daten und hochgeladene Dokumente (können PII enthalten!)
 data/*.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/uploads/*
-# Fernet-Schluessel fuer verschluesselte Provider-Keys - niemals committen!
+# Fernet-Schlüssel für verschlüsselte Provider-Keys – niemals committen!
 data/.settings.key
-# Ed25519-Schluessel der System-Signatur (Pruefdatenpakete) - niemals committen!
+# Ed25519-Schlüssel der System-Signatur (Prüfdatenpakete) – niemals committen!
 data/.signing.key
 *.key
-# SQLite-Sicherungen des Release-Assistenten (vollstaendige Datenbank inkl. PII)
+# SQLite-Sicherungen des Release-Assistenten (vollständige Datenbank inkl. PII)
 data/backups/
-# Tageszaehler des Cloud-Budgets (Laufzeitdaten)
+# Tageszähler des Cloud-Budgets (Laufzeitdaten)
 data/ai_usage.json
 !data/uploads/.gitkeep
 
@@ -46,6 +46,6 @@ frontend/out/
 # Lokale Starter-Laufzeitdateien und Logs
 .run/
 
-# Lokale Agent- und Design-Richtlinien (nicht oeffentlich)
+# Lokale Agent- und Design-Richtlinien (nicht öffentlich)
 DESIGN.md
 CLAUDE.md

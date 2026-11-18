@@ -1,4 +1,4 @@
-"""Tests des PDF-Readers - insbesondere die Fehlerfaelle."""
+"""Tests des PDF-Readers - insbesondere die Fehlerfälle."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def test_nicht_pdf_wird_anhand_der_signatur_erkannt() -> None:
 
 
 def test_beschaedigtes_pdf_erzeugt_klaren_fehler() -> None:
-    """Korrekte Signatur, danach Datenmuell."""
+    """Korrekte Signatur, danach Datenmüll."""
     with pytest.raises(InvalidPdfError):
         extract_text(b"%PDF-1.4\n" + b"\x00\xff" * 500)
 
@@ -66,7 +66,7 @@ def test_signaturpruefung_toleriert_fuehrenden_whitespace() -> None:
 
 
 def test_normalisierung_erhaelt_die_zeilenstruktur() -> None:
-    """Zeilenumbrueche bleiben - sonst verschmelzen Rechnungspositionen."""
+    """Zeilenumbrüche bleiben - sonst verschmelzen Rechnungspositionen."""
     raw = "Position 1:   100,00 EUR\r\n\r\n\r\n\r\nPosition 2:  50,00 EUR   \n"
     normalized = normalize_text(raw)
 

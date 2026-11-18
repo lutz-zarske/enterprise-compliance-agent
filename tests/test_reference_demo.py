@@ -62,7 +62,7 @@ def test_gueltige_rechnung_traegt_gekennzeichnetes_demo_siegel(full_client: Test
     assert seal["status"] == "SEALED_APPROVED"
     assert seal["auditor_name"] == DEMO_AUDITOR
     assert "nicht die Prüfung durch eine reale Person" in seal["note"]
-    # Nur die gueltige Rechnung ist versiegelt.
+    # Nur die gültige Rechnung ist versiegelt.
     others = [item for name, item in seeded.items() if name != "Rechnung_Gueltig_14UStG.pdf"]
     assert all(full_client.get(f"/documents/{item['id']}").json()["sign_off"] is None for item in others)
 
@@ -138,7 +138,7 @@ def test_copilot_musterantwort_ohne_modell(full_client: TestClient, fake_ollama:
 
 
 def test_freie_frage_ohne_modell_antwortet_das_regelwerk(full_client: TestClient, fake_ollama: FakeOllama) -> None:
-    """Copilot-Rueckfall: ohne erreichbares Modell antwortet das Regelwerk - gekennzeichnet, nie still."""
+    """Copilot-Rückfall: ohne erreichbares Modell antwortet das Regelwerk - gekennzeichnet, nie still."""
     fake_ollama.offline = True
     seeded = _seed(full_client)
     document_id = seeded["Rechnung_Gueltig_14UStG.pdf"]["id"]
@@ -188,7 +188,7 @@ def test_musterantworten_vollstaendig_und_zeilengenau() -> None:
         for answer in answers:
             for number in re.findall(r"\[Z\. (\d+)\]", answer):
                 assert 1 <= int(number) <= len(lines), (filename, number)
-    # Stichprobe: Zeile 10 der Steuerfalle ist tatsaechlich die 16-%-Zeile.
+    # Stichprobe: Zeile 10 der Steuerfalle ist tatsächlich die 16-%-Zeile.
     assert "16 %" in texts["Rechnung_Fehlerhaft_Steuerfalle.pdf"][9]
     assert normalize_question("  Welche Pflichtangaben fehlen in dieser Rechnung? ") == normalize_question(
         STANDARD_QUESTIONS[0]

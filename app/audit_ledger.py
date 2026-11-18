@@ -1,29 +1,29 @@
-"""Unveraenderbares Pruefprotokoll (Audit Ledger) mit Hash-Verkettung.
+"""Unveränderbares Prüfprotokoll (Audit Ledger) mit Hash-Verkettung.
 
 Rechtlicher Hintergrund
 -----------------------
-* **EU AI Act Art. 12** verlangt fuer Hochrisiko-KI-Systeme die automatische
-  Protokollierung von Ereignissen ueber den gesamten Lebenszyklus.
+* **EU AI Act Art. 12** verlangt für Hochrisiko-KI-Systeme die automatische
+  Protokollierung von Ereignissen über den gesamten Lebenszyklus.
 * **DSGVO Art. 5 Abs. 2** (Rechenschaftspflicht) verlangt, die Einhaltung der
-  Grundsaetze nachweisen zu koennen.
-* **GoBD Rz. 58 ff.** fordern die Unveraenderbarkeit aufzeichnungspflichtiger
-  Daten; die Hash-Kette ist eine technische Massnahme dafuer (die GoBD
+  Grundsätze nachweisen zu können.
+* **GoBD Rz. 58 ff.** fordern die Unveränderbarkeit aufzeichnungspflichtiger
+  Daten; die Hash-Kette ist eine technische Maßnahme dafür (die GoBD
   schreiben kein bestimmtes Verfahren vor).
 
 Verfahren
 ---------
-Jeder Eintrag speichert den Hash seines Vorgaengers (``previous_hash``) und
-seinen eigenen Hash (``entry_hash``) ueber den kanonischen JSON-Inhalt.  Wer
-einen historischen Eintrag aendert oder loescht, bricht die Kette ab dieser
+Jeder Eintrag speichert den Hash seines Vorgängers (``previous_hash``) und
+seinen eigenen Hash (``entry_hash``) über den kanonischen JSON-Inhalt.  Wer
+einen historischen Eintrag ändert oder löscht, bricht die Kette ab dieser
 Stelle - ``verify_chain`` weist das mit Sequenznummer nach.  Das ist eine
 lineare Hash-Kette (wie bei einem Blockchain-Ledger), kein Merkle-Baum.
 
-Zusaetzlich verhindern Datenbank-Trigger jedes ``UPDATE``/``DELETE`` auf der
+Zusätzlich verhindern Datenbank-Trigger jedes ``UPDATE``/``DELETE`` auf der
 Tabelle.  Gegen einen Angreifer mit Vollzugriff auf die Datenbankdatei hilft
 kein Trigger; deshalb sollte der Kopf-Hash (``GET /api/audit/head``)
-regelmaessig ausserhalb des Systems verankert werden (Ticket, E-Mail,
+regelmäßig außerhalb des Systems verankert werden (Ticket, E-Mail,
 WORM-Speicher, qualifizierter Zeitstempel nach eIDAS).  Erst dann ist auch
-das Abschneiden der juengsten Eintraege nachweisbar.
+das Abschneiden der jüngsten Einträge nachweisbar.
 """
 
 from __future__ import annotations
@@ -42,46 +42,46 @@ from sqlalchemy import Engine
 
 from app.db import audit_trails_table, utcnow
 
-#: Vorgaenger-Hash des allerersten Eintrags.
+#: Vorgänger-Hash des allerersten Eintrags.
 GENESIS_HASH = "0" * 64
 
-#: Prozessweite Sperre: Lesen des Kopf-Hashes und Anhaengen muessen atomar sein.
+#: Prozessweite Sperre: Lesen des Kopf-Hashes und Anhängen müssen atomar sein.
 _APPEND_LOCK = threading.Lock()
 
 
 class AuditEventType:
     """Stabile Ereignistypen im Ledger.
 
-    Die Werte sind Teil gespeicherter, gehashter Eintraege und werden nie
-    umbenannt.  ``SIGN_OFF`` ist das Pruefer-Siegel (Freigabe/Ablehnung),
-    ``HUMAN_OVERRIDE`` die Uebersteuerung einer KI-Einstufung durch eine
-    natuerliche Person (Art. 14 Abs. 4 lit. d VO (EU) 2024/1689).
+    Die Werte sind Teil gespeicherter, gehashter Einträge und werden nie
+    umbenannt.  ``SIGN_OFF`` ist das Prüfer-Siegel (Freigabe/Ablehnung),
+    ``HUMAN_OVERRIDE`` die Übersteuerung einer KI-Einstufung durch eine
+    natürliche Person (Art. 14 Abs. 4 lit. d VO (EU) 2024/1689).
     """
 
     ANALYSIS = "analysis"
     SIGN_OFF = "sign_off"
     HUMAN_OVERRIDE = "human_override"
     #: Provider-Wechsel bei Ausfall (maschinell), Modellwechsel,
-    #: Archivierung und Release-Wechsel (jeweils durch eine Person ausgeloest).
+    #: Archivierung und Release-Wechsel (jeweils durch eine Person ausgelöst).
     PROVIDER_FAILOVER = "provider_failover"
     MODEL_CHANGE = "model_change"
     ARCHIVE = "archive"
     UNARCHIVE = "unarchive"
     RELEASE_UPDATE = "release_update"
 
-    #: Pruefer-Entscheidungen - erscheinen im Zertifikat als Meilenstein.
+    #: Prüfer-Entscheidungen - erscheinen im Zertifikat als Meilenstein.
     MILESTONES = frozenset({SIGN_OFF, HUMAN_OVERRIDE})
-    #: Ereignisse natuerlicher Personen - werden zusaetzlich Ed25519-signiert.
+    #: Ereignisse natürlicher Personen - werden zusätzlich Ed25519-signiert.
     HUMAN = frozenset({SIGN_OFF, HUMAN_OVERRIDE, MODEL_CHANGE, ARCHIVE, UNARCHIVE, RELEASE_UPDATE})
 
 
-#: ``document_id`` fuer Ereignisse ohne Belegbezug (Modell- und Release-Wechsel).
+#: ``document_id`` für Ereignisse ohne Belegbezug (Modell- und Release-Wechsel).
 SYSTEM_DOCUMENT_ID = "system"
-#: Platzhalter fuer ``sha256_hash`` ohne Belegbezug.
+#: Platzhalter für ``sha256_hash`` ohne Belegbezug.
 NO_DOCUMENT_HASH = "0" * 64
 
 
-#: Schluessel der Signatur innerhalb von ``details``.
+#: Schlüssel der Signatur innerhalb von ``details``.
 SIGNATURE_FIELD = "signature"
 
 
@@ -96,7 +96,7 @@ def compute_entry_hash(content: dict[str, Any]) -> str:
 
 @dataclass(slots=True)
 class LedgerEntry:
-    """Ein Eintrag im Pruefprotokoll."""
+    """Ein Eintrag im Prüfprotokoll."""
 
     entry_id: str
     event_type: str
@@ -137,7 +137,7 @@ class LedgerEntry:
 
 @dataclass(slots=True)
 class ChainVerification:
-    """Ergebnis einer vollstaendigen Kettenpruefung."""
+    """Ergebnis einer vollständigen Kettenprüfung."""
 
     valid: bool
     entries: int
@@ -145,7 +145,7 @@ class ChainVerification:
     broken_at_seq: int | None = None
     reason: str | None = None
     verified_at: str = field(default_factory=lambda: utcnow().isoformat())
-    #: Anzahl der Ed25519-signierten Pruefer-Eintraege, die geprueft wurden.
+    #: Anzahl der Ed25519-signierten Prüfer-Einträge, die geprüft wurden.
     signed_entries: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -175,11 +175,11 @@ def _row_to_entry(row: Any) -> LedgerEntry:
 class AuditLedger:
     """Append-only-Protokoll auf Basis von SQLAlchemy Core.
 
-    Mit ``signer`` werden Eintraege natuerlicher Personen (Siegel, Override)
-    zusaetzlich Ed25519-signiert.  Die Signatur entsteht unter derselben Sperre
+    Mit ``signer`` werden Einträge natürlicher Personen (Siegel, Override)
+    zusätzlich Ed25519-signiert.  Die Signatur entsteht unter derselben Sperre
     wie die Verkettung und deckt ``previous_hash`` ab; ``entry_hash`` deckt
-    wiederum die Signatur ab.  Wer die Kette vollstaendig neu berechnet, kann
-    diese Eintraege ohne den privaten Schluessel nicht neu signieren.
+    wiederum die Signatur ab.  Wer die Kette vollständig neu berechnet, kann
+    diese Einträge ohne den privaten Schlüssel nicht neu signieren.
     """
 
     def __init__(self, engine: Engine, signer: Any | None = None) -> None:
@@ -194,7 +194,7 @@ class AuditLedger:
     def _append(self, entry: LedgerEntry) -> LedgerEntry:
         with _APPEND_LOCK, self._engine.begin() as connection:
             if self._engine.dialect.name == "postgresql":
-                # Serialisiert das Anhaengen auch ueber mehrere Prozesse/Replikas.
+                # Serialisiert das Anhängen auch über mehrere Prozesse/Replikas.
                 connection.execute(sa.text("SELECT pg_advisory_xact_lock(424242)"))
             last = connection.execute(
                 sa.select(audit_trails_table.c.entry_hash)
@@ -259,7 +259,7 @@ class AuditLedger:
         return ChainVerification(True, count, previous, signed_entries=signed)
 
     def verify_entry_signature(self, entry: LedgerEntry) -> tuple[bool, str]:
-        """Prueft die Ed25519-Signatur eines Eintrags gegen den System-Schluessel."""
+        """Prüft die Ed25519-Signatur eines Eintrags gegen den System-Schlüssel."""
         from app.signing import verify_signature
 
         signature = entry.signature
@@ -269,7 +269,7 @@ class AuditLedger:
         return verify_signature(signature, entry.signed_content(), expected_fingerprint=expected)
 
     def signature_status(self, entry: LedgerEntry) -> str:
-        """``valid`` | ``invalid`` | ``unsigned`` - fuer die Ledger-Historie im Frontend."""
+        """``valid`` | ``invalid`` | ``unsigned`` - für die Ledger-Historie im Frontend."""
         if entry.signature is None:
             return "unsigned"
         return "valid" if self.verify_entry_signature(entry)[0] else "invalid"

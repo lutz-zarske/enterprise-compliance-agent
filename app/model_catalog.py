@@ -1,9 +1,9 @@
 """Modell-Kataloge der Provider und Upgrade-Erkennung.
 
-Liest die verfuegbaren Modelle ueber die jeweilige API und schlaegt ein
+Liest die verfügbaren Modelle über die jeweilige API und schlägt ein
 neueres Modell *derselben Klasse* vor (Sonnet -> neueres Sonnet, Flash ->
 neueres Flash).  Es wird nie still gewechselt: Ein Vorschlag erscheint als
-Banner, uebernommen wird er erst per Klick - der Wechsel landet dann als
+Banner, übernommen wird er erst per Klick - der Wechsel landet dann als
 ``model_change`` im Ledger (GoBD-Reproduzierbarkeit).
 """
 
@@ -15,7 +15,7 @@ from typing import Any
 
 #: Modellklassen, innerhalb derer ein Upgrade vorgeschlagen wird.
 TIERS = ("pro", "flash", "lite", "opus", "sonnet", "haiku", "mini", "nano")
-#: Spezialmodelle, die fuer die Dokumentpruefung nicht in Frage kommen.
+#: Spezialmodelle, die für die Dokumentprüfung nicht in Frage kommen.
 NOISE = (
     "audio", "realtime", "tts", "transcribe", "image", "imagen", "embedding", "search", "moderation",
     "whisper", "dall-e", "codex", "computer-use", "preview", "exp", "instruct", "learnlm", "gemma",
@@ -35,7 +35,7 @@ def _tokens(model_id: str) -> list[str]:
 
 
 def family(model_id: str) -> str:
-    """Modellklasse aus den Klassenwoertern, z. B. ``gemini-2.5-flash-lite`` -> ``flash+lite``."""
+    """Modellklasse aus den Klassenwörtern, z. B. ``gemini-2.5-flash-lite`` -> ``flash+lite``."""
     return "+".join(sorted({token for token in _tokens(model_id) if token in TIERS}))
 
 

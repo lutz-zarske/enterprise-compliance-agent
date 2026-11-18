@@ -1,4 +1,4 @@
-"""EU AI Act Art. 14: Uebersteuerung durch die Pruefperson, signierte Ledger-Eintraege."""
+"""EU AI Act Art. 14: Uebersteuerung durch die Prüfperson, signierte Ledger-Einträge."""
 
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def test_zertifikat_zeigt_pruefer_meilenstein(full_client: TestClient) -> None:
 
 
 def test_neu_berechnete_kette_faellt_an_der_signatur_auf(tmp_path, settings) -> None:
-    """Wer einen Pruefer-Eintrag aendert und die Hashes neu berechnet, bricht die Ed25519-Signatur."""
+    """Wer einen Prüfer-Eintrag ändert und die Hashes neu berechnet, bricht die Ed25519-Signatur."""
     engine, _ = build_repository(settings)
     signer = SystemSigner(tmp_path / "keys" / ".signing.key")
     ledger = AuditLedger(engine, signer=signer)
@@ -146,7 +146,7 @@ def test_neu_berechnete_kette_faellt_an_der_signatur_auf(tmp_path, settings) -> 
     anyio.run(write)
     assert anyio.run(ledger.verify_chain).valid is True
 
-    # Angriff mit Vollzugriff: Trigger entfernen, Score aendern, Hash neu berechnen.
+    # Angriff mit Vollzugriff: Trigger entfernen, Score ändern, Hash neu berechnen.
     with engine.begin() as connection:
         connection.execute(sa.text("DROP TRIGGER IF EXISTS audit_trails_no_update"))
         row = connection.execute(sa.select(audit_trails_table)).first()._mapping

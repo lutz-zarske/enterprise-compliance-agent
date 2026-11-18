@@ -6,8 +6,8 @@ Zwei bewusste Entscheidungen:
   nicht durch Austausch des Clients.  Dadurch laufen ``app/llm.py`` -
   Payload-Aufbau, JSON-Extraktion, Schemavalidierung und Reparaturrunde -
   in jedem Test mit durch, statt wegabstrahiert zu werden.
-* **PDF-Fixtures werden zur Laufzeit erzeugt**, ohne zusaetzliche Abhaengigkeit
-  wie reportlab.  ``build_pdf`` schreibt ein minimales, gueltiges PDF mit
+* **PDF-Fixtures werden zur Laufzeit erzeugt**, ohne zusätzliche Abhängigkeit
+  wie reportlab.  ``build_pdf`` schreibt ein minimales, gültiges PDF mit
   echtem Textlayer; ``build_scanned_pdf`` eines ohne.
 """
 
@@ -29,7 +29,7 @@ from app.main import create_app, get_llm, get_service
 from app.services import DocumentService
 
 # ---------------------------------------------------------------------------
-# PDF-Erzeugung ohne externe Abhaengigkeiten
+# PDF-Erzeugung ohne externe Abhängigkeiten
 # ---------------------------------------------------------------------------
 
 
@@ -63,7 +63,7 @@ def build_pdf(pages: list[list[str]]) -> bytes:
                 body += b"(" + _escape_pdf_text(line) + b") Tj\nT*\n"
             body += b"ET\n"
         else:
-            # Nur eine gezeichnete Linie: gueltige Seite, aber ohne Textlayer.
+            # Nur eine gezeichnete Linie: gültige Seite, aber ohne Textlayer.
             body = b"q 1 w 50 50 m 300 50 l S Q\n"
 
         objects[page_obj] = (
@@ -98,7 +98,7 @@ def build_pdf(pages: list[list[str]]) -> bytes:
     return bytes(out)
 
 
-#: Beispielrechnung ueber ein KI-Recruiting-System mit PII (Hochrisiko-Fall).
+#: Beispielrechnung über ein KI-Recruiting-System mit PII (Hochrisiko-Fall).
 RECRUITING_INVOICE_LINES = [
     "TalentMatch GmbH, Innovationsweg 12, 10115 Berlin",
     "RECHNUNG Nr. RE-2024-0815",
@@ -203,8 +203,8 @@ DEFAULT_COMPLIANCE: dict[str, Any] = {
 class FakeOllama:
     """Stellt die Ollama-REST-API im Test nach.
 
-    Alle Attribute sind zur Laufzeit veraenderbar, sodass ein Test gezielt
-    Fehlerfaelle erzwingen kann (fehlendes Modell, Dienst offline, kaputtes
+    Alle Attribute sind zur Laufzeit veränderbar, sodass ein Test gezielt
+    Fehlerfälle erzwingen kann (fehlendes Modell, Dienst offline, kaputtes
     JSON, Schemaverletzung mit anschliessender Reparatur).
     """
 
@@ -215,7 +215,7 @@ class FakeOllama:
         self.offline = False
         self.chat_status = 200
         self.calls: list[dict[str, Any]] = []
-        #: Antworten, die vor der regulaeren Antwort ausgeliefert werden.
+        #: Antworten, die vor der regulären Antwort ausgeliefert werden.
         self.pending_raw: list[str] = []
         self.copilot_answer = "Es fehlt die USt-IdNr. [Z. 1] (§ 14 Abs. 4 Satz 1 Nr. 2 UStG)."
 
@@ -258,15 +258,15 @@ def fake_ollama() -> FakeOllama:
 
 
 # ---------------------------------------------------------------------------
-# Gemocktes VIES (Europaeische Kommission)
+# Gemocktes VIES (Europäische Kommission)
 # ---------------------------------------------------------------------------
 
 
 class FakeVies:
     """Stellt ``check-vat-number`` nach - jede Test-App nutzt diesen Transport.
 
-    Damit verlaesst kein Test das lokale System, auch wenn er VIES nur
-    mittelbar beruehrt.  Antwortformat wie die echte Schnittstelle
+    Damit verlässt kein Test das lokale System, auch wenn er VIES nur
+    mittelbar berührt.  Antwortformat wie die echte Schnittstelle
     (deutsche Nummern ohne Namen: "---").
     """
 
@@ -318,7 +318,7 @@ def settings(tmp_path: Path) -> Settings:
     """Isolierte Konfiguration: eigene SQLite-Datei, eigenes Upload-Verzeichnis.
 
     ``_env_file=None``: Eine lokale ``.env`` (etwa mit Cloud-Keys) darf das
-    Testergebnis nicht veraendern.
+    Testergebnis nicht verändern.
     """
     return Settings(
         _env_file=None,
@@ -332,7 +332,7 @@ def settings(tmp_path: Path) -> Settings:
         max_prompt_chars=8000,
         mask_pii_in_storage=True,
         log_json=False,
-        # Wiederholungen ja, Wartezeit nein: die Kaskade laeuft in Tests ohne Backoff-Pausen.
+        # Wiederholungen ja, Wartezeit nein: die Kaskade läuft in Tests ohne Backoff-Pausen.
         llm_retry_delays="0,0",
     )
 
@@ -341,7 +341,7 @@ def settings(tmp_path: Path) -> Settings:
 def make_client(
     settings: Settings, fake_ollama: FakeOllama, fake_vies: FakeVies
 ) -> Iterator[Callable[..., TestClient]]:
-    """Fabrik fuer Testclients - erlaubt abweichende Settings je Test."""
+    """Fabrik für Testclients - erlaubt abweichende Settings je Test."""
     opened: list[TestClient] = []
     clients: list[OllamaClient] = []
 
@@ -354,7 +354,7 @@ def make_client(
         clients.append(llm)
 
         def service_override(request: Request) -> DocumentService:
-            # Das Repository entsteht erst im Lifespan, daher hier verzoegert lesen.
+            # Das Repository entsteht erst im Lifespan, daher hier verzögert lesen.
             return DocumentService(
                 effective,
                 request.app.state.repository,
@@ -385,7 +385,7 @@ def client(make_client: Callable[..., TestClient]) -> TestClient:
 
 @pytest.fixture
 def ollama_client(settings: Settings, fake_ollama: FakeOllama) -> Iterator[OllamaClient]:
-    """Direkter LLM-Client gegen den gemockten Dienst (fuer Unit-Tests)."""
+    """Direkter LLM-Client gegen den gemockten Dienst (für Unit-Tests)."""
     llm = OllamaClient(
         settings,
         client=httpx.AsyncClient(transport=httpx.MockTransport(fake_ollama.handler)),
@@ -394,7 +394,7 @@ def ollama_client(settings: Settings, fake_ollama: FakeOllama) -> Iterator[Ollam
 
 
 def uploaded_document_id(client: TestClient, pdf: bytes, filename: str = "rechnung.pdf") -> str:
-    """Hilfsfunktion: laedt ein PDF hoch und gibt die Dokument-ID zurueck."""
+    """Hilfsfunktion: lädt ein PDF hoch und gibt die Dokument-ID zurück."""
     response = client.post(
         "/documents/upload",
         files={"file": (filename, pdf, "application/pdf")},
@@ -407,9 +407,9 @@ def uploaded_document_id(client: TestClient, pdf: bytes, filename: str = "rechnu
 def make_full_client(
     settings: Settings, fake_ollama: FakeOllama, fake_vies: FakeVies
 ) -> Iterator[Callable[..., TestClient]]:
-    """Vollstaendige App ohne Dependency-Overrides (Router, Runtime-Store, Vault).
+    """Vollständige App ohne Dependency-Overrides (Router, Runtime-Store, Vault).
 
-    Ollama und Cloud-Provider werden auf HTTP-Ebene gemockt; damit laeuft der
+    Ollama und Cloud-Provider werden auf HTTP-Ebene gemockt; damit läuft der
     Produktionspfad inklusive InferenceRouter und PrivacyVault.
     """
     opened: list[TestClient] = []

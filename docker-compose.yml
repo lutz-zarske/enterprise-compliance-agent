@@ -1,11 +1,11 @@
 # ---------------------------------------------------------------------------
 # Standard:            docker compose up --build
 #   -> API (http://127.0.0.1:8001) und Frontend (http://127.0.0.1:3001) im
-#      Container, Ollama laeuft auf dem Host (host.docker.internal).
-#      127.0.0.1 statt localhost: Windows loest localhost bevorzugt nach ::1 auf.
+#      Container, Ollama läuft auf dem Host (host.docker.internal).
+#      127.0.0.1 statt localhost: Windows löst localhost bevorzugt nach ::1 auf.
 #
-# Vollstaendiger Stack: docker compose --profile full up --build
-#   -> zusaetzlich ein Ollama-Container; Modell danach einmalig ziehen mit
+# Vollständiger Stack: docker compose --profile full up --build
+#   -> zusätzlich ein Ollama-Container; Modell danach einmalig ziehen mit
 #      docker compose exec ollama ollama pull qwen2.5:14b-instruct
 # ---------------------------------------------------------------------------
 services:
@@ -46,10 +46,10 @@ services:
       ANALYSIS_WORKERS: ${ANALYSIS_WORKERS:-1}
       DLP_TERMS: ${DLP_TERMS:-}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
-      # Im Container gibt es kein lokales Ollama-Programm: Start/Stopp ueber den Dienst unten.
+      # Im Container gibt es kein lokales Ollama-Programm: Start/Stopp über den Dienst unten.
       RUNNING_IN_CONTAINER: "1"
     volumes:
-      # Benanntes Volume statt Bind-Mount: Docker uebernimmt beim ersten Start
+      # Benanntes Volume statt Bind-Mount: Docker übernimmt beim ersten Start
       # Inhalt und Besitzrechte (appuser, UID 10001) aus dem Image. Ein
       # Bind-Mount von ./data scheitert auf Linux-Hosts an fehlenden
       # Schreibrechten ("unable to open database file").

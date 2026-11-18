@@ -1,13 +1,13 @@
 """PDF-Textextraktion auf Basis von pdfplumber (MIT-Lizenz).
 
-Der Reader ist defensiv gebaut: Beschaedigte, passwortgeschuetzte und
+Der Reader ist defensiv gebaut: Beschädigte, passwortgeschützte und
 gescannte PDFs ohne Textlayer erzeugen jeweils eine eigene, klar benannte
-Ausnahme.  Die API-Schicht kann daraus praezise HTTP-Antworten mit
+Ausnahme.  Die API-Schicht kann daraus präzise HTTP-Antworten mit
 Handlungshinweis erzeugen, statt einen generischen 500er zu liefern.
 
 Bewusst *kein* OCR: Das Projekt ist Privacy-First und soll ohne
-Systemabhaengigkeiten (Tesseract, Poppler) lauffaehig bleiben.  Gescannte
-Dokumente werden erkannt und mit einem verstaendlichen Hinweis abgelehnt.
+Systemabhängigkeiten (Tesseract, Poppler) lauffähig bleiben.  Gescannte
+Dokumente werden erkannt und mit einem verständlichen Hinweis abgelehnt.
 """
 
 from __future__ import annotations
@@ -64,14 +64,14 @@ class InvalidPdfError(PdfReadError):
 
 
 class EncryptedPdfError(PdfReadError):
-    """Das PDF ist passwortgeschuetzt."""
+    """Das PDF ist passwortgeschützt."""
 
     code = "encrypted_pdf"
     hint = "Bitte den Kopierschutz entfernen und das Dokument erneut hochladen."
 
 
 class NoTextLayerError(PdfReadError):
-    """Das PDF enthaelt keinen maschinenlesbaren Text (vermutlich ein Scan)."""
+    """Das PDF enthält keinen maschinenlesbaren Text (vermutlich ein Scan)."""
 
     code = "no_text_layer"
     hint = (
@@ -97,7 +97,7 @@ class PdfExtraction:
 
     @property
     def text_coverage(self) -> float:
-        """Anteil der Seiten mit erkanntem Text - Indikator fuer Teilscans."""
+        """Anteil der Seiten mit erkanntem Text - Indikator für Teilscans."""
         return self.pages_with_text / self.page_count if self.page_count else 0.0
 
 
@@ -111,10 +111,10 @@ _MULTI_SPACES = re.compile(r"[ \t]{2,}")
 
 
 def normalize_text(text: str) -> str:
-    """Vereinheitlicht Whitespace, ohne die Zeilenstruktur zu zerstoeren.
+    """Vereinheitlicht Whitespace, ohne die Zeilenstruktur zu zerstören.
 
     Die Zeilenstruktur bleibt erhalten, weil Rechnungspositionen und
-    Vertragsklauseln fuer das LLM sonst zu einer unlesbaren Textwurst
+    Vertragsklauseln für das LLM sonst zu einer unlesbaren Textwurst
     verschmelzen.
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -126,7 +126,7 @@ def normalize_text(text: str) -> str:
 
 
 def looks_like_pdf(data: bytes) -> bool:
-    """Prueft die Magic Bytes - unabhaengig vom gemeldeten Content-Type."""
+    """Prüft die Magic Bytes - unabhängig vom gemeldeten Content-Type."""
     return data[:1024].lstrip()[: len(PDF_MAGIC)] == PDF_MAGIC
 
 
@@ -134,9 +134,9 @@ def extract_text(data: bytes, *, max_pages: int = MAX_PAGES) -> PdfExtraction:
     """Extrahiert den Text eines PDFs aus dem Speicher.
 
     Raises:
-        InvalidPdfError: Datei ist kein oder ein beschaedigtes PDF.
-        EncryptedPdfError: Datei ist passwortgeschuetzt.
-        NoTextLayerError: Datei enthaelt praktisch keinen Text (Scan).
+        InvalidPdfError: Datei ist kein oder ein beschädigtes PDF.
+        EncryptedPdfError: Datei ist passwortgeschützt.
+        NoTextLayerError: Datei enthält praktisch keinen Text (Scan).
     """
     if not data:
         raise InvalidPdfError("Die hochgeladene Datei ist leer.")

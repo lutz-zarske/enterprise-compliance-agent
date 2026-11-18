@@ -121,7 +121,7 @@ access_logger = logging.getLogger("app.access")
 API_KEY_HEADER = "X-API-Key"
 _api_key_scheme = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
 
-#: Grenze fuer den gepufferten Upload-Lesevorgang.
+#: Grenze für den gepufferten Upload-Lesevorgang.
 _CHUNK_SIZE = 1024 * 1024
 #: So lange gilt ein Cloud-Verbindungstest als aktuell (Schutz vor Mehrfachklicks).
 CONNECTION_TEST_TTL_SECONDS = 15.0
@@ -144,7 +144,7 @@ Institutionelles Backend zur automatisierten Prüfung von Geschäftsdokumenten.
 * **Prüfdatenpaket (ZIP)** mit Originalbeleg, XML, Ledger-Auszug, Zertifikat und
   Ed25519-signiertem Manifest.
 * **Multi-Provider-Inferenz mit Ausweich-Kaskade**: lokal (Ollama) oder Gemini / Claude / GPT;
-  Wiederholung mit Backoff, Ausweichmodell, Ausweich-Schluessel, lokales Modell und zuletzt das
+  Wiederholung mit Backoff, Ausweichmodell, Ausweich-Schlüssel, lokales Modell und zuletzt das
   deterministische Regelwerk. Cloud-Aufrufe ausschließlich über das Privacy Gateway.
 * **Hintergrund-Jobs**: Analysen laufen asynchron mit Phase, Fortschritt, Restzeit und Abbruch
   (`/api/v1/jobs`); `POST /documents/{id}/extract?wait=true` wartet für Skripte auf das Ergebnis.
@@ -358,7 +358,7 @@ async def require_api_key(
     settings: Settings = request.app.state.settings
     if not settings.auth_enabled:
         return
-    # Konstantzeit-Vergleich: verhindert Timing-Angriffe auf den Schluessel.
+    # Konstantzeit-Vergleich: verhindert Timing-Angriffe auf den Schlüssel.
     if api_key and secrets.compare_digest(api_key.encode(), settings.api_key.encode()):
         return
     raise ApiKeyError()
@@ -456,7 +456,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
 
     @application.exception_handler(LLMError)
     async def _handle_llm_error(_request: Request, exc: LLMError) -> JSONResponse:
-        # 400 bei fehlender Konfiguration, 503/504 bei Dienststoerung,
+        # 400 bei fehlender Konfiguration, 503/504 bei Dienststörung,
         # 502 bei unbrauchbarer Antwort oder abgelehntem Key.
         if isinstance(exc, ProviderNotConfiguredError):
             code = status.HTTP_400_BAD_REQUEST
@@ -553,7 +553,7 @@ async def _procedural_doc(
     verification: object | None = None,
     lang: str = "de",
 ) -> dict[str, object]:
-    """Baut die Verfahrensdokumentation aus Settings, Laufzeitstand, Ledger und Schluessel."""
+    """Baut die Verfahrensdokumentation aus Settings, Laufzeitstand, Ledger und Schlüssel."""
     ledger: AuditLedger = request.app.state.ledger
     if entries is None:
         entries = await ledger.list(document_id=record.id, limit=1000)  # type: ignore[attr-defined]
@@ -656,7 +656,7 @@ def _register_routes(application: FastAPI) -> None:
         }
         components: list[ComponentHealth] = [database, ollama]
         if is_cloud:
-            # Im Cloud-Modus ist Ollama optional; massgeblich ist der hinterlegte Key.
+            # Im Cloud-Modus ist Ollama optional; maßgeblich ist der hinterlegte Key.
             healthy = database.status == "ok" and bool(inference["configured"])
         else:
             healthy = all(item.status == "ok" for item in components)
@@ -1509,7 +1509,7 @@ def _register_routes(application: FastAPI) -> None:
                 raise ReleaseError("local_only", "Updates nur direkt am Server (localhost) einspielen.", 403)
             release = await anyio.to_thread.run_sync(
                 partial(manager.preflight, body.tag, body.commit,
-                        # Ein laufender Job zaehlt in beiden Zaehlern - Maximum statt Summe.
+                        # Ein laufender Job zählt in beiden Zählern - Maximum statt Summe.
                         active_analyses=max(PROGRESS.active, request.app.state.jobs.open_count))
             )
             database_file = (
@@ -1600,7 +1600,7 @@ def _register_routes(application: FastAPI) -> None:
         """Neueste Einträge zuerst; jeder Eintrag trägt ``previous_hash`` und ``entry_hash``.
 
         ``signature_status`` (``valid`` | ``invalid`` | ``unsigned``) weist für
-        Prüfer-Einträge die Ed25519-Signatur gegen den System-Schluessel aus.
+        Prüfer-Einträge die Ed25519-Signatur gegen den System-Schlüssel aus.
         """
         ledger: AuditLedger = request.app.state.ledger
         entries = await ledger.list(document_id=document_id, limit=limit)
@@ -1646,5 +1646,5 @@ def _register_routes(application: FastAPI) -> None:
         return await anyio.to_thread.run_sync(signer.public_info)
 
 
-# Modul-Level-Instanz fuer "uvicorn app.main:app".
+# Modul-Level-Instanz für "uvicorn app.main:app".
 app = create_app()

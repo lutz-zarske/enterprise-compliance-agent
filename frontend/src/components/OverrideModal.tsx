@@ -13,7 +13,7 @@ const MIN_REASON = 20;
 
 const LEVELS: AIActRiskLevel[] = ["unacceptable", "high", "limited", "minimal", "not_applicable"];
 
-/** Haeufige Normen fuer die Begruendung - frei editierbar. */
+/** Häufige Normen für die Begründung - frei editierbar. */
 const LEGAL_BASES = {
   de: [
     "Art. 6 Abs. 3 lit. a VO (EU) 2024/1689 (eng begrenzte Verfahrensaufgabe)",

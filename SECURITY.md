@@ -11,8 +11,8 @@ erwartete Auswirkung.
 
 | Version | Sicherheitskorrekturen |
 |---|---|
-| 2.6.x | ja |
-| < 2.6 | nein |
+| 2.7.x | ja |
+| < 2.7 | nein |
 
 ## Hinweise für den Betrieb
 

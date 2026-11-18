@@ -4,10 +4,10 @@ import React from "react";
 import { useI18n } from "./i18n";
 
 /**
- * Schlankes, sicheres Markdown fuer Copilot-Antworten - ohne Abhaengigkeit und ohne
- * ``dangerouslySetInnerHTML``: Absaetze, Aufzaehlungen (- / 1.), Zwischenueberschriften
+ * Schlankes, sicheres Markdown für Copilot-Antworten - ohne Abhängigkeit und ohne
+ * ``dangerouslySetInnerHTML``: Absätze, Aufzählungen (- / 1.), Zwischenüberschriften
  * (### ), **fett**, *kursiv*, `Code`.  Zeilenverweise "[Z. 4]" bzw. "[Z. 4-6]" werden zu
- * Knoepfen, die die Zeile im Belegtext anspringen.
+ * Knöpfen, die die Zeile im Belegtext anspringen.
  */
 export type CiteHandler = (line: number) => void;
 

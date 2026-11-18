@@ -1,9 +1,9 @@
-"""GoBD-Verfahrensdokumentation fuer den Pruefprozess (Entwurf aus dem Systemzustand).
+"""GoBD-Verfahrensdokumentation für den Prüfprozess (Entwurf aus dem Systemzustand).
 
 Gliederung nach GoBD Rz. 153 (BMF-Schreiben vom 28.11.2019 in der geltenden
 Fassung): allgemeine Beschreibung, Anwenderdokumentation, technische
 Systemdokumentation, Betriebsdokumentation.  Ein Anhang stellt den Bezug zum
-konkreten Beleg her (Pruefpfad, Ledger-Eintraege, Siegel, Aufbewahrungsfrist).
+konkreten Beleg her (Prüfpfad, Ledger-Einträge, Siegel, Aufbewahrungsfrist).
 
 Einordnung
 ----------
@@ -12,7 +12,7 @@ nicht einen einzelnen Beleg.  Das System kennt seine eigene Technik genau, die
 Organisation des Unternehmens dagegen nicht: Verantwortliche, Rollen und
 Intervalle sind deshalb als ``[vom Unternehmen zu ergaenzen]`` markiert.  Der
 Generator liefert einen belastbaren technischen Kern, keinen fertigen
-Pruefungsnachweis.  Fuer ersetzendes Scannen gelten ergaenzend die
+Prüfungsnachweis.  Für ersetzendes Scannen gelten ergänzend die
 Muster-Verfahrensdokumentation von BStBK/DStV und die BSI TR-03138 (RESISCAN) -
 das System scannt nicht und ist davon nicht erfasst.
 
@@ -248,7 +248,7 @@ def build_procedural_doc(
     signing_key: dict[str, str],
     lang: str = "de",
 ) -> dict[str, Any]:
-    """Strukturierte Verfahrensdokumentation (Grundlage fuer HTML und Markdown)."""
+    """Strukturierte Verfahrensdokumentation (Grundlage für HTML und Markdown)."""
     snapshot = runtime.snapshot() if runtime is not None else None
     inference_mode = snapshot.inference_mode.value if snapshot else settings.inference_mode
     model = snapshot.active_model if snapshot else settings.ollama_model
@@ -786,7 +786,7 @@ def _sections_i18n(
 
 
 def _document_annex(record: DocumentRecord, entries: list[LedgerEntry], *, lang: str = "de") -> dict[str, Any]:
-    """Anhang A: Pruefpfad des konkreten Belegs."""
+    """Anhang A: Prüfpfad des konkreten Belegs."""
     ui = _PD_UI.get(lang, _PD_UI["de"])
     event_labels = _EVENT_LABELS_I18N.get(lang, _EVENT_LABELS)
     path_labels = _PATH_LABELS_I18N.get(lang, _PATH_LABELS)

@@ -1,15 +1,15 @@
-"""Optionales Tagesbudget fuer Cloud-Sprachmodelle ("Bring Your Own Key").
+"""Optionales Tagesbudget für Cloud-Sprachmodelle ("Bring Your Own Key").
 
-Wer einen eigenen Cloud-Schluessel hinterlegt, soll nicht mit einem Stapel
+Wer einen eigenen Cloud-Schlüssel hinterlegt, soll nicht mit einem Stapel
 Belege unbemerkt eine hohe Rechnung erzeugen.  Deshalb:
 
 * Jede Cloud-Antwort bucht ihre Tokens (aus den Nutzungsangaben des Anbieters,
-  sonst geschaetzt: vier Zeichen je Token).
-* Vor jedem Cloud-Aufruf wird geprueft, ob das Tageslimit erreicht ist
+  sonst geschätzt: vier Zeichen je Token).
+* Vor jedem Cloud-Aufruf wird geprüft, ob das Tageslimit erreicht ist
   (``CLOUD_DAILY_TOKEN_LIMIT``; Standard ``-1`` = ohne Limit).  Ist es erreicht,
-  ueberspringt die Kaskade alle Cloud-Stufen - lokal oder das Regelwerk
-  uebernehmen, die Pruefung bricht nicht ab.
-* Lokale Modelle (Ollama) zaehlen nicht.
+  überspringt die Kaskade alle Cloud-Stufen - lokal oder das Regelwerk
+  übernehmen, die Prüfung bricht nicht ab.
+* Lokale Modelle (Ollama) zählen nicht.
 
 Gespeichert wird nur die Tagessumme je Modell (``data/ai_usage.json``), nie ein
 Prompt oder eine Antwort.
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class BudgetExceededError(LLMError):
-    """Tagesbudget fuer Cloud-Tokens aufgebraucht."""
+    """Tagesbudget für Cloud-Tokens aufgebraucht."""
 
     code = "cloud_budget_exceeded"
     hint = "Bis morgen lokal prüfen – lokale Modelle sind nicht begrenzt – oder das Tageslimit unter Einstellungen › KI-Einrichtung › Ausweich-Kaskade anheben."
@@ -39,7 +39,7 @@ class BudgetExceededError(LLMError):
 
 
 def tokens_from_response(provider: str, data: dict[str, Any], prompt_chars: int = 0) -> int:
-    """Verbrauchte Tokens laut Anbieterantwort; ohne Angabe grob geschaetzt."""
+    """Verbrauchte Tokens laut Anbieterantwort; ohne Angabe grob geschätzt."""
     if provider == "gemini":
         usage = data.get("usageMetadata") or {}
         if usage.get("totalTokenCount"):

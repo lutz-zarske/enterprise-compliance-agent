@@ -4,9 +4,9 @@
  * Blendet den Kaltstart-Splash aus (Markup steht im Server-HTML von layout.tsx).
  *
  * Der Splash deckt den ersten Paint ab, bis die Seite ihre Startdaten hat -
- * dann meldet page.tsx ``meldeBereit()``. Spaetestens nach SPLASH_MAX_MS geht er
+ * dann meldet page.tsx ``meldeBereit()``. Spätestens nach SPLASH_MAX_MS geht er
  * auch ohne Meldung (Backend offline); ohne JavaScript nimmt ihn CSS weg.
- * Bewusst DOM statt React-Zustand: das Server-Markup bleibt bei der Hydration unveraendert.
+ * Bewusst DOM statt React-Zustand: das Server-Markup bleibt bei der Hydration unverändert.
  */
 import { useEffect } from "react";
 

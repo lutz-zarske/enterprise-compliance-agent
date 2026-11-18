@@ -1,20 +1,20 @@
 """In-Memory-Rate-Limiting nach dem Token-Bucket-Verfahren.
 
-Schuetzt die teuren Routen (Upload, Extraktion, Copilot) vor Ueberlastung:
+Schützt die teuren Routen (Upload, Extraktion, Copilot) vor Überlastung:
 Ein lokales 14B-Modell bearbeitet nur wenige Anfragen gleichzeitig, und
 Cloud-Provider rechnen pro Token ab.
 
-Jeder Client (IP-Adresse) erhaelt pro Routengruppe einen eigenen Eimer mit
+Jeder Client (IP-Adresse) erhält pro Routengruppe einen eigenen Eimer mit
 ``capacity`` Token, der kontinuierlich mit ``capacity / 60`` Token pro Sekunde
-nachgefuellt wird.  Kurze Spitzen sind damit erlaubt, Dauerlast nicht.
+nachgefüllt wird.  Kurze Spitzen sind damit erlaubt, Dauerlast nicht.
 
-Grenzen der Loesung (bewusst dokumentiert):
+Grenzen der Lösung (bewusst dokumentiert):
 
 * Der Zustand liegt im Prozessspeicher.  Bei mehreren uvicorn-Workern oder
-  Replikas hat jeder Prozess eigene Eimer; fuer horizontale Skalierung gehoert
+  Replikas hat jeder Prozess eigene Eimer; für horizontale Skalierung gehört
   das Limit in Redis oder an das API-Gateway / den Reverse-Proxy.
 * Hinter einem Reverse-Proxy ist die Client-IP die des Proxys, sofern uvicorn
-  nicht mit ``--proxy-headers`` und ``--forwarded-allow-ips`` laeuft.
+  nicht mit ``--proxy-headers`` und ``--forwarded-allow-ips`` läuft.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from fastapi import Request
 
 
 class RateLimitExceededError(Exception):
-    """Das Kontingent einer Routengruppe ist erschoepft."""
+    """Das Kontingent einer Routengruppe ist erschöpft."""
 
     code = "rate_limited"
 
@@ -50,7 +50,7 @@ class _Bucket:
 class TokenBucketLimiter:
     """Threadsicherer Token-Bucket je (Gruppe, Client)."""
 
-    #: Eimer, die laenger als so viele Sekunden unbenutzt sind, werden entfernt.
+    #: Eimer, die länger als so viele Sekunden unbenutzt sind, werden entfernt.
     _IDLE_EVICTION_SECONDS = 600
 
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
@@ -104,7 +104,7 @@ class TokenBucketLimiter:
 
 
 def client_key(request: Request) -> str:
-    """Identifiziert den Client fuer das Rate-Limit (IP-Adresse)."""
+    """Identifiziert den Client für das Rate-Limit (IP-Adresse)."""
     return request.client.host if request.client else "unknown"
 
 

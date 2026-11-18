@@ -18,9 +18,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.demo import HYBRID_INVOICE, build_cii_invoice
-from app.extractors.einvoice import parse_einvoice_xml, service_time, to_extraction, xrechnung_version_notice
+from app.extractors.einvoice import (
+    PARSER_VERSION,
+    parse_einvoice_xml,
+    service_time,
+    to_extraction,
+    xrechnung_version_notice,
+)
 from app.schemas import ScoreBand
-from app.scoring import labeled_amounts, presented_band, verdict_band
+from app.scoring import (
+    RULESET_VERSION,
+    XRECHNUNG_RESERVATION,
+    labeled_amounts,
+    presented_band,
+    verdict_band,
+    xrechnung_deviation,
+)
 from tests.conftest import FakeOllama
 
 FIXTURES = Path(__file__).parent / "fixtures" / "official"
@@ -76,6 +89,86 @@ def test_mustang_invalid_xrechnung_versionshinweis(client: TestClient, fake_olla
     assert "XRechnung 3.0" in version["detail"]
     assert any(rule.startswith("BR-DE-2:") for rule in detail["einvoice"]["rule_violations"])
     assert "BR-DE-2" in _check(card, "en16931")["detail"]
+    # Pflichtangaben erfüllt, aber nicht konform zur angegebenen XRechnung: Vorbehalt ohne Abzug.
+    assert card["score"] == 100
+    assert card["release_recommendation"] == XRECHNUNG_RESERVATION
+    assert (card["band"], card["band_label"], card["release_blocked"]) == ("amber", "Freigabe unter Vorbehalt", False)
+    assert "öffentlicher Auftraggeber" in version["risk_note"]
+
+
+def test_xrechnung_vorbehalt_nur_bei_xrechnung_kennung() -> None:
+    contact = re.compile(rb"<cac:Contact>.*?</cac:Contact>", re.S)
+    data = (FIXTURES / "01.01a-INVOICE_ubl.xml").read_bytes()
+    without_contact = contact.sub(b"", data, count=1)
+    assert xrechnung_deviation(parse_einvoice_xml(without_contact)) is True  # BR-DE-2
+    assert xrechnung_deviation(parse_einvoice_xml(data)) is False
+    en16931 = without_contact.replace(b"#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0", b"")
+    invoice = parse_einvoice_xml(en16931)
+    assert invoice.profile_key == "en16931" and xrechnung_deviation(invoice) is False
+
+
+# ---------------------------------------------------------------------------
+# Neuprüfung liest das Original mit dem aktuellen Parser (Belege aus älteren Versionen)
+# ---------------------------------------------------------------------------
+
+
+def _upload(client: TestClient, name: str, content_type: str) -> str:
+    data = (FIXTURES / name).read_bytes()
+    response = client.post("/documents/upload", files={"file": (name, data, content_type)})
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def _set_stored(client: TestClient, document_id: str, values: dict) -> None:
+    client.app.state.repository._update(document_id, values)  # type: ignore[attr-defined]
+
+
+def test_neupruefung_liest_altes_xml_neu_ein(client: TestClient, fake_ollama: FakeOllama) -> None:
+    fake_ollama.offline = True
+    document_id = _upload(client, "01.01a-INVOICE_ubl.xml", "application/xml")
+    stored = client.get(f"/documents/{document_id}").json()["einvoice"]
+    # Stand eines älteren Parsers: Positionszeiträume nicht gelesen, keine Parser-Version.
+    old = {**stored, "parser_version": None, "lines": [
+        {**line, "period_start": None, "period_end": None} for line in stored["lines"]
+    ]}
+    _set_stored(client, document_id, {"einvoice": old})
+
+    card = client.post(f"/documents/{document_id}/extract?wait=true").json()["scorecard"]
+    assert _check(card, "ustg_6_service_date")["status"] == "pass"
+    assert (card["score"], card["release_blocked"]) == (100, False)
+    detail = client.get(f"/documents/{document_id}").json()
+    assert detail["einvoice"]["parser_version"] == PARSER_VERSION
+    assert "BG-26" in detail["text_view"]["text"]
+    entry = client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"][0]
+    assert entry["details"]["einvoice_parser"] == PARSER_VERSION
+    assert entry["details"]["einvoice_reread"] is True
+    assert entry["details"]["ruleset_version"] == RULESET_VERSION
+
+
+def test_neupruefung_wiederholt_den_pdf_abgleich(client: TestClient, fake_ollama: FakeOllama) -> None:
+    fake_ollama.offline = True
+    document_id = _upload(client, "EN16931_Einfach.pdf", "application/pdf")
+    stored = client.get(f"/documents/{document_id}").json()["einvoice"]
+    old_checks = [
+        {**check, "status": "mismatch", "visual_value": "15,12 EUR"} if check["bt"] == "BT-109" else check
+        for check in stored["visual_check"]
+    ]
+    _set_stored(client, document_id, {"einvoice": {**stored, "parser_version": None, "visual_check": old_checks}})
+
+    card = client.post(f"/documents/{document_id}/extract?wait=true").json()["scorecard"]
+    assert _check(card, "xml_primacy")["status"] == "pass"
+    assert (card["score"], card["band"]) == (100, "green")
+    checks = client.get(f"/documents/{document_id}").json()["einvoice"]["visual_check"]
+    assert all(check["status"] == "match" for check in checks)
+
+
+def test_neupruefung_ohne_aenderung_schreibt_nichts_neu(client: TestClient, fake_ollama: FakeOllama) -> None:
+    fake_ollama.offline = True
+    document_id = _upload(client, "01.01a-INVOICE_ubl.xml", "application/xml")
+    client.post(f"/documents/{document_id}/extract?wait=true")
+    entry = client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"][0]
+    assert "einvoice_reread" not in entry["details"]
+    assert entry["details"]["einvoice_parser"] == PARSER_VERSION
 
 
 # ---------------------------------------------------------------------------

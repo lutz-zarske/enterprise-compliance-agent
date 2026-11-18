@@ -109,7 +109,7 @@ def test_lesefassung_und_extraktion_aus_xml() -> None:
     assert extraction.doc_type.value == "invoice"
     assert extraction.sender == "Softwarehaus Nordhessen GmbH"
     assert extraction.total_amount == Decimal("1297.00")
-    assert extraction.tax_rate is None  # Mischsteuersatz: Pruefung je Satz aus BG-23
+    assert extraction.tax_rate is None  # Mischsteuersatz: Prüfung je Satz aus BG-23
     assert extraction.service_period == "01.09.2026 - 30.09.2026"
 
 
@@ -137,14 +137,14 @@ def test_profil_erkennung(spec: str, key: str, label: str) -> None:
 def test_minimum_profil_ist_keine_e_rechnung() -> None:
     invoice = parse_einvoice_xml(build_cii_invoice(hybrid_spec(specification_id="urn:factur-x.eu:1p0:minimum")))
     assert invoice.is_einvoice is False
-    assert invoice.rule_violations == []  # Geschaeftsregeln gelten fuer MINIMUM nicht
+    assert invoice.rule_violations == []  # Geschäftsregeln gelten für MINIMUM nicht
     embedded = invoice.model_copy(update={"source": "embedded"})
     assert uses_structured_path(embedded) is False  # Bildteil ist die Rechnung
     assert uses_structured_path(invoice) is True  # reines XML: es gibt nur den Datensatz
 
 
 # ---------------------------------------------------------------------------
-# Sicherheit und Fehlerfaelle
+# Sicherheit und Fehlerfälle
 # ---------------------------------------------------------------------------
 
 
@@ -243,7 +243,7 @@ def test_diskrepanz_bei_abweichenden_betraegen() -> None:
     assert "§ 14c" in (primacy.risk_note or "")
     assert card.score == 90
     assert "Abweichung zwischen XML und PDF" in card.release_recommendation
-    # Massgeblich bleiben die XML-Werte: Mathematik und Pflichtangaben sind sauber.
+    # Maßgeblich bleiben die XML-Werte: Mathematik und Pflichtangaben sind sauber.
     assert all(c.status.value == "pass" for c in next(t for t in card.tiles if t.key == "math").checks)
 
 

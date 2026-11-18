@@ -2,13 +2,13 @@
 
 Zwei Aufgaben:
 
-1. **Durchsetzung der Maskierung.** Ein LLM haelt sich nicht garantiert an die
-   Anweisung, nur maskierte Werte zurueckzugeben.  Alles, was aus dem Modell
-   kommt, laeuft hier durch, bevor es in die Datenbank geschrieben wird.
-2. **Deterministische Zweitmeinung.** Regulaere Ausdruecke und Schluesselwort-
-   listen finden IBANs, Ausweisnummern, Gesundheits- und Religionsbezuege
+1. **Durchsetzung der Maskierung.** Ein LLM hält sich nicht garantiert an die
+   Anweisung, nur maskierte Werte zurückzugeben.  Alles, was aus dem Modell
+   kommt, läuft hier durch, bevor es in die Datenbank geschrieben wird.
+2. **Deterministische Zweitmeinung.** Reguläre Ausdrücke und Schlüsselwort-
+   listen finden IBANs, Ausweisnummern, Gesundheits- und Religionsbezüge
    reproduzierbar.  Zusammen mit der LLM-Bewertung entsteht ein Audit, das
-   auch dann Treffer meldet, wenn das Modell etwas uebersieht - und das die
+   auch dann Treffer meldet, wenn das Modell etwas übersieht - und das die
    Herkunft jedes Treffers ausweist (``source``).
 """
 
@@ -25,7 +25,7 @@ from app.schemas import (
     iban_checksum_valid,
 )
 
-#: Kategorien, deren Wert ein direkter Identifikator ist und maskiert gehoert.
+#: Kategorien, deren Wert ein direkter Identifikator ist und maskiert gehört.
 IDENTIFIER_CATEGORIES: frozenset[PIICategory] = frozenset(
     {
         PIICategory.ID_DOCUMENT_NUMBER,
@@ -39,10 +39,10 @@ IDENTIFIER_CATEGORIES: frozenset[PIICategory] = frozenset(
     }
 )
 
-#: Hoechstzahl an Treffern je Kategorie, damit ein Serienbrief das Audit nicht flutet.
+#: Höchstzahl an Treffern je Kategorie, damit ein Serienbrief das Audit nicht flutet.
 MAX_FINDINGS_PER_CATEGORY = 5
 
-#: Laenge des Kontextausschnitts um einen regelbasierten Treffer herum.
+#: Länge des Kontextausschnitts um einen regelbasierten Treffer herum.
 CONTEXT_WINDOW = 60
 
 
@@ -78,8 +78,8 @@ _IBAN_PATTERN = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){2,8}\b")
 _EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b")
 _PHONE_PATTERN = re.compile(r"(?:\+49|0049|\(0\)|\b0)[\s/.-]?\d{2,5}[\s/.-]?\d{3,}\b")
 _LONG_DIGITS_PATTERN = re.compile(r"\b\d{8,}\b")
-#: Leitweg-IDs oeffentlicher Auftraggeber (z. B. 04011000-1234512345-06) sind
-#: Behoerdenkennungen, keine Telefonnummern - erkannt am gueltigen Pruefziffernpaar.
+#: Leitweg-IDs öffentlicher Auftraggeber (z. B. 04011000-1234512345-06) sind
+#: Behördenkennungen, keine Telefonnummern - erkannt am gültigen Prüfziffernpaar.
 _LEITWEG_CANDIDATE = re.compile(r"\b\d{2,12}(?:-[A-Za-z0-9]{1,30})?-\d{2}\b")
 
 
@@ -112,9 +112,9 @@ def redact_text(value: str, *, limit: int | None = None) -> str:
 def enforce_masking(findings: Iterable[PIIFinding], *, enabled: bool = True) -> list[PIIFinding]:
     """Erzwingt die Maskierung aller Treffer, bevor sie persistiert werden.
 
-    Auch wenn das LLM den Klartextwert liefert, verlaesst er diese
+    Auch wenn das LLM den Klartextwert liefert, verlässt er diese
     Funktion nur maskiert.  Bei ``enabled=False`` wird lediglich der Kontext
-    gekuerzt (Debug-Betrieb, ausdruecklich konfiguriert).
+    gekürzt (Debug-Betrieb, ausdrücklich konfiguriert).
     """
     result: list[PIIFinding] = []
     for finding in findings:
@@ -140,7 +140,7 @@ def enforce_masking(findings: Iterable[PIIFinding], *, enabled: bool = True) -> 
 # Regelbasierte Erkennung
 # ---------------------------------------------------------------------------
 
-#: Schluesselwoerter fuer besondere Kategorien nach Art. 9/10 DSGVO.
+#: Schlüsselwörter für besondere Kategorien nach Art. 9/10 DSGVO.
 KEYWORD_RULES: dict[PIICategory, tuple[str, ...]] = {
     PIICategory.HEALTH_DATA: (
         "diagnose", "krankheit", "erkrankung", "patient", "patientin", "arztbericht",
@@ -180,9 +180,9 @@ KEYWORD_RULES: dict[PIICategory, tuple[str, ...]] = {
     ),
 }
 
-#: Kurze Schluesselwoerter nur am Wortanfang: sonst trifft "reha" in
-#: "Softwarehaus".  Laengere Begriffe bleiben Teilstrings (deutsche Komposita
-#: wie "Arztattest" oder "Universitaetsklinik").
+#: Kurze Schlüsselwörter nur am Wortanfang: sonst trifft "reha" in
+#: "Softwarehaus".  Längere Begriffe bleiben Teilstrings (deutsche Komposita
+#: wie "Arztattest" oder "Universitätsklinik").
 _SHORT_KEYWORD = 5
 _KEYWORD_OVERRIDES = {"rezept": r"rezept(?!ion)"}  # "Rezeption" ist kein Gesundheitsdatum
 
@@ -197,7 +197,7 @@ _KEYWORD_PATTERNS: dict[str, re.Pattern[str]] = {
     keyword: _keyword_pattern(keyword) for keywords in KEYWORD_RULES.values() for keyword in keywords
 }
 
-#: Muster fuer schluesselwortverankerte Identifikatoren.
+#: Muster für schlüsselwortverankerte Identifikatoren.
 _ANCHORED_PATTERNS: tuple[tuple[PIICategory, re.Pattern[str]], ...] = (
     (
         PIICategory.ID_DOCUMENT_NUMBER,
@@ -235,7 +235,7 @@ _ANCHORED_PATTERNS: tuple[tuple[PIICategory, re.Pattern[str]], ...] = (
 
 
 def _context_around(text: str, start: int, end: int) -> str:
-    """Schneidet einen bereits entschaerften Kontext um eine Fundstelle."""
+    """Schneidet einen bereits entschärften Kontext um eine Fundstelle."""
     left = max(start - CONTEXT_WINDOW, 0)
     right = min(end + CONTEXT_WINDOW, len(text))
     return redact_text(text[left:right], limit=300)
@@ -261,7 +261,7 @@ def scan_text(text: str) -> list[PIIFinding]:
             )
         )
 
-    # --- IBANs (mit Pruefsumme, daher praktisch falsch-positiv-frei) --------
+    # --- IBANs (mit Prüfsumme, daher praktisch falsch-positiv-frei) --------
     iban_spans: list[tuple[int, int]] = []
     for match in _IBAN_PATTERN.finditer(text):
         iban_spans.append(match.span())
@@ -276,12 +276,12 @@ def scan_text(text: str) -> list[PIIFinding]:
     leitweg_spans = _leitweg_spans(text)
     for match in _PHONE_PATTERN.finditer(text):
         if _overlaps(match.span(), iban_spans) or _overlaps(match.span(), leitweg_spans):
-            continue  # Ziffernbloecke einer IBAN oder Leitweg-ID sind keine Telefonnummer.
+            continue  # Ziffernblöcke einer IBAN oder Leitweg-ID sind keine Telefonnummer.
         digits = re.sub(r"\D", "", match.group(0))
         if len(digits) >= 7:
             add(PIICategory.CONTACT_DATA, mask_value(match.group(0).strip()), *match.span(), 0.7)
 
-    # --- Schluesselwortverankerte Identifikatoren --------------------------
+    # --- Schlüsselwortverankerte Identifikatoren --------------------------
     for category, pattern in _ANCHORED_PATTERNS:
         for match in pattern.finditer(text):
             add(category, mask_value(match.group(1).strip()), *match.span(), 0.9)
@@ -304,7 +304,7 @@ def scan_text(text: str) -> list[PIIFinding]:
 
 
 # ---------------------------------------------------------------------------
-# Zusammenfuehrung von LLM- und Regelbefunden
+# Zusammenführung von LLM- und Regelbefunden
 # ---------------------------------------------------------------------------
 
 
@@ -318,8 +318,8 @@ def merge_findings(
 ) -> list[PIIFinding]:
     """Vereinigt beide Quellen und markiert Doppeltreffer als ``both``.
 
-    Doppelt gefundene Werte erhoehen die Konfidenz - was Regeln *und* Modell
-    unabhaengig voneinander finden, ist selten ein Fehlalarm.
+    Doppelt gefundene Werte erhöhen die Konfidenz - was Regeln *und* Modell
+    unabhängig voneinander finden, ist selten ein Fehlalarm.
     """
     merged: dict[tuple[str, str], PIIFinding] = {}
 
@@ -335,7 +335,7 @@ def merge_findings(
                 candidate for candidate in merged.values() if candidate.category == finding.category
             ]
             if same_category and finding.category in SPECIAL_CATEGORIES:
-                # Beschreibende Kategorien nicht mehrfach auffuehren, sondern
+                # Beschreibende Kategorien nicht mehrfach aufführen, sondern
                 # den vorhandenen Treffer auf "both" hochstufen.
                 first = same_category[0]
                 merged[_dedupe_key(first)] = first.model_copy(
@@ -365,7 +365,7 @@ def merge_findings(
 # Textansicht mit Maskierungsstufen (strict | standard | audit_only)
 # ---------------------------------------------------------------------------
 
-#: Hoechstlaenge der Textansicht im Inspektor.
+#: Höchstlänge der Textansicht im Inspektor.
 TEXT_VIEW_LIMIT = 20_000
 
 _DATE_PATTERN = re.compile(r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b")
@@ -387,7 +387,7 @@ _VIEW_CATEGORIES: dict[str, tuple[str, str | None]] = {
     "DATE": ("Datum", "[DATUM]"),
 }
 
-#: Welche Kategorien je Stufe tatsaechlich geschwaerzt werden.
+#: Welche Kategorien je Stufe tatsächlich geschwärzt werden.
 MASKED_BY_LEVEL: dict[str, frozenset[str]] = {
     "strict": frozenset(_VIEW_CATEGORIES),
     "standard": frozenset(
@@ -396,7 +396,7 @@ MASKED_BY_LEVEL: dict[str, frozenset[str]] = {
     "audit_only": frozenset(),
 }
 
-#: Abgleich Textansicht <-> Befundliste (fuer die Quelle "both").
+#: Abgleich Textansicht <-> Befundliste (für die Quelle "both").
 _FINDING_CATEGORY: dict[str, PIICategory] = {
     "EMAIL": PIICategory.CONTACT_DATA,
     "PHONE": PIICategory.CONTACT_DATA,
@@ -409,11 +409,11 @@ _FINDING_CATEGORY: dict[str, PIICategory] = {
 
 
 def _collect_view_spans(text: str) -> list[tuple[int, int, str, str]]:
-    """(start, end, kategorie, wert) - ohne Ueberlappungen, nach Position sortiert."""
+    """(start, end, kategorie, wert) - ohne Überlappungen, nach Position sortiert."""
     from app.privacy_vault import PrivacyVault  # lokaler Import: vermeidet Zyklus
 
     raw: list[tuple[int, int, str, str]] = []
-    # Hoechste Prioritaet: verankerte Identifikatoren und Art.-9-Schluesselwoerter.
+    # Höchste Priorität: verankerte Identifikatoren und Art.-9-Schlüsselwörter.
     for category, pattern in _ANCHORED_PATTERNS:
         name = {
             PIICategory.ID_DOCUMENT_NUMBER: "ID_NUMBER",
@@ -433,7 +433,7 @@ def _collect_view_spans(text: str) -> list[tuple[int, int, str, str]]:
     for match in _DATE_PATTERN.finditer(text):
         raw.append((*match.span(), "DATE", match.group(0)))
 
-    # Leitweg-IDs sind Behoerdenkennungen: weder markieren noch schwaerzen.
+    # Leitweg-IDs sind Behördenkennungen: weder markieren noch schwärzen.
     leitweg = _leitweg_spans(text)
     chosen: list[tuple[int, int, str, str]] = []
     for item in raw:
@@ -448,13 +448,13 @@ def _collect_view_spans(text: str) -> list[tuple[int, int, str, str]]:
 def build_text_view(
     text: str, level: str, findings: Iterable[PIIFinding] = ()
 ) -> dict[str, object]:
-    """Erzeugt die Inspektor-Ansicht: geschwaerzter Text plus markierte Fundstellen.
+    """Erzeugt die Inspektor-Ansicht: geschwärzter Text plus markierte Fundstellen.
 
-    * ``strict``: alle erkannten Merkmale geschwaerzt (Namen, Firmen, Betraege,
+    * ``strict``: alle erkannten Merkmale geschwärzt (Namen, Firmen, Beträge,
       Datumsangaben, Adressen, Identifikatoren, Art.-9-Begriffe).
     * ``standard``: IBAN, Steuernummern/USt-IdNr., E-Mail, Telefon, Kennnummern
-      und Art.-9-Begriffe geschwaerzt; uebrige Treffer nur markiert.
-    * ``audit_only``: nichts geschwaerzt, alle Treffer markiert (interne Revision).
+      und Art.-9-Begriffe geschwärzt; übrige Treffer nur markiert.
+    * ``audit_only``: nichts geschwärzt, alle Treffer markiert (interne Revision).
     """
     level = level if level in MASKED_BY_LEVEL else "standard"
     truncated = len(text) > TEXT_VIEW_LIMIT

@@ -201,7 +201,7 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
 }
 
 /**
- * Ansicht „Protokoll“: die vollstaendige SHA-256-Hash-Kette (Prueferereignisse zusaetzlich
+ * Ansicht „Protokoll“: die vollständige SHA-256-Hash-Kette (Prüferereignisse zusätzlich
  * Ed25519-signiert) mit Systemereignissen, Exporte (GoBD-Paket, Verfahrensdokumentation)
  * und das Regelwerk.
  */
@@ -269,7 +269,7 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
     }
   }, []);
 
-  // Beim Oeffnen der Ansicht und nach jeder Aenderung des Kopf-Hashes neu laden.
+  // Beim Öffnen der Ansicht und nach jeder Änderung des Kopf-Hashes neu laden.
   useEffect(() => {
     if (active) void load();
   }, [active, load, ledger?.head_hash, ledger?.entries]);

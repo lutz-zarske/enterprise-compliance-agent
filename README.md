@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 351 pytest](https://img.shields.io/badge/pytest-351_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 355 pytest](https://img.shields.io/badge/pytest-355_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
 > Checks mandatory invoice details and arithmetic; it does not replace full
 > EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
-> FastAPI · Next.js 15 · 351 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 355 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -206,7 +206,7 @@ Handlungsanweisung – **es werden nie Ersatzdaten angezeigt.**
 | **EU AI Act** – VO (EU) 2024/1689 | Risikoklassen (Art. 5, Art. 6 Abs. 2 i. V. m. Anhang III, Art. 50), Anhang-III-Eskalation, Hinweis auf Art. 6 Abs. 3, Betreiberpflichten (Art. 26), Logging (Art. 12), menschliche Aufsicht (Art. 14) inkl. begründeter Übersteuerung (Art. 14 Abs. 4 lit. d) | Anhang-III-Pflichten ab **02.12.2027**, Anhang I ab 02.08.2028 nach **VO (EU) 2026/1744** (Digital Omnibus) |
 | **§ 14 Abs. 4 UStG** | Pflichtangaben Nr. 1–8 einzeln, Kleinbetragsrechnung (§ 33 UStDV), Vorsteuerrisiko (§ 15 UStG) | gültig |
 | **USt-IdNr.** – VIES, § 18e UStG | Live-Abfrage der USt-IdNr. des Ausstellers (BT-31) auf Klick; Momentaufnahme ohne Score-Einfluss. Die qualifizierte Bestätigung erteilt das BZSt | VIES-REST-Schnittstelle |
-| **E-Rechnung** – § 14 Abs. 1 UStG, EN 16931 | XML aus ZUGFeRD/Factur-X-PDFs und reine XRechnung (CII/UBL); Profil aus BT-24; Pflichtfelder und Summenregeln (BR-CO-10/13/14/15, BR-DE-15) | Empfangspflicht seit 01.01.2025; Ausstellungspflicht 2027/2028 |
+| **E-Rechnung** – § 14 Abs. 1 UStG, EN 16931 | XML aus ZUGFeRD/Factur-X-PDFs und reine XRechnung (CII/UBL); Profil aus BT-24; XRechnung-Version; Pflichtfelder, Leistungszeitraum (BT-72, BG-14, BG-26) und Geschäftsregeln (BR-CO-10/13/14/15, BR-DE-2, BR-DE-15, BR-DE-TMP-32) | Empfangspflicht seit 01.01.2025; Ausstellungspflicht 2027/2028 |
 | **XML-Vorrang** – BMF-Schreiben vom 15.10.2024, Rz. 36 | Bei hybriden Rechnungen ist der XML-Teil maßgeblich; Abgleich von acht Kernwerten mit dem Bildteil | präzisiert durch BMF-Schreiben vom 15.10.2025 |
 | **B2G** – § 5 Abs. 1 Nr. 1 ERechV, BR-DE-15 | Leitweg-ID bei öffentlichen Auftraggebern: Aufbau und Prüfziffer (ISO/IEC 7064, MOD 97-10) | KoSIT-Formatspezifikation 2.0.2 |
 | **§ 12 / § 14c UStG** | Zulässige Steuersätze, Steuerberechnung, Hinweis auf EuGH C-378/21 | BMF-Schreiben vom 27.02.2024 |
@@ -277,7 +277,7 @@ zuerst selbst (Standard nach 2 s und 5 s), dann übernimmt die nächste:
 ## Compliance-Scorecard (0–100)
 
 Der Score entsteht **nicht im Sprachmodell**, sondern in `app/scoring.py` aus
-festen, versionierten Regeln (Regelwerk 2026.2).
+festen, versionierten Regeln (Regelwerk 2026.3).
 
 | Kachel | Regel | Abzug |
 |---|---|---|
@@ -298,11 +298,14 @@ festen, versionierten Regeln (Regelwerk 2026.2).
 | | Amtliche Kennnummern natürlicher Personen | −5 |
 
 Bänder: **≥ 85 grün** (verkehrsfähig) · **60–84 gelb** (Nachbesserung) ·
-**< 60 rot** (Revisionssperre). Die Ampel folgt der Freigabeentscheidung: Grün
-gibt es nur ohne Mangel und ohne Vorbehalt; eine gesperrte Freigabe
-(„Nachforderung nötig“) oder ein Vorbehalt zeigt höchstens Gelb, auch bei
-Score 90. Reine Hinweise ohne Punktabzug – etwa eine nicht mehr gültige
-XRechnung-Version oder ein Verstoß gegen BR-DE-2 – ändern Score und Ampel nicht.
+**< 60 rot** (Revisionssperre). **Der Score misst Pflichtangaben und
+Rechenwerte, die Ampel bildet die Freigabeentscheidung ab:** Grün gibt es nur
+ohne Mangel und ohne Vorbehalt; eine gesperrte Freigabe („Nachforderung nötig“)
+oder ein Vorbehalt zeigt höchstens Gelb, auch bei Score 100. Weist sich ein
+Beleg als XRechnung aus und verletzt eine BR-DE-Regel oder nutzt eine nicht
+mehr gültige XRechnung-Version, lautet die Empfehlung „Freigabe unter
+Vorbehalt“ ohne Punktabzug – Eingangsplattformen öffentlicher Auftraggeber
+prüfen gegen diese Regeln. Für reine EN-16931-/ZUGFeRD-Profile gilt das nicht.
 Musterdaten: gültige Rechnung 100, Steuerfalle 45, KI-Recruiting-Vertrag 59
 (gedeckelt), ZUGFeRD-Rechnung 100.
 
@@ -432,12 +435,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 351 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 355 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-351 Tests (Stand v2.7.1) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+355 Tests (Stand v2.7.2) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -510,10 +513,10 @@ app/
   model_catalog.py     Live-Modell-Listen der Anbieter, Upgrade-Vorschlag
   ai_budget.py         Optionales Cloud-Tagesbudget
   local_ai.py          Ollama / LM Studio erkennen, Ollama starten und stoppen
-  scoring.py           Deterministische Scorecard (Regelwerk 2026.2)
+  scoring.py           Deterministische Scorecard (Regelwerk 2026.3)
   audit_ledger.py      Append-only-Ledger mit Hash-Kette und Signaturen
   extractors/          EN-16931-Parser (CII/UBL), PDF-Anhänge, Leitweg-ID
-  gobd_export.py · procedural_doc.py · reporting.py · retention.py · signing.py
+  gobd_export.py · procedural_doc.py · docx_export.py · reporting.py · print_layout.py · retention.py · signing.py
   redact.py            DLP-Gateway
   release.py           Release-Assistent
 frontend/src/
@@ -563,6 +566,3 @@ die Freigabe durch die Prüfperson.
 unter Apache 2.0 ([NOTICE](tests/fixtures/NOTICE)) · Änderungen je Version im
 [Changelog](CHANGELOG.md) · Sicherheitslücken bitte vertraulich melden
 ([SECURITY.md](SECURITY.md)).
----
-
-Entwickelt von Lutz Zarske · MIT-Lizenz

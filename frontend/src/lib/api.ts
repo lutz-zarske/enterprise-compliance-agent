@@ -1,9 +1,9 @@
 /**
- * HTTP-Client fuer das Compliance-Backend.
+ * HTTP-Client für das Compliance-Backend.
  *
  * Grundsatz: Keine Fallback- oder Mock-Daten. Ist das Backend nicht erreichbar,
- * wirft jeder Aufruf einen ApiError mit status 0 - die Oberflaeche zeigt dann
- * einen Offline-Hinweis statt erfundener Pruefergebnisse.
+ * wirft jeder Aufruf einen ApiError mit status 0 - die Oberfläche zeigt dann
+ * einen Offline-Hinweis statt erfundener Prüfergebnisse.
  */
 import type {
   BatchUploadResponse,
@@ -234,7 +234,7 @@ export async function fetchHealth(): Promise<HealthResponse> {
 export const api = {
   documents: (limit = 200) => request<DocumentListResponse>(`/documents?limit=${limit}`),
   document: (id: string) => request<DocumentDetail>(`/documents/${id}`),
-  /** Startet die Pruefung als Hintergrund-Job (HTTP 202) - kein Request wartet auf das Modell. */
+  /** Startet die Prüfung als Hintergrund-Job (HTTP 202) - kein Request wartet auf das Modell. */
   extract: (id: string) => request<JobSnapshot>(`/documents/${id}/extract`, { method: "POST" }),
   submitJobs: (documentIds: string[]) =>
     request<{ jobs: JobSnapshot[]; rejected: { document_id: string; code: string; message: string }[] }>(
@@ -300,7 +300,7 @@ export const api = {
   updateSettings: (update: SettingsUpdate) => request<RuntimeSettings>("/api/settings", json(update)),
   testConnection: (provider?: string) =>
     request<ConnectionTestResult>("/api/settings/test-connection", json({ provider: provider ?? null })),
-  /** Laedt beliebig viele Dateien in Paketen zu je 20 (Backend-Limit MAX_BATCH_FILES). */
+  /** Lädt beliebig viele Dateien in Paketen zu je 20 (Backend-Limit MAX_BATCH_FILES). */
   uploadBatch: async (files: File[]): Promise<BatchUploadResponse> => {
     const result: BatchUploadResponse = { items: [], succeeded: 0, failed: 0 };
     for (let start = 0; start < files.length; start += BATCH_SIZE) {

@@ -90,7 +90,7 @@ interface Message extends CopilotTurn {
   aborted?: boolean;
 }
 
-/** Beide Spalten fuellen das Fenster exakt (Kopfzeile 57 px + Innenabstand 2 x 16 px), nie unter 560 px. */
+/** Beide Spalten füllen das Fenster exakt (Kopfzeile 57 px + Innenabstand 2 x 16 px), nie unter 560 px. */
 const VIEW_HEIGHT = "h-[max(560px,calc(100vh-89px))] 2xl:h-[max(560px,calc(100vh-97px))]";
 
 /** Antwort zum Einfügen in E-Mail oder Ticket: Markdown-Hervorhebungen entfernt, Zeilenverweise bleiben. */
@@ -137,7 +137,7 @@ function SourceText({ document, cited }: { document: DocumentDetail; cited: numb
 }
 
 /**
- * Compliance Copilot als ruhiger Arbeitsbereich: links das Gespraech mit Live-Arbeitsschritten,
+ * Compliance Copilot als ruhiger Arbeitsbereich: links das Gespräch mit Live-Arbeitsschritten,
  * rechts der Beleg (Zeilenverweise springen hinein) oder der Entwurf der Korrekturanforderung.
  */
 export function CopilotView({ document, documents, onSelect, modelLabel, modelReady, active, onBusyChange }: {
@@ -193,7 +193,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
   const isReference = document?.provider === "reference";
   const suggestions = suggestionsFor(document, locale);
 
-  // Modell-Banner erst nach kurzer Verzoegerung - kein Aufblitzen waehrend des Kaltstarts.
+  // Modell-Banner erst nach kurzer Verzögerung - kein Aufblitzen während des Kaltstarts.
   useEffect(() => {
     const timer = window.setTimeout(() => setBannerReady(true), 900);
     return () => window.clearTimeout(timer);
@@ -214,7 +214,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
 
   useEffect(() => onBusyChange(busy), [busy, onBusyChange]);
 
-  // Laufzeit sekuendlich weiterzaehlen, solange gearbeitet wird.
+  // Laufzeit sekündlich weiterzählen, solange gearbeitet wird.
   useEffect(() => {
     if (!busy) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);

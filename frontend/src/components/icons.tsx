@@ -4,7 +4,7 @@ export interface IconProps extends React.SVGProps<SVGSVGElement> {
   size?: number | string;
 }
 
-/** Lucide-kompatible Strichsymbole ohne Zusatzabhaengigkeit. */
+/** Lucide-kompatible Strichsymbole ohne Zusatzabhängigkeit. */
 function icon(displayName: string, children: React.ReactNode) {
   const Component: React.FC<IconProps> = ({ size = 16, className = "", ...props }) => (
     <svg

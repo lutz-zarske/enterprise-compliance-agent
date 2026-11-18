@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv/app
 
-# Abhaengigkeiten zuerst -> maximale Layer-Cache-Ausnutzung.
+# Abhängigkeiten zuerst -> maximale Layer-Cache-Ausnutzung.
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 

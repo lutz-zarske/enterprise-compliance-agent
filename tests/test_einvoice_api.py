@@ -218,7 +218,7 @@ def test_manipuliertes_paket_wird_erkannt(client: TestClient) -> None:
                 target.writestr(name, change(name, source.read(name)))
         return buffer.getvalue()
 
-    # 1. XML-Datensatz veraendert -> Hash passt nicht mehr
+    # 1. XML-Datensatz verändert -> Hash passt nicht mehr
     tampered = rebuild(lambda name, data: data.replace(b"5712.00", b"5812.00") if name == "factur-x.xml" else data)
     result = verify_package(tampered, expected_fingerprint=fingerprint)
     assert result["valid"] is False
@@ -234,7 +234,7 @@ def test_manipuliertes_paket_wird_erkannt(client: TestClient) -> None:
 
     assert "Signatur ungültig" in verify_package(rebuild(forge))["signature"]
 
-    # 3. Fremder Schluessel -> Herkunft nicht belegt
+    # 3. Fremder Schlüssel -> Herkunft nicht belegt
     assert verify_package(original, expected_fingerprint="0000:0000")["valid"] is False
 
 

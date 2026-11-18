@@ -1,10 +1,10 @@
-"""Cloud-Provider fuer die Inferenz: Google Gemini, Anthropic Claude, OpenAI.
+"""Cloud-Provider für die Inferenz: Google Gemini, Anthropic Claude, OpenAI.
 
-Alle drei Clients sind schmale ``httpx``-Transporte ohne SDK-Abhaengigkeit.
+Alle drei Clients sind schmale ``httpx``-Transporte ohne SDK-Abhängigkeit.
 Sie erben Prompts, JSON-Extraktion, Schemavalidierung und Reparaturrunde von
 ``StructuredLLMClient`` - jeder Provider implementiert nur ``_post_chat``.
 
-Datenschutz: Diese Clients werden ausschliesslich ueber den
+Datenschutz: Diese Clients werden ausschließlich über den
 ``PrivacyVault`` (``app/privacy_vault.py``) angesprochen, der identifizierende
 Werte vor dem Versand pseudonymisiert.  Siehe ``app/inference.py``.
 """
@@ -23,15 +23,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Antwortlaenge fuer strukturierte Audits (JSON mit Begruendungen).
+#: Antwortlänge für strukturierte Audits (JSON mit Begründungen).
 MAX_OUTPUT_TOKENS = 4096
 
-#: HTTP-Status, bei denen eine Wiederholung bzw. die naechste Stufe der Kaskade lohnt.
+#: HTTP-Status, bei denen eine Wiederholung bzw. die nächste Stufe der Kaskade lohnt.
 OVERLOAD_STATUS = frozenset({408, 429, 500, 502, 503, 504, 529})
 
 
 def overload_message(label: str, status: int) -> str:
-    """Benennt die tatsaechliche Ursache je Status - Limit, Ueberlast oder Stoerung."""
+    """Benennt die tatsächliche Ursache je Status - Limit, Überlast oder Störung."""
     if status == 429:
         return f"{label} nimmt vorerst keine Anfragen an (HTTP 429: Anfragelimit oder Kontingent des API-Keys erreicht)."
     if status == 408:
@@ -42,7 +42,7 @@ def overload_message(label: str, status: int) -> str:
 
 
 class ProviderNotConfiguredError(LLMError):
-    """Cloud-Modus gewaehlt, aber kein API-Key hinterlegt."""
+    """Cloud-Modus gewählt, aber kein API-Key hinterlegt."""
 
     code = "provider_not_configured"
     hint = "API-Key unter Einstellungen › KI-Einrichtung hinterlegen oder auf 'Lokal' umschalten."
@@ -56,7 +56,7 @@ class ProviderAuthError(LLMError):
 
 
 class ProviderUnavailableError(LLMError):
-    """Provider nicht erreichbar, ueberlastet oder Kontingent erschoepft."""
+    """Provider nicht erreichbar, überlastet oder Kontingent erschöpft."""
 
     code = "provider_unavailable"
     hint = (
@@ -75,7 +75,7 @@ class ProviderTimeoutError(LLMError):
 
 
 class CloudLLMClient(StructuredLLMClient):
-    """Gemeinsame Fehlerabbildung fuer HTTP-basierte Cloud-Provider."""
+    """Gemeinsame Fehlerabbildung für HTTP-basierte Cloud-Provider."""
 
     provider = "cloud"
     label = "Cloud"
@@ -107,7 +107,7 @@ class CloudLLMClient(StructuredLLMClient):
 
     @property
     def key_hint(self) -> str:
-        """Letzte vier Zeichen des Schluessels - unterscheidet Ausweich-Schluessel im Protokoll."""
+        """Letzte vier Zeichen des Schlüssels - unterscheidet Ausweich-Schlüssel im Protokoll."""
         return f"...{self._api_key[-4:]}" if len(self._api_key) >= 8 else "****"
 
     async def aclose(self) -> None:
@@ -142,7 +142,7 @@ class CloudLLMClient(StructuredLLMClient):
         if response.status_code in OVERLOAD_STATUS or response.status_code >= 500:
             raise ProviderUnavailableError(overload_message(self.label, response.status_code))
         if response.status_code >= 400:
-            # Fehlertext des Providers kann Prompt-Auszuege enthalten -> gekuerzt.
+            # Fehlertext des Providers kann Prompt-Auszüge enthalten -> gekürzt.
             raise LLMResponseError(
                 f"{self.label} antwortet mit HTTP {response.status_code}: {response.text[:300]}"
             )
@@ -167,7 +167,7 @@ def _split_system(messages: list[dict[str, str]]) -> tuple[str, list[dict[str, s
 
 
 class GeminiClient(CloudLLMClient):
-    """Google Gemini ueber die Generative Language REST-API (``generateContent``)."""
+    """Google Gemini über die Generative Language REST-API (``generateContent``)."""
 
     provider = "gemini"
     label = "Google Gemini"
@@ -224,7 +224,7 @@ class GeminiClient(CloudLLMClient):
 
 
 class AnthropicClient(CloudLLMClient):
-    """Anthropic Claude ueber die Messages API."""
+    """Anthropic Claude über die Messages API."""
 
     provider = "anthropic"
     label = "Anthropic Claude"

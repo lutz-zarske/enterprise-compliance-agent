@@ -3,6 +3,12 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.7.2 – 18.11.2026
+
+- **Neuprüfung mit aktuellem Parser:** „Neu prüfen“ liest das gespeicherte Original neu ein – XML-Datensatz, Lesefassung und Abgleich mit dem PDF-Bildteil. Belege, die unter einer älteren Version hochgeladen wurden, erhalten so dieselben Befunde wie ein frischer Upload. Das Prüfprotokoll vermerkt die Parser-Version (`einvoice_parser`) und, ob neu eingelesen wurde (`einvoice_reread`); Regelwerk 2026.3.
+- **XRechnung-Konformität:** Weist sich ein Beleg als XRechnung aus und verletzt eine BR-DE-Regel oder nutzt eine nicht mehr gültige XRechnung-Version, lautet die Empfehlung „Freigabe unter Vorbehalt – XRechnung-Standard nicht eingehalten“ (gelb, ohne Punktabzug). Begründung im Befund: Pflichtangaben erfüllt, aber nicht konform zum angegebenen Standard; Eingangsplattformen öffentlicher Auftraggeber prüfen gegen diese Regeln. Reine EN-16931-/ZUGFeRD-Profile sind nicht betroffen.
+- README erklärt die Trennung: Der Score misst Pflichtangaben und Rechenwerte, die Ampel bildet die Freigabeentscheidung ab.
+
 ## v2.7.1 – 18.11.2026
 
 Praxistest mit offiziellen Musterrechnungen der KoSIT (XRechnung-Testsuite) und des Mustangproject.

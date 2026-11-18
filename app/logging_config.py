@@ -2,15 +2,15 @@
 
 * Jede Logzeile ist genau ein JSON-Objekt (``timestamp``, ``level``,
   ``logger``, ``message``, ``request_id`` und optionale Zusatzfelder).  Damit
-  laesst sich der Logstream ohne Parsing-Regeln in Loki, Elastic, Splunk oder
+  lässt sich der Logstream ohne Parsing-Regeln in Loki, Elastic, Splunk oder
   Azure Monitor einspielen.
 * Die ``request_id`` stammt aus einer ``ContextVar``: Die Middleware setzt sie
   einmal pro Anfrage, und jede Logzeile innerhalb dieser Anfrage - auch aus
-  tieferen Schichten wie ``services`` oder ``llm`` - traegt sie automatisch.
-* Der ``PIIRedactionFilter`` laeuft vor jeder Ausgabe und entfernt IBANs,
+  tieferen Schichten wie ``services`` oder ``llm`` - trägt sie automatisch.
+* Der ``PIIRedactionFilter`` läuft vor jeder Ausgabe und entfernt IBANs,
   E-Mail-Adressen, Telefonnummern und lange Ziffernfolgen aus Nachricht und
   Argumenten.  Er ist ein Sicherheitsnetz, kein Freibrief: Der Code loggt
-  grundsaetzlich keine Dokumentinhalte, sondern nur IDs, Zaehler und Dauern.
+  grundsätzlich keine Dokumentinhalte, sondern nur IDs, Zähler und Dauern.
 """
 
 from __future__ import annotations
@@ -23,10 +23,10 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
-#: Request-ID der aktuell bearbeiteten Anfrage ("-" ausserhalb einer Anfrage).
+#: Request-ID der aktuell bearbeiteten Anfrage ("-" außerhalb einer Anfrage).
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
-#: Erlaubtes Format fuer extern gelieferte Request-IDs (Schutz vor Log-Injection).
+#: Erlaubtes Format für extern gelieferte Request-IDs (Schutz vor Log-Injection).
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 #: Standardattribute eines LogRecord - alles andere gilt als Zusatzfeld.
@@ -35,7 +35,7 @@ _RESERVED = frozenset(
     | {"message", "asctime", "request_id", "color_message"}
 )
 
-#: Schluessel, deren Werte grundsaetzlich nie im Log erscheinen.
+#: Schlüssel, deren Werte grundsätzlich nie im Log erscheinen.
 _SENSITIVE_KEYS = frozenset(
     {"raw_text", "text", "content", "api_key", "authorization", "password", "secret"}
 )
@@ -48,14 +48,14 @@ _API_KEY = re.compile(r"\b(?:sk-[A-Za-z0-9_-]{8,}|AIza[0-9A-Za-z_-]{20,})\b")
 
 
 def normalize_request_id(candidate: str | None) -> str | None:
-    """Uebernimmt eine Client-Request-ID nur, wenn sie harmlos ist."""
+    """Übernimmt eine Client-Request-ID nur, wenn sie harmlos ist."""
     if candidate and _REQUEST_ID_RE.fullmatch(candidate):
         return candidate
     return None
 
 
 def scrub(value: str) -> str:
-    """Entfernt offensichtliche Identifikatoren und Schluessel aus einem String."""
+    """Entfernt offensichtliche Identifikatoren und Schlüssel aus einem String."""
     value = _API_KEY.sub("[SECRET]", value)
     value = _IBAN.sub("[IBAN]", value)
     value = _EMAIL.sub("[EMAIL]", value)
@@ -77,7 +77,7 @@ def _scrub_any(value: Any) -> Any:
 
 
 class PIIRedactionFilter(logging.Filter):
-    """Schwaerzt PII in Nachricht, Argumenten und Zusatzfeldern."""
+    """Schwärzt PII in Nachricht, Argumenten und Zusatzfeldern."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
@@ -114,7 +114,7 @@ class JsonFormatter(logging.Formatter):
             if key not in _RESERVED and not key.startswith("_"):
                 payload[key] = value
         if record.exc_info:
-            # Nur Typ und (geschwaerzte) Meldung - Tracebacks koennen Daten enthalten.
+            # Nur Typ und (geschwärzte) Meldung - Tracebacks können Daten enthalten.
             exc_type, exc_value = record.exc_info[0], record.exc_info[1]
             payload["exception"] = {
                 "type": exc_type.__name__ if exc_type else None,
@@ -124,7 +124,7 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(level: str = "INFO", *, json_logs: bool = True) -> None:
-    """Richtet den Root-Logger einmalig ein (idempotent, auch fuer uvicorn)."""
+    """Richtet den Root-Logger einmalig ein (idempotent, auch für uvicorn)."""
     root = logging.getLogger()
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
 

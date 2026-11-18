@@ -136,7 +136,7 @@ function Field({ label, hint, children }: { label: string; hint?: React.ReactNod
   );
 }
 
-/** Ueberschrift eines Bereichs; ``quiet``: Titel nur fuer Screenreader (der Reiter darueber nennt ihn schon). */
+/** Überschrift eines Bereichs; ``quiet``: Titel nur für Screenreader (der Reiter darüber nennt ihn schon). */
 function SectionTitle({ title, text, hint, quiet = false }: { title: string; text?: string; hint?: React.ReactNode; quiet?: boolean }) {
   const info = hint && (
     <Tooltip content={hint}>
@@ -283,9 +283,9 @@ function useSave(onSaved: (settings: RuntimeSettings) => void, notify: Notify) {
 }
 
 /**
- * 1-Klick Start/Stopp fuer Ollama (nur direkt am Server; im Container ueber docker compose).
- * ``compact``: nur ein knapper Start-Hinweis, und nur wenn Ollama installiert ist, aber nicht laeuft
- * (Kaskade mit lokalem Fallback - ohne Umweg ueber „KI-Modelle“).
+ * 1-Klick Start/Stopp für Ollama (nur direkt am Server; im Container über docker compose).
+ * ``compact``: nur ein knapper Start-Hinweis, und nur wenn Ollama installiert ist, aber nicht läuft
+ * (Kaskade mit lokalem Fallback - ohne Umweg über „KI-Modelle“).
  */
 function LocalAiControl({ active, onChanged, notify, compact = false }: { active: boolean; onChanged: () => void; notify: Notify; compact?: boolean }) {
   const { tr, td } = useI18n();
@@ -369,7 +369,7 @@ function LocalAiControl({ active, onChanged, notify, compact = false }: { active
   );
 }
 
-/** Letzter Verbindungstest je Konfiguration - bleibt beim Schliessen und erneuten Oeffnen sichtbar. */
+/** Letzter Verbindungstest je Konfiguration - bleibt beim Schließen und erneuten Öffnen sichtbar. */
 const lastTests = new Map<string, ConnectionTestResult>();
 const testKey = (settings: RuntimeSettings, mode: InferenceMode) =>
   `${mode}|${settings.models[mode]}|${mode === "local" ? "" : settings.masked_keys?.[mode] ?? ""}`;
@@ -383,7 +383,7 @@ function initialProvider(settings: RuntimeSettings): CloudMode | "" {
 /**
  * Anbieter → Key → Modelle, in dieser Reihenfolge freigeschaltet: Ohne Anbieter kein Key,
  * ohne hinterlegten Key keine Modell-Liste (der Anbieter liefert sie erst mit Key).
- * Ein Klick auf „Speichern“ speichert und prüft danach die Verbindung; waehrenddessen ist
+ * Ein Klick auf „Speichern“ speichert und prüft danach die Verbindung; währenddessen ist
  * der Knopf gesperrt, das Ergebnis steht als Haken daneben.
  */
 function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
@@ -422,7 +422,7 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
     if (!active) return;
     setLocation(settings.inference_mode === "local" ? "local" : "cloud");
     setProvider(initialProvider(settings));
-    // Nur beim Oeffnen synchronisieren - nicht bei jedem Speichern.
+    // Nur beim Öffnen synchronisieren - nicht bei jedem Speichern.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
@@ -1374,7 +1374,7 @@ function AboutSection({ version, release, checking, notify }: {
 
 const SOURCE_URL = "https://github.com/lutz-zarske/enterprise-compliance-agent";
 
-/** Einstellungen: Kategorien links, ruhige Formulare rechts; feste Hoehe, Inhalte scrollen im Panel. */
+/** Einstellungen: Kategorien links, ruhige Formulare rechts; feste Höhe, Inhalte scrollen im Panel. */
 export function SettingsModal({ open, settings, health, version, onClose, onSaved, onAccessChanged, notify }: Props) {
   const { tr } = useI18n();
   const [section, setSection] = useState<Section>("ai");
@@ -1383,7 +1383,7 @@ export function SettingsModal({ open, settings, health, version, onClose, onSave
   const [releaseChecking, setReleaseChecking] = useState(false);
   const needsSettings = section === "ai" || section === "compliance";
 
-  // Release-Status beim Oeffnen vorab laden: zuerst lokal (sofort), dann mit Abgleich des Servers.
+  // Release-Status beim Öffnen vorab laden: zuerst lokal (sofort), dann mit Abgleich des Servers.
   useEffect(() => {
     if (!open) return;
     let alive = true;

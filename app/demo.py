@@ -1,23 +1,23 @@
-"""Referenzdokumente fuer Live-Praesentationen (``POST /api/demo/seed``).
+"""Referenzdokumente für Live-Präsentationen (``POST /api/demo/seed``).
 
-Vier bewusst konstruierte Faelle decken Ampelfarben und E-Rechnung ab:
+Vier bewusst konstruierte Fälle decken Ampelfarben und E-Rechnung ab:
 
 1. ``Rechnung_Gueltig_14UStG.pdf`` - alle Pflichtangaben, korrekte Mathematik.
-   Erwartung: gruen, Score 100 (keine Abzuege nach Regelwerk 2026.2).
+   Erwartung: grün, Score 100 (keine Abzüge nach Regelwerk 2026.3).
 2. ``Rechnung_Fehlerhaft_Steuerfalle.pdf`` - keine Steuernummer/USt-IdNr. (-20),
-   unzulaessiger Steuersatz 16 % (-10), kein Leistungsdatum (-10), IBAN mit
-   falscher Pruefziffer (-15).  Erwartung: rot, Score 45.
-3. ``KI_Recruiting_Dienstleistervertrag.pdf`` - KI-gestuetztes Bewerber-
-   Screening (Anhang III Nr. 4) ohne Konformitaetsnachweis.  Erwartung: rot,
+   unzulässiger Steuersatz 16 % (-10), kein Leistungsdatum (-10), IBAN mit
+   falscher Prüfziffer (-15).  Erwartung: rot, Score 45.
+3. ``KI_Recruiting_Dienstleistervertrag.pdf`` - KI-gestütztes Bewerber-
+   Screening (Anhang III Nr. 4) ohne Konformitätsnachweis.  Erwartung: rot,
    Score gedeckelt auf 59.
 4. ``Rechnung_ZUGFeRD_Hybrid.pdf`` - hybride E-Rechnung (Profil EN 16931) mit
-   eingebettetem ``factur-x.xml`` an eine (fiktive) Kommune mit gueltiger
-   Leitweg-ID.  Erwartung: gruen, Score 100 - deterministisch aus dem XML,
+   eingebettetem ``factur-x.xml`` an eine (fiktive) Kommune mit gültiger
+   Leitweg-ID.  Erwartung: grün, Score 100 - deterministisch aus dem XML,
    ohne Sprachmodell und ohne Vorberechnung.
 
-Die Erwartungswerte gelten fuer eine vollstaendige Extraktion; da Stufe 3 der
-Pipeline ein LLM ist, kann ein schwaecheres Modell einzelne Felder verfehlen.
-Die Regex-Gegenprobe in ``app/scoring.py`` faengt die meisten dieser Faelle ab.
+Die Erwartungswerte gelten für eine vollständige Extraktion; da Stufe 3 der
+Pipeline ein LLM ist, kann ein schwächeres Modell einzelne Felder verfehlen.
+Die Regex-Gegenprobe in ``app/scoring.py`` fängt die meisten dieser Fälle ab.
 
 Die PDFs entstehen zur Laufzeit ohne Zusatzbibliothek (gleiches Verfahren wie
 in ``tests/conftest.py``).
@@ -45,7 +45,7 @@ def build_pdf(
     attachments: list[tuple[str, bytes, str]] | None = None,
     xmp: bytes | None = None,
 ) -> bytes:
-    """Minimales, gueltiges PDF mit echtem Textlayer (Helvetica, WinAnsi).
+    """Minimales, gültiges PDF mit echtem Textlayer (Helvetica, WinAnsi).
 
     ``attachments`` bettet Dateien wie bei ZUGFeRD/Factur-X ein
     (``/EmbeddedFiles`` + ``/AF`` mit ``/AFRelationship``); ``xmp`` setzt den
@@ -172,10 +172,10 @@ RECRUITING_LINES = [
 # Hybride E-Rechnung (ZUGFeRD 2.3 / Factur-X, Profil EN 16931)
 # ---------------------------------------------------------------------------
 #
-# Eine Quelle fuer XML und Bildteil: Beide werden aus ``HYBRID_INVOICE``
+# Eine Quelle für XML und Bildteil: Beide werden aus ``HYBRID_INVOICE``
 # erzeugt, damit der Abgleich XML <-> PDF in den Musterdaten deckungsgleich ist.
-# Kaeufer ist eine (fiktive) Kommune - so zeigt der Beleg auch die
-# B2G-Pruefung mit Leitweg-ID (Pruefziffer nach KoSIT-Spezifikation gueltig).
+# Käufer ist eine (fiktive) Kommune - so zeigt der Beleg auch die
+# B2G-Prüfung mit Leitweg-ID (Prüfziffer nach KoSIT-Spezifikation gültig).
 
 HYBRID_FILENAME = "Rechnung_ZUGFeRD_Hybrid.pdf"
 
@@ -233,8 +233,8 @@ def build_cii_invoice(spec: dict[str, Any]) -> bytes:
     """CII-Datensatz (ZUGFeRD 2.x / Factur-X) aus einer Rechnungsbeschreibung.
 
     Reihenfolge der Elemente folgt dem CII-Schema D16B; die Summen werden aus
-    den Positionen berechnet, ``spec["override"]`` kann sie fuer Tests gezielt
-    verfaelschen.
+    den Positionen berechnet, ``spec["override"]`` kann sie für Tests gezielt
+    verfälschen.
     """
     e = escape
     line_total = sum((line[4] for line in spec["lines"]), Decimal(0))
@@ -392,20 +392,20 @@ def demo_documents() -> list[tuple[str, bytes]]:
 
 
 # ---------------------------------------------------------------------------
-# Referenz-Audits: vorberechnete KI-Antworten fuer den Betrieb ohne Modell
+# Referenz-Audits: vorberechnete KI-Antworten für den Betrieb ohne Modell
 # ---------------------------------------------------------------------------
 #
-# Ersetzt wird ausschliesslich die *Modellantwort* (Extraktion + AI-Act-/
+# Ersetzt wird ausschließlich die *Modellantwort* (Extraktion + AI-Act-/
 # DSGVO-Audit).  Maskierungszwang, Regex-Zweitmeinung, Eskalationsregeln,
-# Scorecard und Ledger-Eintrag laufen ueber denselben Codepfad wie bei einer
-# echten Analyse.  Ergebnisse sind ueberall als Referenz-Audit gekennzeichnet
+# Scorecard und Ledger-Eintrag laufen über denselben Codepfad wie bei einer
+# echten Analyse.  Ergebnisse sind überall als Referenz-Audit gekennzeichnet
 # (``model="reference-fixture"``, ``provider="reference"``).
 
 #: Kennzeichnung in Datenbank, Ledger, UI und Zertifikat.
 REFERENCE_MODEL = "reference-fixture"
 REFERENCE_PROVIDER = "reference"
 
-#: Siegel der gueltigen Musterrechnung - ausdruecklich keine echte Pruefung.
+#: Siegel der gültigen Musterrechnung - ausdrücklich keine echte Prüfung.
 DEMO_AUDITOR = "Demo-Prüfer (Musterdaten)"
 DEMO_SEAL_NOTE = (
     "Referenz-Siegel der Musterdaten. Es dokumentiert den Ablauf, nicht die "
@@ -754,12 +754,12 @@ _BY_LANG = {
 
 @cache
 def hybrid_demo_sha256() -> str:
-    """SHA-256 der hybriden Musterrechnung - Musterantworten gelten nur fuer exakt diese Datei."""
+    """SHA-256 der hybriden Musterrechnung - Musterantworten gelten nur für exakt diese Datei."""
     return hashlib.sha256(build_hybrid_pdf(HYBRID_INVOICE)).hexdigest()
 
 
 def reference_answer(filename: str, question: str, lang: str = "de") -> str | None:
-    """Musterantwort fuer eine Standardfrage zu einem Musterdokument (sonst ``None``)."""
+    """Musterantwort für eine Standardfrage zu einem Musterdokument (sonst ``None``)."""
     index = _STANDARD_KEYS.get(normalize_question(question))
     answers = _BY_LANG.get(lang, REFERENCE_ANSWERS).get(filename) or REFERENCE_ANSWERS.get(filename)
     if index is None or answers is None:

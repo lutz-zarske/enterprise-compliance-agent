@@ -1,19 +1,19 @@
 #!/usr/bin/env python
-"""Smoke-Test fuer die Ollama-Anbindung.
+"""Smoke-Test für die Ollama-Anbindung.
 
-Prueft in drei Stufen, ob die Inferenzstrecke einsatzbereit ist:
+Prüft in drei Stufen, ob die Inferenzstrecke einsatzbereit ist:
 
 1. Ist der Ollama-Dienst unter ``OLLAMA_BASE_URL`` erreichbar?
 2. Ist das konfigurierte Modell installiert?
 3. Liefert das Modell auf einen echten deutschen Beispieltext ein
-   schemakonformes JSON zurueck?
+   schemakonformes JSON zurück?
 
 Aufruf::
 
     python scripts/smoke_test_ollama.py            # alle drei Stufen
     python scripts/smoke_test_ollama.py --quick    # nur Stufe 1 und 2
 
-Exitcodes: 0 = alles in Ordnung, 1 = mindestens eine Pruefung fehlgeschlagen.
+Exitcodes: 0 = alles in Ordnung, 1 = mindestens eine Prüfung fehlgeschlagen.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ RECHNUNG Nr. RE-2024-0815
 Rechnungsdatum: 15.03.2024
 Fällig am: 14.04.2024
 
-Empfänger: Nordwind Personalservice AG, Hafenstrasse 3, 20457 Hamburg
+Empfänger: Nordwind Personalservice AG, Hafenstraße 3, 20457 Hamburg
 
 Position 1: Jahreslizenz "TalentMatch Screening Suite" - eine KI-gestützte
 Software zur automatisierten Vorauswahl und Rangfolgebildung von Bewerbungen
@@ -85,7 +85,7 @@ async def run(quick: bool) -> int:
             print(f"       Hinweis: {exc.hint}")
             return 1
 
-        # --- Stufe 2: Modellverfuegbarkeit --------------------------------
+        # --- Stufe 2: Modellverfügbarkeit --------------------------------
         if await client.is_model_available(models):
             print(f"{OK} Stufe 2: Modell '{settings.ollama_model}' ist installiert.")
         else:

@@ -1,6 +1,6 @@
 /**
- * Bildmarke: Schild mit Pruefhaken auf ruhiger Kachel.  Vektor statt Rastergrafik -
- * scharf in jeder Groesse; Farben kommen aus globals.css (.brand-*), passend zu Hell und Dunkel.
+ * Bildmarke: Schild mit Prüfhaken auf ruhiger Kachel.  Vektor statt Rastergrafik -
+ * scharf in jeder Größe; Farben kommen aus globals.css (.brand-*), passend zu Hell und Dunkel.
  */
 export function BrandMark({ size = 32, className }: { size?: number; className?: string }) {
   return (

@@ -31,7 +31,7 @@ KEY_B = "AIza-backup-key-0002"
 
 
 class FakeGemini:
-    """Gemini-REST auf HTTP-Ebene: Status je Modell bzw. Schluessel steuerbar."""
+    """Gemini-REST auf HTTP-Ebene: Status je Modell bzw. Schlüssel steuerbar."""
 
     def __init__(self) -> None:
         self.status_by_model: dict[str, list[int]] = {}
@@ -83,7 +83,7 @@ def _trail(client: TestClient, document_id: str) -> list[dict[str, Any]]:
     return client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"]
 
 
-# --- Ollama-Haertung ----------------------------------------------------------------
+# --- Ollama-Härtung ----------------------------------------------------------------
 
 
 def test_localhost_wird_auf_ipv4_normalisiert() -> None:
@@ -112,7 +112,7 @@ def test_health_schlaegt_installiertes_modell_vor(client: TestClient, fake_ollam
     assert client.get("/api/settings").json()["models"]["local"] == "qwen2.5:14b-instruct"
 
 
-# --- Retries, Ausweichmodell, Ausweich-Schluessel --------------------------------------
+# --- Retries, Ausweichmodell, Ausweich-Schlüssel --------------------------------------
 
 
 def test_neuversuch_auf_derselben_stufe_ohne_wechsel(
@@ -206,7 +206,7 @@ def test_ausweich_schluessel_validierung(make_full_client: Callable[..., TestCli
     assert local.status_code == 422
 
     client.post("/api/settings", json={"ausweich_schluessel": [{"id": "k1", "provider": "openai", "api_key": "sk-x-12345678"}]})
-    # Ohne api_key bleibt der gespeicherte Schluessel (gleiche id, gleicher Anbieter).
+    # Ohne api_key bleibt der gespeicherte Schlüssel (gleiche id, gleicher Anbieter).
     kept = client.post("/api/settings", json={"ausweich_schluessel": [{"id": "k1", "provider": "openai", "model": "gpt-4o"}]})
     assert kept.json()["ausweich_schluessel"][0]["key_hint"] == "sk-...5678"
 
@@ -274,7 +274,7 @@ def test_erschoepftes_budget_weicht_lokal_aus(
     body = client.post(f"/documents/{document_id}/extract?wait=true").json()
     assert body["provider"] == "local"
     assert body["compliance"]["failover"][0]["reason_code"] == "cloud_budget_exceeded"
-    assert fake_gemini.calls == []  # kein einziger Cloud-Aufruf ueber dem Limit
+    assert fake_gemini.calls == []  # kein einziger Cloud-Aufruf über dem Limit
     assert client.get("/api/settings").json()["cloud_budget"]["enabled"] is True
 
 
@@ -365,7 +365,7 @@ def test_job_ereignisse_tragen_einheitliche_zeitstempel(
     done = _poll(client, job["job_id"], {"done"})
     kinds = [event["kind"] for event in done["events"]]
     assert "retry" in kinds and "switch" in kinds
-    # Epoch-Sekunden wie started_at – auch beim Stufenwechsel, der fuers Ledger ISO mitbringt.
+    # Epoch-Sekunden wie started_at – auch beim Stufenwechsel, der fürs Ledger ISO mitbringt.
     assert all(isinstance(event["at"], float) for event in done["events"])
     switch = next(event for event in done["events"] if event["kind"] == "switch")
     assert switch["from_stage"] == "primary" and switch["to_stage"] == "ausweichmodell"
@@ -379,7 +379,7 @@ def test_abbruch_stellt_den_vorherigen_stand_her(
     document_id = uploaded_document_id(client, invoice_pdf)
     job = client.post(f"/documents/{document_id}/extract").json()
     _poll(client, job["job_id"], {"running"})
-    # Ein zweiter Start fuer denselben Beleg liefert den laufenden Job.
+    # Ein zweiter Start für denselben Beleg liefert den laufenden Job.
     assert client.post(f"/documents/{document_id}/extract").json()["job_id"] == job["job_id"]
 
     client.post(f"/api/v1/jobs/{job['job_id']}/cancel")

@@ -16,7 +16,7 @@ interface PanelProps {
   notify: (tone: "ok" | "bad", title: string, message?: string) => void;
   /** Strg/⌘ + Enter versiegelt (nur solange der umgebende Dialog offen ist). */
   shortcutActive: boolean;
-  /** Fokus beim Oeffnen: ins Namensfeld, falls noch kein Name bekannt ist. */
+  /** Fokus beim Öffnen: ins Namensfeld, falls noch kein Name bekannt ist. */
   autoFocus?: boolean;
 }
 

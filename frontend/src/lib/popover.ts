@@ -2,9 +2,9 @@ import type React from "react";
 import { useEffect, useId, useLayoutEffect, useState } from "react";
 
 /**
- * Lage eines schwebenden Menues (Portal, position: fixed) zum Ausloeser:
- * unter dem Feld, bei zu wenig Platz darueber; links- oder rechtsbuendig.
- * Die Hoehe ist auf den sichtbaren Bereich begrenzt - auf 1080p ragt nichts
+ * Lage eines schwebenden Menüs (Portal, position: fixed) zum Auslöser:
+ * unter dem Feld, bei zu wenig Platz darüber; links- oder rechtsbündig.
+ * Die Höhe ist auf den sichtbaren Bereich begrenzt - auf 1080p ragt nichts
  * unten heraus.
  */
 export function popoverStyle(
@@ -28,9 +28,9 @@ export function popoverStyle(
 }
 
 /**
- * Lage eines Portal-Popovers am Ausloeser, nachgefuehrt bei Groessenaenderung.
- * Popovers der Kopfzeile laufen bewusst ueber ein Portal: Die Kopfzeile traegt
- * ``backdrop-filter``, und verschachtelte Glas-Menues zeichnet Chromium darin
+ * Lage eines Portal-Popovers am Auslöser, nachgeführt bei Größenänderung.
+ * Popovers der Kopfzeile laufen bewusst über ein Portal: Die Kopfzeile trägt
+ * ``backdrop-filter``, und verschachtelte Glas-Menüs zeichnet Chromium darin
  * ohne eigenen Blur - sie wirken durchsichtig.
  */
 export function useAnchoredStyle(
@@ -55,9 +55,9 @@ export function useAnchoredStyle(
 const POPOVER_EVENT = "eca-popover-open";
 
 /**
- * Popover-Bus: Hoechstens ein Menue oder Popover ist gleichzeitig offen.
- * Oeffnet sich eines (Select, Musterdaten, Job-Monitor, Hinweise, Version),
- * meldet es das ueber ein Fenster-Ereignis; alle anderen schliessen sich.
+ * Popover-Bus: Höchstens ein Menü oder Popover ist gleichzeitig offen.
+ * Öffnet sich eines (Select, Musterdaten, Job-Monitor, Hinweise, Version),
+ * meldet es das über ein Fenster-Ereignis; alle anderen schließen sich.
  */
 export function usePopoverExclusive(open: boolean, close: () => void, key?: string): void {
   const auto = useId();
@@ -73,7 +73,7 @@ export function usePopoverExclusive(open: boolean, close: () => void, key?: stri
   }, [open, id, close]);
 }
 
-/** Klick daneben und Escape schliessen ein Popover (Escape erreicht keinen umgebenden Dialog). */
+/** Klick daneben und Escape schließen ein Popover (Escape erreicht keinen umgebenden Dialog). */
 export function useDismiss(
   open: boolean,
   close: () => void,

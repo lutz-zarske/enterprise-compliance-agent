@@ -47,7 +47,7 @@ const TILE_TO_TAB: Record<ScoreTile["key"], InspectorTab> = {
 const TAB_KEYS: InspectorTab[] = ["ustg", "aiact", "pii", "facts", "xml"];
 
 const VIEW_STORAGE = "eca-view";
-/** Merkt, fuer welche Backend-Version bereits einmal neu geladen wurde (keine Schleife). */
+/** Merkt, für welche Backend-Version bereits einmal neu geladen wurde (keine Schleife). */
 const VERSION_RELOAD_STORAGE = "eca-reloaded-for";
 
 function asApiError(err: unknown): ApiError {
@@ -164,7 +164,7 @@ export default function DashboardPage() {
         api.settings(),
       ]);
       // Neues Backend nach Neustart (z. B. von Hand im Terminal): einmal neu laden,
-      // damit nie ein altes Client-Bundle gegen ein neues Backend laeuft.
+      // damit nie ein altes Client-Bundle gegen ein neues Backend läuft.
       if (bootVersion.current === null) {
         bootVersion.current = h.version;
       } else if (h.version !== bootVersion.current) {
@@ -206,7 +206,7 @@ export default function DashboardPage() {
     }
   }, [refreshData, loadDetail, notify, tr]);
 
-  // Erster Ladevorgang: Splash abbauen, Erstbesucher begruessen.
+  // Erster Ladevorgang: Splash abbauen, Erstbesucher begrüßen.
   useEffect(() => {
     void loadAll().finally(() => {
       meldeBereit();
@@ -214,7 +214,7 @@ export default function DashboardPage() {
     });
   }, [loadAll]);
 
-  // Reaktiv statt Aktualisieren-Button: Rueckkehr ins Fenster laedt den Stand neu (hoechstens alle 15 s).
+  // Reaktiv statt Aktualisieren-Button: Rückkehr ins Fenster lädt den Stand neu (höchstens alle 15 s).
   useEffect(() => {
     const onReturn = () => {
       if (window.document.visibilityState === "visible" && Date.now() - lastLoad.current > 15_000) void loadAll();
@@ -327,7 +327,7 @@ export default function DashboardPage() {
   async function handleSeed(file?: string) {
     setSeeding(true);
     try {
-      // Die Musterdaten kommen bereits geprueft zurueck (Referenz-Audits) - ohne Inferenz.
+      // Die Musterdaten kommen bereits geprüft zurück (Referenz-Audits) - ohne Inferenz.
       const result = await api.seed(file);
       await refreshData();
       const audited = result.items.filter((item) => item.reference_audit).length;
@@ -412,13 +412,13 @@ export default function DashboardPage() {
   const structuredReady = Boolean(
     detail?.einvoice && !detail.einvoice.error && (detail.einvoice.source === "standalone" || detail.einvoice.is_einvoice),
   );
-  // Keine Pruefung bricht an fehlender KI ab: das Regelwerk schliesst gekennzeichnet ab.
+  // Keine Prüfung bricht an fehlender KI ab: das Regelwerk schließt gekennzeichnet ab.
   const canAnalyze = online && (!cloudUnconfigured || structuredReady);
   const isXml = detail?.content_type === "application/xml";
   const overlayOpen = settingsOpen || exportOpen || overrideOpen || sealOpen || welcomeOpen || tourOpen || shortcutsOpen;
   const canSeal = Boolean(detail?.scorecard) && online && !activeJob;
 
-  // Strg/⌘ + Enter oeffnet den Siegel-Dialog; dort versiegelt ein zweites Strg/⌘ + Enter.
+  // Strg/⌘ + Enter öffnet den Siegel-Dialog; dort versiegelt ein zweites Strg/⌘ + Enter.
   useEffect(() => {
     if (overlayOpen || !canSeal || view !== "workspace") return;
     const onKey = (event: KeyboardEvent) => {
@@ -430,7 +430,7 @@ export default function DashboardPage() {
     return () => window.document.removeEventListener("keydown", onKey);
   }, [overlayOpen, canSeal, view]);
 
-  // 1-5 wechseln den Reiter, ? oeffnet die Kuerzel-Uebersicht - nie beim Tippen, nie bei offenem Dialog.
+  // 1-5 wechseln den Reiter, ? öffnet die Kürzel-Übersicht - nie beim Tippen, nie bei offenem Dialog.
   useEffect(() => {
     if (overlayOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -511,11 +511,11 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Keep-Alive: alle Ansichten bleiben eingehaengt - ein Wechsel bricht keine Pruefung und kein Gespraech ab. */}
+          {/* Keep-Alive: alle Ansichten bleiben eingehängt - ein Wechsel bricht keine Prüfung und kein Gespräch ab. */}
           <div hidden={view !== "workspace"} className="space-y-4 2xl:space-y-5">
             <KpiStrip kpis={kpis} loading={!health && !offline} />
 
-            {/* Kompakte Queue (340 bzw. 400 px), der Rest gehoert der Workbench. */}
+            {/* Kompakte Queue (340 bzw. 400 px), der Rest gehört der Workbench. */}
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)] 2xl:gap-5">
               <div className="space-y-4">
                 <DocumentUploader disabled={offline} onUploaded={handleUploaded} onError={(err) => reportError(tr("Upload fehlgeschlagen", "Upload failed", "Error al subir"), err)} />

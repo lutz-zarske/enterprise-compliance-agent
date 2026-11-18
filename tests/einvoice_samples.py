@@ -1,4 +1,4 @@
-"""Testdaten fuer E-Rechnungen: UBL-XRechnung und Varianten der hybriden Musterrechnung."""
+"""Testdaten für E-Rechnungen: UBL-XRechnung und Varianten der hybriden Musterrechnung."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ XRECHNUNG_30 = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnun
 
 
 def hybrid_spec(**changes: Any) -> dict[str, Any]:
-    """Tiefe Kopie der Musterrechnung mit gezielten Aenderungen."""
+    """Tiefe Kopie der Musterrechnung mit gezielten Änderungen."""
     spec = copy.deepcopy(HYBRID_INVOICE)
     for key, value in changes.items():
         if key in {"seller", "buyer"}:
@@ -23,7 +23,7 @@ def hybrid_spec(**changes: Any) -> dict[str, Any]:
 
 
 def b2b_spec(**changes: Any) -> dict[str, Any]:
-    """Musterrechnung an ein Unternehmen (keine Behoerde, keine Leitweg-ID)."""
+    """Musterrechnung an ein Unternehmen (keine Behörde, keine Leitweg-ID)."""
     return hybrid_spec(
         buyer={"name": "Brandt Maschinenbau AG", "street": "Industrieweg 7", "postcode": "70565",
                "city": "Stuttgart", "leitweg": None},
@@ -83,6 +83,7 @@ def build_ubl_invoice(
     <cac:PostalAddress><cbc:StreetName>Hauptstraße 5</cbc:StreetName><cbc:CityName>Kassel</cbc:CityName><cbc:PostalZone>34117</cbc:PostalZone><cac:Country><cbc:IdentificationCode>DE</cbc:IdentificationCode></cac:Country></cac:PostalAddress>
     <cac:PartyTaxScheme><cbc:CompanyID>DE298765432</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>
     <cac:PartyLegalEntity><cbc:RegistrationName>Softwarehaus Nordhessen GmbH</cbc:RegistrationName></cac:PartyLegalEntity>
+    <cac:Contact><cbc:Name>Rechnungsstelle</cbc:Name><cbc:Telephone>+49 561 000000</cbc:Telephone><cbc:ElectronicMail>rechnung@softwarehaus.example</cbc:ElectronicMail></cac:Contact>
   </cac:Party></cac:AccountingSupplierParty>
   <cac:AccountingCustomerParty><cac:Party>
     <cbc:EndpointID schemeID="0204">{buyer_reference or "keine"}</cbc:EndpointID>

@@ -2,12 +2,12 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-/** Gewaehlte Darstellung; "system" folgt dem Betriebssystem (prefers-color-scheme). */
+/** Gewählte Darstellung; "system" folgt dem Betriebssystem (prefers-color-scheme). */
 export type ThemeChoice = "dark" | "light" | "system";
 export type Theme = "dark" | "light";
 
 interface ThemeContextValue {
-  /** Tatsaechlich angezeigtes Farbschema. */
+  /** Tatsächlich angezeigtes Farbschema. */
   theme: Theme;
   /** Gespeicherte Wahl (dark | light | system). */
   choice: ThemeChoice;
@@ -37,7 +37,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [choice, setChoiceState] = useState<ThemeChoice>("dark");
   const [theme, setThemeState] = useState<Theme>("dark");
 
-  // Das Inline-Script im Layout hat die Klasse bereits gesetzt - hier nur uebernehmen.
+  // Das Inline-Script im Layout hat die Klasse bereits gesetzt - hier nur übernehmen.
   useEffect(() => {
     let stored: ThemeChoice = "dark";
     try {
@@ -50,7 +50,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(document.documentElement.classList.contains("dark") ? "dark" : "light");
   }, []);
 
-  // "system": Wechsel des Betriebssystems live uebernehmen.
+  // "system": Wechsel des Betriebssystems live übernehmen.
   useEffect(() => {
     if (choice !== "system") return;
     const query = window.matchMedia("(prefers-color-scheme: light)");
@@ -69,7 +69,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {
-      /* privater Modus: Wahl gilt nur fuer diese Sitzung */
+      /* privater Modus: Wahl gilt nur für diese Sitzung */
     }
     setChoiceState(next);
     setThemeState(resolved);

@@ -2,7 +2,7 @@ import type { DocumentDetail, ScoreCheck } from "../types/api";
 import { formatDate, formatMoney } from "./format";
 import { getActiveLocale, translateDynamic } from "./i18n";
 
-/** Maengel, die der Lieferant beheben kann: formelle Pflichtangaben und Rechenfehler. */
+/** Mängel, die der Lieferant beheben kann: formelle Pflichtangaben und Rechenfehler. */
 export function correctionDefects(document: DocumentDetail | null): ScoreCheck[] {
   if (!document?.scorecard || document.extraction?.doc_type !== "invoice") return [];
   return document.scorecard.tiles
@@ -13,7 +13,7 @@ export function correctionDefects(document: DocumentDetail | null): ScoreCheck[]
 
 /**
  * Entwurf einer Korrekturanforderung an den Lieferanten - deterministisch aus
- * dem Pruefergebnis, ohne Sprachmodell.
+ * dem Prüfergebnis, ohne Sprachmodell.
  */
 export function buildCorrectionRequest(document: DocumentDetail): string {
   const loc = getActiveLocale();

@@ -57,9 +57,9 @@ export interface ComplianceAudit {
   duration_ms: number;
   provider: InferenceMode | string;
   privacy_gateway: Record<string, number> | null;
-  /** Provider-Wechsel waehrend der Analyse (Ausweich-Kaskade). */
+  /** Provider-Wechsel während der Analyse (Ausweich-Kaskade). */
   failover?: FailoverSwitch[] | null;
-  /** Alle KI-Stufen ausgefallen: das Regelwerk hat die Pruefung abgeschlossen. */
+  /** Alle KI-Stufen ausgefallen: das Regelwerk hat die Prüfung abgeschlossen. */
   heuristic?: boolean;
   fallback_reason?: string | null;
   headline: string;
@@ -435,7 +435,7 @@ export interface RuntimeSettings {
   has_anthropic_key: boolean;
   has_openai_key: boolean;
   masked_keys: Record<string, string | null>;
-  /** Anbieter-Fallbacks in Reihenfolge (ohne den primaeren), "local" = Ollama. */
+  /** Anbieter-Fallbacks in Reihenfolge (ohne den primären), "local" = Ollama. */
   fallbacks: InferenceMode[];
   /** Ausweichmodell des aktiven Anbieters ("" = aus). */
   ausweich_modell: string;
@@ -443,7 +443,7 @@ export interface RuntimeSettings {
   ausweich_schluessel: BackupKey[];
   max_ausweich_schluessel: number;
   suggested_fallback_models: Record<string, string>;
-  /** Effektive Kaskade in Reihenfolge (ohne Schluessel). */
+  /** Effektive Kaskade in Reihenfolge (ohne Schlüssel). */
   chain: ChainStage[];
   heuristic_fallback: boolean;
   retry_delays: number[];

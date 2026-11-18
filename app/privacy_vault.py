@@ -5,24 +5,24 @@ Ablauf
 1. **Pseudonymisieren:** Vor dem Versand an Gemini, Claude oder GPT ersetzt der
    Vault identifizierende Werte durch Platzhalter (``{{PERSON_1}}``,
    ``{{IBAN_1}}``, ``{{ORG_1}}``, ``{{AMOUNT_1}}`` ...).  Gleiche Werte erhalten
-   denselben Platzhalter, damit das Modell Bezuege weiterhin erkennt.
-2. **Fluechtiges Mapping:** Die Zuordnung Platzhalter -> Klartext lebt nur im
-   Arbeitsspeicher dieses Prozesses und nur fuer die Dauer eines Auftrags.
+   denselben Platzhalter, damit das Modell Bezüge weiterhin erkennt.
+2. **Flüchtiges Mapping:** Die Zuordnung Platzhalter -> Klartext lebt nur im
+   Arbeitsspeicher dieses Prozesses und nur für die Dauer eines Auftrags.
    Sie wird weder geloggt noch persistiert noch versendet.
-3. **Re-Identifizierung:** Die Modellantwort wird lokal zurueckuebersetzt,
+3. **Re-Identifizierung:** Die Modellantwort wird lokal zurückübersetzt,
    *bevor* sie gegen das Pydantic-Schema validiert wird.
 
-Rechtliche Einordnung (bewusst nuechtern)
+Rechtliche Einordnung (bewusst nüchtern)
 -----------------------------------------
 Pseudonymisierte Daten bleiben personenbezogene Daten (Art. 4 Nr. 5 DSGVO,
 ErwG 26), solange der Verantwortliche re-identifizieren kann - und genau das
-tut dieser Vault.  Er *reduziert* das Uebermittlungsrisiko im Sinne von
-Art. 25 und Art. 32 DSGVO und ist eine anerkannte ergaenzende Massnahme fuer
+tut dieser Vault.  Er *reduziert* das Übermittlungsrisiko im Sinne von
+Art. 25 und Art. 32 DSGVO und ist eine anerkannte ergänzende Maßnahme für
 Drittlandtransfers (EDSA-Empfehlungen 01/2020, Use Case 2).  Er ersetzt aber
 weder Auftragsverarbeitungsvertrag noch Transfergrundlage (Art. 44 ff.).
 Die Erkennung ist regelbasiert: Namen ohne Anrede oder Rollenbezeichnung und
-Freitext-Merkmale (z. B. eine Diagnose im Fliesstext) werden nicht erfasst.
-Fuer den Volldatenschutz bleibt der lokale Modus der Standard.
+Freitext-Merkmale (z. B. eine Diagnose im Fließtext) werden nicht erfasst.
+Für den Volldatenschutz bleibt der lokale Modus der Standard.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ VAULT_SYSTEM_NOTE = (
 
 _PLACEHOLDER = re.compile(r"\{\{([A-Z_]+_\d+)\}\}")
 
-#: Woerter, die vor einer Rechtsform stehen, aber nicht zum Firmennamen gehoeren.
+#: Wörter, die vor einer Rechtsform stehen, aber nicht zum Firmennamen gehören.
 _ORG_STOPWORDS = frozenset(
     {
         "zwischen", "und", "der", "die", "das", "den", "dem", "des", "von", "an", "bei",
@@ -55,7 +55,7 @@ _ORG_STOPWORDS = frozenset(
 
 _CAP = r"[A-ZÄÖÜ][\wÄÖÜäöüß&.\-]*"
 
-#: (Kategorie, Muster, Gruppe) - Reihenfolge = Prioritaet bei Ueberlappung.
+#: (Kategorie, Muster, Gruppe) - Reihenfolge = Priorität bei Überlappung.
 _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
     ("EMAIL", re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b"), 0),
     ("VAT_ID", re.compile(r"\b(?:DE ?\d{9}|ATU\d{8})\b"), 0),
@@ -124,7 +124,7 @@ class _Span:
 
 
 def _trim_org(value: str, start: int) -> tuple[str, int]:
-    """Entfernt fuehrende Stoppwoerter ("Zwischen TalentScreen AI GmbH" -> "TalentScreen AI GmbH")."""
+    """Entfernt führende Stoppwörter ("Zwischen TalentScreen AI GmbH" -> "TalentScreen AI GmbH")."""
     words = value.split(" ")
     offset = 0
     while len(words) > 2 and words[0].casefold() in _ORG_STOPWORDS:
@@ -165,7 +165,7 @@ class PrivacyVault:
                     value, start = _trim_org(value, start)
                     end = start + len(value)
                 candidates.append(_Span(start, end, category, value))
-        # Ueberlappungen aufloesen: Regelprioritaet (Listenreihenfolge), dann Laenge.
+        # Überlappungen auflösen: Regelpriorität (Listenreihenfolge), dann Länge.
         chosen: list[_Span] = []
         for span in candidates:
             if any(span.start < other.end and other.start < span.end for other in chosen):

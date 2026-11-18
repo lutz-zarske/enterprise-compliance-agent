@@ -58,9 +58,9 @@ import { Chip, CopyValue, EmptyState, HashBadge, Kbd, Spinner, StatusIcon, Tabs,
 
 export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml";
 
-/** Scrollhoehe der Inspektor-Spalten: auf grossen Monitoren (1440p/2K) die volle Hoehe nutzen. */
+/** Scrollhöhe der Inspektor-Spalten: auf großen Monitoren (1440p/2K) die volle Höhe nutzen. */
 /**
- * Feste Workbench-Hoehe statt max-h: Beim Reiterwechsel bleibt die Spalte gleich hoch,
+ * Feste Workbench-Höhe statt max-h: Beim Reiterwechsel bleibt die Spalte gleich hoch,
  * die Action-Leiste darunter springt um keinen Pixel. Inhalte scrollen im Panel.
  */
 const PANEL_HEIGHT = "h-[560px] min-h-[480px] xl:h-[max(560px,calc(100vh-320px))] 2xl:h-[max(720px,calc(100vh-320px))]";
@@ -146,7 +146,7 @@ function TextViewer({ view, evidenceLines, evidenceTone: tone, activeSpans, acti
   const sources = useSourceLabels();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Zeilen mit eingebetteten Markierungen; Markierungen ueber Zeilengrenzen werden geteilt.
+  // Zeilen mit eingebetteten Markierungen; Markierungen über Zeilengrenzen werden geteilt.
   const rows = useMemo<Row[]>(() => {
     if (!view) return [];
     const { text, spans } = view;
@@ -290,7 +290,7 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
         </div>
         {check.legal_reference && <p className="text-xs text-subtle">{check.legal_reference}</p>}
         {detailText && <p className="mt-1 text-xs leading-relaxed text-muted">{detailText}</p>}
-        {/* Bei Abzuegen steht die Risikoerklaerung im Tooltip am Abzug; Hinweise ohne Abzug inline. */}
+        {/* Bei Abzügen steht die Risikörklärung im Tooltip am Abzug; Hinweise ohne Abzug inline. */}
         {riskText && check.deduction === 0 && check.status !== "pass" && (
           <p className="mt-1 text-xs leading-relaxed text-warn">{riskText}</p>
         )}
@@ -323,9 +323,9 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
   );
 }
 
-// --- VIES-Pruefung der USt-IdNr. (BT-31) ---------------------------------------
+// --- VIES-Prüfung der USt-IdNr. (BT-31) ---------------------------------------
 
-/** Zerlegt „DE 312 345 678“ in Laendercode und Nummer; geschwaerzte Werte sind nicht abfragbar. */
+/** Zerlegt „DE 312 345 678“ in Ländercode und Nummer; geschwärzte Werte sind nicht abfragbar. */
 function parseVatId(raw: string | null | undefined): { country: string; number: string } | null | "masked" {
   if (!raw) return null;
   if (/[*•[\]]/.test(raw)) return "masked";
@@ -653,7 +653,7 @@ function Fact({ label, value, mono }: { label: string; value: React.ReactNode; m
 }
 
 /**
- * Summenblock nach Financial-UI-Muster: Bezeichnung links, Betrag rechtsbuendig in
+ * Summenblock nach Financial-UI-Muster: Bezeichnung links, Betrag rechtsbündig in
  * Tabellenziffern, Summenstrich vor dem Gesamtbetrag.
  */
 function SumBlock({ rows, total, currency, marks }: {
@@ -1070,9 +1070,9 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
   onTabChange: (tab: InspectorTab) => void;
   onOverride?: () => void;
   ledger: LedgerVerification | null;
-  /** Wechselt in die Ansicht "Protokoll" (vollstaendige Hash-Kette). */
+  /** Wechselt in die Ansicht "Protokoll" (vollständige Hash-Kette). */
   onOpenProtocol?: () => void;
-  /** Oeffnet den Siegel-Dialog; fehlt, solange nicht gesiegelt werden kann. */
+  /** Öffnet den Siegel-Dialog; fehlt, solange nicht gesiegelt werden kann. */
   onSeal?: () => void;
 }) {
   const { tr } = useI18n();
@@ -1108,7 +1108,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
     setActiveSpan(null);
   }, [document.id]);
 
-  // Escape loest eine per Klick gesetzte Hervorhebung (Dialoge schliessen sich ohnehin selbst).
+  // Escape löst eine per Klick gesetzte Hervorhebung (Dialoge schließen sich ohnehin selbst).
   useEffect(() => {
     if (!pinnedIds) return;
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && setPinnedIds(null);
@@ -1135,7 +1135,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
   }, []);
   const evidenceApi = useMemo<EvidenceApi>(() => ({ index, active, hover, locate }), [index, active, hover, locate]);
 
-  /** Rueckrichtung: Klick auf eine belegte Zeile oeffnet das Kriterium rechts. */
+  /** Rückrichtung: Klick auf eine belegte Zeile öffnet das Kriterium rechts. */
   const selectLine = useCallback(
     (line: number) => {
       const ids = index.byLine.get(line) ?? [];
@@ -1159,7 +1159,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
   }, [rowScroll, tab]);
 
   const overrideHash = document.scorecard?.human_override?.ledger_entry_hash;
-  // Nach einer Uebersteuerung den Hinweis oben im Panel sichtbar machen.
+  // Nach einer Übersteuerung den Hinweis oben im Panel sichtbar machen.
   useEffect(() => {
     if (overrideHash) panelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [overrideHash]);

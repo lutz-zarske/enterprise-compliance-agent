@@ -17,7 +17,7 @@ import { SampleMenu } from "./SampleMenu";
 import { useTheme } from "./ThemeProvider";
 import { PillTabs, Tooltip } from "./ui";
 
-/** Drei fokussierte Ansichten statt einer ueberfrachteten Einzelseite. */
+/** Drei fokussierte Ansichten statt einer überfrachteten Einzelseite. */
 export type View = "workspace" | "copilot" | "protocol";
 
 type Notify = (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
@@ -44,7 +44,7 @@ interface HeaderProps {
 
 /**
  * Kein dauerhaftes Versions-Badge: Ein Klick auf Logo oder Schriftzug zeigt Version
- * und Regelwerk in einem schlanken Popover (Escape oder Klick daneben schliesst es).
+ * und Regelwerk in einem schlanken Popover (Escape oder Klick daneben schließt es).
  */
 function LogoVersion({ version, ruleset }: { version: string | null; ruleset: string | null }) {
   const { tr } = useI18n();

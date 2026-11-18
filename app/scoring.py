@@ -1,7 +1,7 @@
 """Deterministische Compliance-Scorecard (0-100).
 
 Der Score entsteht **nicht** im LLM, sondern aus festen, versionierten Regeln
-ueber die validierte Extraktion, das Audit und den Dokumenttext.  Dieselbe
+über die validierte Extraktion, das Audit und den Dokumenttext.  Dieselbe
 Eingabe ergibt immer denselben Score - Voraussetzung für eine Prüfung, die
 ein Wirtschaftsprüfer nachvollziehen und nachrechnen kann.
 
@@ -16,8 +16,8 @@ Bewertungsschema (Basis 100, Abzüge je Mangel):
   Kleinbetragsrechnungen bis 250 EUR brutto: reduzierter Katalog (Paragraf 33 UStDV).
 * E-Rechnung (seit Regelwerk 2026.2): Abweichung zwischen massgeblichem
   XML-Datensatz und PDF-Bildteil -10 (BMF 15.10.2024, Rz. 36); fehlende oder
-  ungueltige Leitweg-ID bei oeffentlichen Auftraggebern -10 (Paragraf 5 ERechV).
-  Profil- und Geschaeftsregel-Befunde (EN 16931) sind Hinweise ohne Abzug.
+  ungültige Leitweg-ID bei öffentlichen Auftraggebern -10 (Paragraf 5 ERechV).
+  Profil- und Geschäftsregel-Befunde (EN 16931) sind Hinweise ohne Abzug.
 * Mathematische Validität: ungültige IBAN (MOD-97) -15, Netto + USt != Brutto
   -15, USt-Betrag != Netto x Satz -10, unzulässiger Steuersatz -10.
 * Regulatorisches Risiko (EU AI Act): Hochrisiko ohne Nachweis einer
@@ -55,7 +55,7 @@ from app.schemas import (
     iban_checksum_valid,
 )
 
-RULESET_VERSION = "2026.2"
+RULESET_VERSION = "2026.3"
 
 #: Grenze der Kleinbetragsrechnung nach Paragraf 33 UStDV (seit 01.01.2017).
 SMALL_AMOUNT_LIMIT = Decimal("250")
@@ -472,8 +472,11 @@ def _en16931_check(einvoice: EInvoiceData | None, *, marker: bool, public: bool)
             if einvoice.rule_violations:
                 detail += " Verstöße: " + " ".join(einvoice.rule_violations) + " Kein Punktabzug."
                 risk_note = (
-                    "Verstöße gegen EN-16931-Geschäftsregeln führen beim Empfänger regelmäßig zur Zurückweisung "
-                    "durch den Validator."
+                    XRECHNUNG_RESERVATION_NOTE
+                    if einvoice.profile_key == "xrechnung"
+                    and any(rule.startswith("BR-DE-") for rule in einvoice.rule_violations)
+                    else "Verstöße gegen EN-16931-Geschäftsregeln führen beim Empfänger regelmäßig zur "
+                    "Zurückweisung durch den Validator."
                 )
         else:
             status = CheckStatus.WARN
@@ -545,6 +548,28 @@ def _service_time_detail(checks: list[ScoreCheck], einvoice: EInvoiceData | None
         )
 
 
+XRECHNUNG_RESERVATION = "Freigabe unter Vorbehalt — XRechnung-Standard nicht eingehalten"
+XRECHNUNG_RESERVATION_NOTE = (
+    "Pflichtangaben nach § 14 UStG erfüllt, aber nicht konform zum angegebenen XRechnung-Standard; "
+    "Eingangsplattformen öffentlicher Auftraggeber prüfen gegen diese Regeln. Daher Freigabe unter Vorbehalt, "
+    "ohne Punktabzug."
+)
+
+
+def xrechnung_deviation(einvoice: EInvoiceData | None) -> bool:
+    """Weist sich der Beleg als XRechnung aus und verletzt BR-DE-Regeln oder nutzt eine ungültige Version?
+
+    Gilt nur bei XRechnung-Kennung (BT-24), nicht für reine EN-16931-/ZUGFeRD-Profile.
+    """
+    if einvoice is None or einvoice.error or einvoice.profile_key != "xrechnung":
+        return False
+    from app.extractors.einvoice import xrechnung_version_notice
+
+    if any(rule.startswith("BR-DE-") for rule in einvoice.rule_violations):
+        return True
+    return xrechnung_version_notice(einvoice) is not None
+
+
 def _xrechnung_version_check(einvoice: EInvoiceData | None) -> ScoreCheck | None:
     """Hinweis ohne Punktabzug, wenn die XRechnung-Version nicht mehr in Kraft ist."""
     if einvoice is None or einvoice.error:
@@ -557,6 +582,7 @@ def _xrechnung_version_check(einvoice: EInvoiceData | None) -> ScoreCheck | None
     return ScoreCheck(
         id="xrechnung_version", label="XRechnung-Version", legal_reference="KoSIT, Versionen und Bundles",
         status=CheckStatus.WARN, detail=f"{notice} Kein Punktabzug.", evidence_source="xml_rule",
+        risk_note=XRECHNUNG_RESERVATION_NOTE,
     )
 
 
@@ -608,7 +634,7 @@ def _public_reason(extraction: ExtractionResult, einvoice: EInvoiceData | None) 
 
 
 def _leitweg_check(extraction: ExtractionResult, einvoice: EInvoiceData | None, text: str) -> ScoreCheck | None:
-    """Leitweg-ID nur bei oeffentlichen Auftraggebern (B2G) - im B2B-Verkehr nicht erforderlich."""
+    """Leitweg-ID nur bei öffentlichen Auftraggebern (B2G) - im B2B-Verkehr nicht erforderlich."""
     from app.extractors.einvoice import find_leitweg_in_text, validate_leitweg_id
 
     reason = _public_reason(extraction, einvoice)
@@ -651,7 +677,7 @@ def _allowed_rates(doc_date: date | None) -> set[Decimal]:
 
 
 def _structured_vat_checks(einvoice: EInvoiceData, doc_date: date | None) -> list[ScoreCheck]:
-    """Steuerpruefung je Steuersatz aus der XML-Aufschluesselung (BG-23) - auch bei Mischsaetzen."""
+    """Steuerprüfung je Steuersatz aus der XML-Aufschlüsselung (BG-23) - auch bei Mischsätzen."""
     checks: list[ScoreCheck] = []
     rates = [entry.rate for entry in einvoice.vat_breakdown if entry.rate is not None]
     if rates:
@@ -873,7 +899,7 @@ def _privacy_tile(compliance: ComplianceAudit) -> ScoreTile:
 
 
 # ---------------------------------------------------------------------------
-# Risikoerklaerung je Mangel (ein Satz, fuer Tooltips und Zertifikat)
+# Risikörklärung je Mangel (ein Satz, für Tooltips und Zertifikat)
 # ---------------------------------------------------------------------------
 
 RISK_NOTES: dict[str, str] = {
@@ -901,7 +927,7 @@ RISK_NOTES: dict[str, str] = {
     "gdpr_identifiers": "Amtliche Kennnummern sind besonders missbrauchsanfällig (Identitätsdiebstahl) und dürfen nur mit Rechtsgrundlage gespeichert werden.",
 }
 
-#: Rechtlicher Kontext, der unabhaengig vom Ergebnis angezeigt wird.
+#: Rechtlicher Kontext, der unabhängig vom Ergebnis angezeigt wird.
 CHECK_NOTES: dict[str, str] = {
     "tax_calc": (
         "Bei Rechnungen ausschließlich an Endverbraucher entsteht keine Steuerschuld aus § 14c UStG "
@@ -1023,6 +1049,8 @@ def compute_scorecard(
         recommendation, blocked = "Freigabe gesperrt — Nachforderung nötig", True
     elif any(check.id == "xml_primacy" and check.deduction for check in formal.checks):
         recommendation, blocked = "Freigabe unter Vorbehalt — Abweichung zwischen XML und PDF klären (XML maßgeblich)", False
+    elif is_invoice and xrechnung_deviation(einvoice):
+        recommendation, blocked = XRECHNUNG_RESERVATION, False
     elif has_fail or band is ScoreBand.AMBER:
         recommendation, blocked = "Freigabe unter Vorbehalt — Nachbesserung empfohlen", False
     elif is_invoice:

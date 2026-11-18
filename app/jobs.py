@@ -1,20 +1,20 @@
 """Asynchrone Analyse-Jobs mit Fortschritt, Restzeit und Abbruch.
 
-Eine Dokumentpruefung mit einem 14B-Modell dauert Minuten.  Ein einzelner
+Eine Dokumentprüfung mit einem 14B-Modell dauert Minuten.  Ein einzelner
 HTTP-Request, der so lange offen bleibt, scheitert an Timeouts von Browser,
-Proxy oder Reverse-Proxy - und die Pruefperson sieht bis dahin nichts.
+Proxy oder Reverse-Proxy - und die Prüfperson sieht bis dahin nichts.
 
 Stattdessen nimmt ``POST /api/v1/jobs`` (bzw. ``POST /documents/{id}/extract``)
-den Auftrag sofort an und liefert eine ``job_id``.  Die Oberflaeche fragt den
-Zustand ab: Warteschlangenplatz, Fortschritt 0-1, Phase, geglaettete Restzeit.
+den Auftrag sofort an und liefert eine ``job_id``.  Die Oberfläche fragt den
+Zustand ab: Warteschlangenplatz, Fortschritt 0-1, Phase, geglättete Restzeit.
 Die Jobs laufen als asyncio-Tasks im Prozess; ein Semaphor begrenzt die
 gleichzeitigen Analysen (``ANALYSIS_WORKERS``, lokal sinnvoll: 1).
 
-* Abbruch: kooperativ - der Task wird beendet, der Beleg behaelt sein
-  vorheriges Ergebnis; ausgeloeste Provider-Wechsel stehen trotzdem im Ledger.
-* Haengende Jobs: ohne Fortschrittsmeldung laenger als ``stall_seconds``
-  meldet der Snapshot ``stalled=true`` (die Oberflaeche bietet dann Abbrechen an).
-* Release-Wechsel: Waehrend ``ReleaseManager.busy`` startet kein Job; der
+* Abbruch: kooperativ - der Task wird beendet, der Beleg behält sein
+  vorheriges Ergebnis; ausgelöste Provider-Wechsel stehen trotzdem im Ledger.
+* Hängende Jobs: ohne Fortschrittsmeldung länger als ``stall_seconds``
+  meldet der Snapshot ``stalled=true`` (die Oberfläche bietet dann Abbrechen an).
+* Release-Wechsel: Während ``ReleaseManager.busy`` startet kein Job; der
   Release-Assistent wartet seinerseits, bis keine Analyse mehr offen ist.
 * Beendete Jobs bleiben ``JOB_RETENTION_SECONDS`` abrufbar.
 """
@@ -32,7 +32,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-#: Vier Phasen der Pruefung: Schluessel, Anzeige, Anteil am Gesamtfortschritt.
+#: Vier Phasen der Prüfung: Schlüssel, Anzeige, Anteil am Gesamtfortschritt.
 PHASES: tuple[tuple[str, str, float], ...] = (
     ("text_check", "Text-Layer & XML-Vorrang", 0.06),
     ("pii_scan", "PII-Scanner & Privacy Vault", 0.10),
@@ -42,18 +42,18 @@ PHASES: tuple[tuple[str, str, float], ...] = (
 PHASE_KEYS = tuple(key for key, _label, _weight in PHASES)
 PHASE_LABELS = {key: label for key, label, _weight in PHASES}
 
-#: Erwartete Dauer einer KI-Pruefung, bis eigene Messwerte vorliegen (s).
+#: Erwartete Dauer einer KI-Prüfung, bis eigene Messwerte vorliegen (s).
 DEFAULT_EXPECTED_SECONDS = 45.0
-#: Gewicht der juengsten Messung in der gleitenden Erwartung.
+#: Gewicht der jüngsten Messung in der gleitenden Erwartung.
 EXPECTATION_ALPHA = 0.35
-#: Glaettung der angezeigten Restzeit (Anteil des neuen Werts).
+#: Glättung der angezeigten Restzeit (Anteil des neuen Werts).
 ETA_ALPHA = 0.3
 
 Runner = Callable[["JobContext"], Awaitable[dict[str, Any]]]
 
 
 class JobCancelled(Exception):
-    """Abbruch durch die Pruefperson."""
+    """Abbruch durch die Prüfperson."""
 
 
 @dataclass(slots=True)
@@ -83,7 +83,7 @@ class Job:
 
 
 class JobContext:
-    """Wird an die Analyse uebergeben: Phase melden, Kaskaden-Ereignisse anhaengen."""
+    """Wird an die Analyse übergeben: Phase melden, Kaskaden-Ereignisse anhängen."""
 
     def __init__(self, manager: JobManager, job: Job) -> None:
         self._manager = manager
@@ -105,7 +105,7 @@ class JobContext:
         job.last_update = time.time()
 
     def event(self, kind: str, info: dict[str, Any]) -> None:
-        """Wiederholung oder Stufenwechsel der KI-Kaskade (fuer den Job-Monitor)."""
+        """Wiederholung oder Stufenwechsel der KI-Kaskade (für den Job-Monitor)."""
         job = self._job
         if kind == "retry":
             job.message = (
@@ -114,7 +114,7 @@ class JobContext:
         elif kind == "switch":
             job.message = f"Wechsle auf Ausweichmodell {info.get('to_model')}…"
         # "at" einheitlich als Epoch-Sekunden wie created_at/started_at (der Stufenwechsel
-        # bringt fuer das Ledger einen ISO-Zeitstempel mit, der hier nicht durchschlagen soll).
+        # bringt für das Ledger einen ISO-Zeitstempel mit, der hier nicht durchschlagen soll).
         details = {k: v for k, v in info.items() if k not in {"reason", "at"}}
         job.events.append({"kind": kind, **details, "at": time.time()})
         job.events = job.events[-20:]
@@ -166,7 +166,7 @@ class JobManager:
 
     def submit(self, *, document_id: str, title: str, runner: Runner, kind: str = "analysis",
                path: str = "llm") -> Job:
-        """Reiht eine Analyse ein; laeuft fuer den Beleg schon eine, kommt diese zurueck."""
+        """Reiht eine Analyse ein; läuft für den Beleg schon eine, kommt diese zurück."""
         self._prune()
         existing = self.open_for(document_id)
         if existing is not None:
@@ -180,11 +180,11 @@ class JobManager:
 
     @staticmethod
     def _close(job: Job, status: str, message: str) -> None:
-        """Schliesst einen noch offenen Job ab (idempotent).
+        """Schließt einen noch offenen Job ab (idempotent).
 
-        Wird ein Task vor seinem ersten Schritt abgebrochen, laeuft ``_run`` nie an -
+        Wird ein Task vor seinem ersten Schritt abgebrochen, läuft ``_run`` nie an -
         auch dessen ``finally`` nicht.  Ohne diesen Abschluss bliebe der Job "queued",
-        ``open_count`` sperrte den Release-Wechsel und ``wait`` kehrte nie zurueck.
+        ``open_count`` sperrte den Release-Wechsel und ``wait`` kehrte nie zurück.
         """
         if job.status not in {"queued", "running"}:
             return
@@ -215,7 +215,7 @@ class JobManager:
         except (JobCancelled, asyncio.CancelledError):
             job.status = "cancelled"
             job.message = "Abgebrochen"
-        except Exception as exc:  # noqa: BLE001 - der Fehler gehoert in den Job, nicht in den Event-Loop
+        except Exception as exc:  # noqa: BLE001 - der Fehler gehört in den Job, nicht in den Event-Loop
             job.status = "failed"
             job.error = {
                 "code": getattr(exc, "code", "internal_error"),
@@ -249,7 +249,7 @@ class JobManager:
             job.message = "Wird abgebrochen …"
             if job.task is not None and not job.task.done():
                 job.task.cancel()
-            # Ein wartender Job hat noch nichts veraendert: sofort als abgebrochen fuehren.
+            # Ein wartender Job hat noch nichts verändert: sofort als abgebrochen führen.
             if job.status == "queued":
                 self._close(job, "cancelled", "Abgebrochen")
         return job
@@ -267,10 +267,10 @@ class JobManager:
 
     # --- Anzeige -------------------------------------------------------------
     def _progress(self, job: Job, now: float) -> tuple[float, float | None]:
-        """(Anzeige-Fortschritt, geglaettete Restzeit in s).
+        """(Anzeige-Fortschritt, geglättete Restzeit in s).
 
         Innerhalb einer Phase kriecht der Balken asymptotisch Richtung Phasenende
-        (nie darueber hinaus); erst die echte naechste Phase schiebt ihn weiter.
+        (nie darüber hinaus); erst die echte nächste Phase schiebt ihn weiter.
         """
         if job.status == "done":
             return 1.0, 0.0

@@ -181,7 +181,7 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
                   )}
                 </p>
               </button>
-              {/* Rechtsfolgen fuer Screenreader dauerhaft verknuepft; sichtbar im Portal-Tooltip. */}
+              {/* Rechtsfolgen für Screenreader dauerhaft verknüpft; sichtbar im Portal-Tooltip. */}
               {risks.length > 0 && (
                 <span id={`risk-${tile.key}`} className="sr-only">
                   {risks.map((check) => `−${check.deduction}: ${td(check.risk_note)}`).join(" ")}

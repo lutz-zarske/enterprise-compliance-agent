@@ -9,11 +9,11 @@ const ACTIVE_POLL_MS = 1200;
 const IDLE_POLL_MS = 8000;
 
 /**
- * Warteschlange der Analyse-Jobs fuer Kopfzeile und Arbeitsbereich.
+ * Warteschlange der Analyse-Jobs für Kopfzeile und Arbeitsbereich.
  *
- * Meldet jeden Job genau einmal ueber ``onFinished``, sobald er die Warteschlange
- * verlaesst (fertig, abgebrochen oder fehlgeschlagen) - die Seite laedt dann
- * Liste, Kennzahlen und den geoeffneten Beleg neu.  Keep-Alive: Der Hook lebt in
+ * Meldet jeden Job genau einmal über ``onFinished``, sobald er die Warteschlange
+ * verlässt (fertig, abgebrochen oder fehlgeschlagen) - die Seite lädt dann
+ * Liste, Kennzahlen und den geöffneten Beleg neu.  Keep-Alive: Der Hook lebt in
  * der Seite, ein Ansichtswechsel bricht nichts ab.
  */
 export function useJobs(online: boolean, onFinished: (job: JobSnapshot) => void) {

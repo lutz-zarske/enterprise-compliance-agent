@@ -1,10 +1,10 @@
 /**
- * Fundstellen im Belegtext je Pruefkriterium (Rossum-Muster: Hover auf ein
+ * Fundstellen im Belegtext je Prüfkriterium (Rossum-Muster: Hover auf ein
  * Kriterium hebt die belegende Zeile hervor, Klick scrollt dorthin).
  *
  * Die Zuordnung ist deterministisch und folgt denselben Mustern wie die
  * Textbelege des Regelwerks (app/scoring.py: analyze_text). Sie arbeitet auf der
- * Inspektor-Ansicht, also auch auf geschwaerztem Text: Feldbezeichner wie
+ * Inspektor-Ansicht, also auch auf geschwärztem Text: Feldbezeichner wie
  * „Rechnungsdatum:“ bleiben stehen, nur die Werte werden zu Platzhaltern.
  */
 import type { CheckStatus, DetectionSource, DocumentDetail, ScoreCheck, ScoreTile } from "../types/api";
@@ -19,7 +19,7 @@ export interface Line {
 export interface Evidence {
   /** Zeilenindizes, aufsteigend */
   lines: number[];
-  /** Indizes in text_view.spans, die zusaetzlich hervorgehoben werden */
+  /** Indizes in text_view.spans, die zusätzlich hervorgehoben werden */
   spans: number[];
 }
 
@@ -28,7 +28,7 @@ export type EvidenceTone = "ok" | "warn" | "bad";
 export interface EvidenceIndex {
   lines: Line[];
   byCheck: Map<string, Evidence>;
-  /** Rueckrichtung: welche Kriterien eine Zeile belegt */
+  /** Rückrichtung: welche Kriterien eine Zeile belegt */
   byLine: Map<number, string[]>;
 }
 
@@ -59,7 +59,7 @@ const GROSS = /brutto|gesamtbetrag|rechnungsbetrag|endbetrag|zu zahlen/i;
 const IBAN_LABEL = /\biban\b|bankverbindung/i;
 const LEITWEG = /leitweg/i;
 
-/** Ton der Hervorhebung: Gruen konform, Gelb Pruefhinweis oder reiner KI-Nachweis, Rot Verstoss. */
+/** Ton der Hervorhebung: Grün konform, Gelb Prüfhinweis oder reiner KI-Nachweis, Rot Verstoss. */
 export function evidenceTone(status: CheckStatus, source: DetectionSource | null): EvidenceTone | null {
   if (status === "fail") return "bad";
   if (status === "warn") return "warn";
@@ -93,7 +93,7 @@ export function worstTone(tones: (EvidenceTone | null)[]): EvidenceTone | null {
   return tones.reduce<EvidenceTone | null>((worst, tone) => (tone && (!worst || RANK[tone] > RANK[worst]) ? tone : worst), null);
 }
 
-/** Pruefkacheln, deren Kriterien im Inspektor als Zeilen erscheinen. */
+/** Prüfkacheln, deren Kriterien im Inspektor als Zeilen erscheinen. */
 export const TILE_TABS: Partial<Record<ScoreTile["key"], "ustg" | "facts" | "aiact">> = {
   formal: "ustg",
   math: "facts",
@@ -131,7 +131,7 @@ export function buildEvidence(document: DocumentDetail): EvidenceIndex {
     }
     return hits;
   };
-  /** Zeilen, in denen ein extrahierter Wert woertlich steht (nur ungeschwaerzt auffindbar). */
+  /** Zeilen, in denen ein extrahierter Wert wörtlich steht (nur ungeschwärzt auffindbar). */
   const containing = (value: string | null | undefined, first = true): number[] => {
     const needle = value?.trim().toLowerCase();
     if (!needle || needle.length < 3) return [];

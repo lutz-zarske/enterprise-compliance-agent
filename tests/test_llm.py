@@ -81,7 +81,7 @@ async def test_compliance_audit_wird_schemakonform_validiert(
 async def test_kaputte_antwort_wird_in_einer_reparaturrunde_korrigiert(
     ollama_client: OllamaClient, fake_ollama: FakeOllama
 ) -> None:
-    """Erster Versuch liefert Muell, der zweite das korrekte JSON."""
+    """Erster Versuch liefert Müll, der zweite das korrekte JSON."""
     fake_ollama.pending_raw = ["Ich bin ein Sprachmodell und kein JSON."]
 
     extraction, _ = await ollama_client.extract_document("Beispieltext")

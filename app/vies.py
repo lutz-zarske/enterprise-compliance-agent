@@ -1,16 +1,16 @@
-"""Live-Pruefung von USt-IdNr. ueber VIES (Europaeische Kommission).
+"""Live-Prüfung von USt-IdNr. über VIES (Europäische Kommission).
 
 Die Kommission stellt die REST-Schnittstelle kostenlos und ohne API-Key bereit.
 Bewusste Grenzen:
 
-* Uebertragen werden ausschliesslich Laendercode und Nummer - kein
-  Dokumentinhalt.  Die Abfrage loest die Pruefperson aus, nie ein Automatismus.
-* Das Ergebnis ist eine Momentaufnahme: Es wird nicht gespeichert und fliesst
+* Übertragen werden ausschließlich Ländercode und Nummer - kein
+  Dokumentinhalt.  Die Abfrage löst die Prüfperson aus, nie ein Automatismus.
+* Das Ergebnis ist eine Momentaufnahme: Es wird nicht gespeichert und fließt
   nicht in den deterministischen Compliance-Score ein.
-* Deutschland uebermittelt ueber VIES weder Namen noch Anschrift ("---").  Eine
-  qualifizierte Bestaetigung nach § 18e UStG erteilt allein das BZSt.
+* Deutschland übermittelt über VIES weder Namen noch Anschrift ("---").  Eine
+  qualifizierte Bestätigung nach § 18e UStG erteilt allein das BZSt.
 * Kurzes Timeout (Standard 3 s): VIES verbindet die nationalen Datenbanken,
-  die einzeln ausfallen koennen (``MS_UNAVAILABLE``).
+  die einzeln ausfallen können (``MS_UNAVAILABLE``).
 * Die Nummer selbst wird nicht geloggt - bei Einzelunternehmern ist sie ein
   personenbezogenes Datum.
 """
@@ -42,9 +42,9 @@ _NUMBER = re.compile(r"^[0-9A-Z+*]{2,12}$")
 _DE_NUMBER = re.compile(r"^\d{9}$")
 _SEPARATORS = re.compile(r"[\s.\-/]")
 
-#: VIES-Fehlercodes, die auf eine fehlerhafte Eingabe zurueckgehen.
+#: VIES-Fehlercodes, die auf eine fehlerhafte Eingabe zurückgehen.
 _INPUT_ERRORS = {"INVALID_INPUT", "INVALID_REQUESTER_INFO"}
-#: Voruebergehende Stoerungen - spaeter erneut versuchen.
+#: Vorübergehende Störungen - später erneut versuchen.
 _BUSY_ERRORS = {
     "MS_UNAVAILABLE", "MS_MAX_CONCURRENT_REQ", "GLOBAL_MAX_CONCURRENT_REQ",
     "SERVICE_UNAVAILABLE", "TIMEOUT", "SERVER_BUSY",
@@ -53,7 +53,7 @@ _NOT_PROVIDED = {"", "---"}
 
 
 class ViesInputError(ServiceError):
-    """Laendercode oder Nummer sind fuer VIES nicht abfragbar."""
+    """Ländercode oder Nummer sind für VIES nicht abfragbar."""
 
     code = "vies_invalid_input"
     status_code = 422
@@ -69,10 +69,10 @@ class ViesUnavailableError(ServiceError):
 
 
 def normalize_vat(country_code: str, vat_number: str) -> tuple[str, str]:
-    """Bringt Laendercode und Nummer in die von VIES erwartete Form.
+    """Bringt Ländercode und Nummer in die von VIES erwartete Form.
 
     Akzeptiert Leerzeichen, Punkte und Bindestriche sowie ein vorangestelltes
-    Laenderpraefix (``DE 312 345 678``).  Griechenland wird als ``EL`` gefuehrt.
+    Länderpräfix (``DE 312 345 678``).  Griechenland wird als ``EL`` geführt.
     """
     country = country_code.strip().upper()
     country = _ISO_TO_VIES.get(country, country)
@@ -106,7 +106,7 @@ def _provided(value: Any) -> str | None:
 
 
 class ViesClient:
-    """Asynchroner Client fuer ``check-vat-number`` (Transport in Tests gemockt)."""
+    """Asynchroner Client für ``check-vat-number`` (Transport in Tests gemockt)."""
 
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._url = settings.vies_url
@@ -148,7 +148,7 @@ class ViesClient:
         if response.status_code >= 400 or not isinstance(payload.get("valid"), bool):
             raise ViesUnavailableError(f"Unerwartete Antwort von VIES (HTTP {response.status_code}).")
 
-        logger.info("VIES-Abfrage (%s): %s", country, "gueltig" if payload["valid"] else "ungueltig")
+        logger.info("VIES-Abfrage (%s): %s", country, "gültig" if payload["valid"] else "ungültig")
         return VatVerification(
             country_code=country,
             vat_number=number,

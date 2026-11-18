@@ -1,4 +1,4 @@
-"""Tests des hash-verketteten Pruefprotokolls (audit_trails)."""
+"""Tests des hash-verketteten Prüfprotokolls (audit_trails)."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ async def test_trigger_verhindern_update_und_delete(ledger: AuditLedger) -> None
 
 
 async def test_manipulation_wird_mit_sequenz_nachgewiesen(ledger: AuditLedger) -> None:
-    """Selbst wer die Trigger entfernt, faellt bei der Kettenpruefung auf."""
+    """Selbst wer die Trigger entfernt, fällt bei der Kettenprüfung auf."""
     await _append(ledger, score=40)
     await _append(ledger, score=55)
     await _append(ledger, score=61)

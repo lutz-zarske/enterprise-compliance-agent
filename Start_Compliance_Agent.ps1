@@ -298,6 +298,6 @@ Box-Zeile "Logs:    $LogDir" DarkGray
 Box-Zeile "Beenden: Stop_Compliance_Agent.bat" DarkGray
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host ""
-# Kurze Lesepause fuer die Statusbox, danach schliesst sich das Fenster von selbst.
+# Kurze Lesepause für die Statusbox, danach schließt sich das Fenster von selbst.
 if (-not $NoBrowser) { Start-Process "http://127.0.0.1:$FrontendPort"; Start-Sleep -Seconds 2 }
 exit 0

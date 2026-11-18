@@ -11,7 +11,7 @@ type EdgeTone = "pass" | "warn" | "fail" | "neutral";
 
 /**
  * Status als feine Innenkante oben in der Kachel.
- * Im hellen Modus traegt nur die Kontur den Ton; die Lichtkante gilt im Dark Mode.
+ * Im hellen Modus trägt nur die Kontur den Ton; die Lichtkante gilt im Dark Mode.
  */
 const EDGE: Record<EdgeTone, string> = {
   pass: "dark:border-emerald-500/[0.14] dark:shadow-[inset_0_1px_0_0_rgba(16,185,129,0.09)]",

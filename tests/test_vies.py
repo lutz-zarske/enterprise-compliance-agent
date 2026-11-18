@@ -1,8 +1,8 @@
-"""VIES-Live-Pruefung der USt-IdNr. (POST /api/vat/verify).
+"""VIES-Live-Prüfung der USt-IdNr. (POST /api/vat/verify).
 
-VIES ist ueber ``FakeVies`` auf HTTP-Ebene gemockt (``httpx.MockTransport``):
+VIES ist über ``FakeVies`` auf HTTP-Ebene gemockt (``httpx.MockTransport``):
 Normalisierung, Fehlerabbildung und Antwortaufbereitung in ``app/vies.py``
-laufen vollstaendig mit, ohne dass ein Test das Netz beruehrt.
+laufen vollständig mit, ohne dass ein Test das Netz berührt.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def test_valid_german_number_without_name(client: TestClient, fake_vies: FakeVie
     assert body["valid"] is True
     assert body["country_code"] == "DE"
     assert body["vat_number"] == "312345678"
-    # Deutschland uebermittelt ueber VIES weder Namen noch Anschrift ("---").
+    # Deutschland übermittelt über VIES weder Namen noch Anschrift ("---").
     assert body["name"] is None
     assert body["address"] is None
     assert body["request_date"].startswith("2026-10-07T09:15:00")

@@ -54,7 +54,7 @@ das Ergebnis. Der Job durchläuft vier Phasen, die er live meldet:
 
 | Phase | Schritt | Details |
 |---|---|---|
-| 1 | Text-Layer & XML-Vorrang | Textlayer vorhanden? E-Rechnungen mit auswertbarem XML laufen ab hier deterministisch über den EN-16931-Datensatz (BMF 15.10.2024, Rz. 36). |
+| 1 | Text-Layer & XML-Vorrang | Textlayer vorhanden? Das gespeicherte Original wird mit dem aktuellen Parser neu eingelesen (auch bei Belegen aus älteren Versionen; das Protokoll vermerkt `einvoice_parser` und ggf. `einvoice_reread`). E-Rechnungen mit auswertbarem XML laufen ab hier deterministisch über den EN-16931-Datensatz (BMF 15.10.2024, Rz. 36). |
 | 2 | PII-Scanner & Privacy Vault | Regex-Zweitmeinung über den Volltext; bei Cloud-Inferenz Aufbau des Mappings (gleiche Platzhalter für beide Modellaufrufe). |
 | 3 | § 14 UStG Extraktion & Prüfung | Strukturierte Extraktion mit Pydantic-Vertrag und einer Reparaturrunde bei Schemafehlern; regelbasierte Nachkontrollen (IBAN MOD-97, Pflichtangaben). |
 | 4 | EU AI Act, Scorecard & Ledger | Einstufung nach Art. 5/6/50 mit Anhang-III-Eskalation, DSGVO-Befund mit Maskierungszwang, deterministische Scorecard, Ledger-Eintrag. |
@@ -273,7 +273,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (351 Tests, Stand v2.7.1) deckt die Kette vom HTTP-Request bis zur
+`pytest` (355 Tests, Stand v2.7.2) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die

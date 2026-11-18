@@ -31,8 +31,8 @@ const FOCUSABLE_SELECTOR =
   'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])';
 
 /**
- * Sperrt den Hintergrund (#eca-app-shell via inert), faengt Tab im Dialog,
- * schliesst auf Escape und gibt beim Schliessen den Fokus zurueck.
+ * Sperrt den Hintergrund (#eca-app-shell via inert), fängt Tab im Dialog,
+ * schließt auf Escape und gibt beim Schließen den Fokus zurück.
  */
 export function useModalFocusLock(
   open: boolean,
@@ -74,7 +74,7 @@ export function useModalFocusLock(
       }
     };
     document.addEventListener("keydown", onKey);
-    // Ein Kind (z. B. das Namensfeld) darf den Fokus beim Oeffnen selbst setzen.
+    // Ein Kind (z. B. das Namensfeld) darf den Fokus beim Öffnen selbst setzen.
     if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
@@ -201,7 +201,7 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
   }, [value, items.length]);
 
   // Bei schmaler Spalte scrollt die Leiste: der aktive Tab bleibt immer sichtbar.
-  // Bewusst nur waagerecht in der Leiste selbst - scrollIntoView wuerde auch die Seite
+  // Bewusst nur waagerecht in der Leiste selbst - scrollIntoView würde auch die Seite
   // verschieben (auf schmalen Fenstern sprang sie beim Laden zum Inspektor).
   useEffect(() => {
     const list = listRef.current;
@@ -314,7 +314,7 @@ export function ProgressBar({ value, className, label }: { value: number | null;
   );
 }
 
-/** Kleiner Fortschrittsring (16 px) fuer die Kopfzeile - platzsparender als ein Balken. */
+/** Kleiner Fortschrittsring (16 px) für die Kopfzeile - platzsparender als ein Balken. */
 export function MiniRing({ value }: { value: number }) {
   const r = 6;
   const circumference = 2 * Math.PI * r;
@@ -338,7 +338,7 @@ export function MiniRing({ value }: { value: number }) {
   );
 }
 
-/** Restzeit, die zwischen zwei Meldungen sekuendlich weiterzaehlt und sich weich angleicht. */
+/** Restzeit, die zwischen zwei Meldungen sekündlich weiterzählt und sich weich angleicht. */
 export function Eta({ seconds, className }: { seconds: number | null | undefined; className?: string }) {
   const anchor = useRef<{ value: number; at: number } | null>(null);
   const [shown, setShown] = useState<number | null>(null);
@@ -367,7 +367,7 @@ export function Eta({ seconds, className }: { seconds: number | null | undefined
 }
 
 /**
- * Mehrzeiliges Eingabefeld, das mit dem Inhalt waechst (bis ``maxRows``), danach
+ * Mehrzeiliges Eingabefeld, das mit dem Inhalt wächst (bis ``maxRows``), danach
  * scrollt - ohne manuelle Zieh-Ecke.
  */
 export const AutoTextarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
@@ -454,7 +454,7 @@ export interface Toast {
   leaving?: boolean;
 }
 
-/** Erfolg und Hinweis 3 s, Warnung und Fehler 6 s (laenger lesbar); Ueberfahren pausiert. */
+/** Erfolg und Hinweis 3 s, Warnung und Fehler 6 s (länger lesbar); Überfahren pausiert. */
 const TOAST_MS: Record<Toast["tone"], number> = { ok: 3000, info: 3000, warn: 6000, bad: 6000 };
 
 export function useToasts() {
@@ -571,14 +571,14 @@ export function Spinner({ size = 14 }: { size?: number }) {
 }
 
 const TIP_MARGIN = 8;
-/** Nach dem ersten Tooltip erscheinen weitere sofort (eine Leiste fuehlt sich dadurch schneller an). */
+/** Nach dem ersten Tooltip erscheinen weitere sofort (eine Leiste fühlt sich dadurch schneller an). */
 let lastTipClosedAt = 0;
 
 /**
- * Tooltip per Portal: haengt mit fester Position an ``<body>`` und wird an das
+ * Tooltip per Portal: hängt mit fester Position an ``<body>`` und wird an das
  * Fenster geklemmt - in Scrollbereichen, Karten mit ``overflow: hidden`` und am
  * Bildschirmrand (1080p) wird nichts abgeschnitten.  Erscheint bei Hover und
- * Tastaturfokus (WCAG 1.4.13), Escape schliesst.  ``align``/``side`` sind nur
+ * Tastaturfokus (WCAG 1.4.13), Escape schließt.  ``align``/``side`` sind nur
  * Vorzugsrichtungen.
  */
 export function Tooltip({ content, children, align = "left", side = "top", className, inline = false }: {
@@ -587,7 +587,7 @@ export function Tooltip({ content, children, align = "left", side = "top", class
   align?: "left" | "right" | "center";
   side?: "top" | "bottom";
   className?: string;
-  /** Im Fliesstext (z. B. Belegzeilen) ``inline`` statt ``inline-flex``, damit der Umbruch erhalten bleibt. */
+  /** Im Fließtext (z. B. Belegzeilen) ``inline`` statt ``inline-flex``, damit der Umbruch erhalten bleibt. */
   inline?: boolean;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
@@ -674,7 +674,7 @@ export function Tooltip({ content, children, align = "left", side = "top", class
   );
 }
 
-/** „⌘“ auf Apple-Geraeten, sonst „Strg“ / „Ctrl“ (nach dem ersten Render, SSR-sicher). */
+/** „⌘“ auf Apple-Geräten, sonst „Strg“ / „Ctrl“ (nach dem ersten Render, SSR-sicher). */
 export function useModifierLabel(): string {
   const { tr: tl } = useI18n();
   const [apple, setApple] = useState(false);
@@ -708,7 +708,7 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 /**
- * 1-Klick-Kopieren mit 1,5 s Haken-Feedback. Der Button behaelt seine Breite,
+ * 1-Klick-Kopieren mit 1,5 s Haken-Feedback. Der Button behält seine Breite,
  * damit beim Wechsel auf „Kopiert“ nichts springt.
  */
 export function CopyButton({ value, label, className }: { value: string; label: string; className?: string }) {
@@ -761,7 +761,7 @@ export function CopyButton({ value, label, className }: { value: string; label: 
   );
 }
 
-/** Kopierbarer Wert mit Tabellenziffern (Rechnungsnummer, Leitweg-ID, IBAN); ``mono`` nur fuer Hashes/IDs. */
+/** Kopierbarer Wert mit Tabellenziffern (Rechnungsnummer, Leitweg-ID, IBAN); ``mono`` nur für Hashes/IDs. */
 export function CopyValue({ value, label, display, className, mono = false }: {
   value: string | null | undefined;
   label: string;
@@ -779,8 +779,8 @@ export function CopyValue({ value, label, display, className, mono = false }: {
 }
 
 /**
- * Gekuerzter Hash im Monospace-Badge mit Verifikationsstatus und Kopierbutton.
- * ``verified``: true = nachgerechnet/Signatur gueltig, false = Befund, null = nicht geprueft.
+ * Gekürzter Hash im Monospace-Badge mit Verifikationsstatus und Kopierbutton.
+ * ``verified``: true = nachgerechnet/Signatur gültig, false = Befund, null = nicht geprüft.
  */
 export function HashBadge({ value, label = "SHA-256", verified = null, verifiedLabel, className, statusIcon = true }: {
   value: string;

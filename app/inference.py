@@ -1,26 +1,26 @@
 """Universeller Inference-Router mit ausfallsicherer Kaskade.
 
 Der Router liest bei *jedem* Auftrag die aktuelle Laufzeitkonfiguration und
-liefert einen ``FailoverClient`` ueber die effektive Kaskade:
+liefert einen ``FailoverClient`` über die effektive Kaskade:
 
 1. Hauptmodell des aktiven Providers
 2. Ausweichmodell desselben Anbieters (nur Cloud)
-3. Ausweich-Schluessel der Reihe nach (nur Cloud; auch mehrere Keys eines Anbieters)
+3. Ausweich-Schlüssel der Reihe nach (nur Cloud; auch mehrere Keys eines Anbieters)
 4. Anbieter-Fallbacks (``fallbacks``), ``local`` = Ollama
 
-* ``local``  -> ``OllamaClient`` (kein Byte verlaesst den Rechner)
-* ``gemini`` / ``anthropic`` / ``openai`` -> Cloud-Client, **immer** umhuellt vom
+* ``local``  -> ``OllamaClient`` (kein Byte verlässt den Rechner)
+* ``gemini`` / ``anthropic`` / ``openai`` -> Cloud-Client, **immer** umhüllt vom
   ``VaultedClient``.  Alle Cloud-Stufen teilen sich *einen* ``PrivacyVault``:
   gleiche Platzhalter, ein Bericht.  Ein Cloud-Aufruf ohne Privacy Gateway ist
   im Code nicht vorgesehen.
 
 Wiederholen vor Wechseln: Bei HTTP 408/429/5xx, Verbindungsfehler oder
-Zeitueberschreitung wiederholt der Client dieselbe Stufe zunaechst mit kurzem
-Backoff (Standard 2 s, dann 5 s).  Erst danach uebernimmt die naechste Stufe;
+Zeitüberschreitung wiederholt der Client dieselbe Stufe zunächst mit kurzem
+Backoff (Standard 2 s, dann 5 s).  Erst danach übernimmt die nächste Stufe;
 jeder Wechsel wird festgehalten und von ``services`` als ``provider_failover``
 in der SHA-256-Hash-Kette des Ledgers protokolliert (maschinelles Ereignis,
-keine Ed25519-Signatur - die gilt Prueferereignissen).  Abgelehnte Keys (401/403) und
-Schemafehler loesen bewusst weder Wiederholung noch Wechsel aus - eine
+keine Ed25519-Signatur - die gilt Prüferereignissen).  Abgelehnte Keys (401/403) und
+Schemafehler lösen bewusst weder Wiederholung noch Wechsel aus - eine
 Fehlkonfiguration soll sichtbar bleiben.
 """
 
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 #: Standard-Backoff vor dem Stufenwechsel (s) - wie in der Konfiguration ``LLM_RETRY_DELAYS``.
 DEFAULT_RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0)
 
-#: Ereignis-Rueckruf fuer Live-Fortschritt (Copilot-Arbeitsschritte, Job-Phase).
+#: Ereignis-Rückruf für Live-Fortschritt (Copilot-Arbeitsschritte, Job-Phase).
 EventHook = Callable[[str, dict[str, Any]], None]
 
 _CLOUD_CLASSES: dict[InferenceMode, type[CloudLLMClient]] = {
@@ -70,7 +70,7 @@ STAGE_LABELS = {
 
 
 def is_failover_error(exc: BaseException) -> bool:
-    """Ueberlast, Ausfall, Zeitueberschreitung oder Budget - nie 401/403 oder Schemafehler."""
+    """Überlast, Ausfall, Zeitüberschreitung oder Budget - nie 401/403 oder Schemafehler."""
     return isinstance(exc, LLMError) and bool(getattr(exc, "failover", False))
 
 
@@ -94,9 +94,9 @@ class FailoverClient(StructuredLLMClient):
         self._retry_delays = retry_delays
         self.vault = vault
         self.on_event = on_event
-        #: Protokoll der Wechsel (Grundlage fuer die Ledger-Eintraege).
+        #: Protokoll der Wechsel (Grundlage für die Ledger-Einträge).
         self.switches: list[dict[str, str]] = []
-        #: Anzahl der Wiederholungen ueber alle Stufen (fuer Bericht und Tests).
+        #: Anzahl der Wiederholungen über alle Stufen (für Bericht und Tests).
         self.retries = 0
 
     @property
@@ -124,7 +124,7 @@ class FailoverClient(StructuredLLMClient):
             return
         try:
             self.on_event(kind, info)
-        except Exception:  # noqa: BLE001 - ein Anzeige-Rueckruf darf die Pruefung nie kippen
+        except Exception:  # noqa: BLE001 - ein Anzeige-Rückruf darf die Prüfung nie kippen
             logger.debug("Ereignis-Rückruf fehlgeschlagen", exc_info=True)
 
     async def _post_chat(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> str:
@@ -175,7 +175,7 @@ class FailoverClient(StructuredLLMClient):
 
 
 class InferenceRouter:
-    """Waehlt pro Auftrag die Kaskade und erzwingt das Privacy Gateway."""
+    """Wählt pro Auftrag die Kaskade und erzwingt das Privacy Gateway."""
 
     def __init__(
         self,
@@ -223,7 +223,7 @@ class InferenceRouter:
         api_key: str | None = None,
         model: str | None = None,
     ) -> CloudLLMClient:
-        """Roher Cloud-Client (ohne Vault) - fuer die Kaskade und Verbindungstests ohne Dokumentinhalt."""
+        """Roher Cloud-Client (ohne Vault) - für die Kaskade und Verbindungstests ohne Dokumentinhalt."""
         snap = snapshot or self._store.snapshot()
         key = api_key or snap.key_for(mode.value)
         cls = _CLOUD_CLASSES[mode]
@@ -250,7 +250,7 @@ class InferenceRouter:
         )
 
     def acquire(self, on_event: EventHook | None = None) -> FailoverClient:
-        """Client fuer genau einen Auftrag (Dokumentanalyse oder Copilot-Frage)."""
+        """Client für genau einen Auftrag (Dokumentanalyse oder Copilot-Frage)."""
         snap = self._store.snapshot()
         vault = PrivacyVault()
         clients: list[StructuredLLMClient] = []
@@ -270,7 +270,7 @@ class InferenceRouter:
                 )
             except ProviderNotConfiguredError:
                 if position == 0:
-                    raise  # Der primaere Provider muss eingerichtet sein.
+                    raise  # Der primäre Provider muss eingerichtet sein.
                 logger.warning("Ausweich-Stufe %s ohne API-Key - übersprungen.", stage.provider.value)
                 continue
             clients.append(VaultedClient(inner, vault))

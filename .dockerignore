@@ -11,7 +11,11 @@ tests/
 data/
 .env
 .env.local
+.run/
+*.key
 README.md
 docker-compose.yml
 frontend/
 docs/
+CLAUDE.md
+DESIGN.md

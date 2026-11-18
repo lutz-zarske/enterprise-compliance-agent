@@ -5,8 +5,8 @@ import { useI18n } from "../lib/i18n";
 
 /**
  * Ruhige Absturz-Abfangseite (Next.js-Fehlergrenze): keine rohen Exceptions, sondern
- * eine verstaendliche Meldung mit Handlungsanweisung.  Pruefergebnisse und Ledger
- * liegen im Backend und bleiben unberuehrt.
+ * eine verständliche Meldung mit Handlungsanweisung.  Prüfergebnisse und Ledger
+ * liegen im Backend und bleiben unberührt.
  */
 export default function ErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const { tr } = useI18n();

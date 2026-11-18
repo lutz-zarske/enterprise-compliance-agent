@@ -35,7 +35,7 @@ def test_extraktion_liefert_scorecard_und_detail_traegt_sie(full_client: TestCli
     card = body["scorecard"]
     assert 0 <= card["score"] <= 100
     assert [tile["key"] for tile in card["tiles"]] == ["formal", "regulatory", "privacy", "math"]
-    # Recruiting-KI ohne Konformitaetsnachweis -> gedeckelt und gesperrt.
+    # Recruiting-KI ohne Konformitätsnachweis -> gedeckelt und gesperrt.
     assert card["score"] <= 59 and card["band"] == "red"
     assert card["release_blocked"] is True
     assert body["audit_entry_id"]
@@ -122,7 +122,7 @@ def test_sign_off_versiegelt_und_schreibt_ledger(full_client: TestClient, invoic
     assert "GEPRÜFT &amp; FREIGEGEBEN" in html and "Lutz Zarske" in html
     assert full_client.get("/documents").json()["items"][0]["sealed"] is True
 
-    # Neue Analyse = neuer Pruefgegenstand -> Siegel faellt, Historie bleibt.
+    # Neue Analyse = neuer Prüfgegenstand -> Siegel fällt, Historie bleibt.
     full_client.post(f"/documents/{document_id}/extract?wait=true")
     assert full_client.get(f"/documents/{document_id}").json()["sign_off"] is None
     assert len(full_client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"]) == 3
@@ -293,7 +293,7 @@ def test_standard_schwaerzt_identifikatoren_und_art9() -> None:
     assert "DE89370400440532013000" not in text and "DE89********3000" in text
     assert "p.simon@talentmatch.example" not in text
     assert "Attest" not in text and "[ART. 9]" in text
-    # Namen und Betraege bleiben lesbar, sind aber markiert.
+    # Namen und Beträge bleiben lesbar, sind aber markiert.
     assert "Petra Simon" in text and "32.725,00 EUR" in text
     person = next(span for span in view["spans"] if span["category"] == "person")
     assert person["masked"] is False
@@ -331,7 +331,7 @@ def test_quelle_both_wenn_llm_und_regel_treffen(full_client: TestClient, invoice
 
 
 def test_unbekannte_extraktionsfelder_bleiben_tolerant() -> None:
-    """Neue Pflichtfelder sind optional - alte Modellantworten bleiben gueltig."""
+    """Neue Pflichtfelder sind optional - alte Modellantworten bleiben gültig."""
     from app.schemas import ExtractionResult
 
     legacy = ExtractionResult.model_validate(DEFAULT_EXTRACTION)

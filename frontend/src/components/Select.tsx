@@ -17,9 +17,9 @@ export interface SelectOption<T extends string = string> {
  * Dropdown im Glas-Design.
  *
  * Ersetzt das native <select>, das das Betriebssystem zeichnet und das deshalb
- * als eckiger Fremdkoerper im Layout sitzt. Die Liste schwebt als Portal ueber
+ * als eckiger Fremdkörper im Layout sitzt. Die Liste schwebt als Portal über
  * dem Layout (kein Springen der Spalte); Pfeiltasten bewegen, Enter/Leertaste
- * uebernehmen, Escape schliesst, Tab verlaesst. Rollen combobox/listbox/option.
+ * übernehmen, Escape schließt, Tab verlässt. Rollen combobox/listbox/option.
  */
 export function Select<T extends string = string>({ value, options, onChange, ariaLabel, className, width = 220, disabled = false, placeholder }: {
   value: T;
@@ -29,7 +29,7 @@ export function Select<T extends string = string>({ value, options, onChange, ar
   className?: string;
   width?: number;
   disabled?: boolean;
-  /** Text, solange nichts gewaehlt ist. */
+  /** Text, solange nichts gewählt ist. */
   placeholder?: string;
 }) {
   const { tr } = useI18n();
@@ -41,14 +41,14 @@ export function Select<T extends string = string>({ value, options, onChange, ar
   const id = useId();
   const selected = options.find((option) => option.value === value);
   const close = useCallback(() => setOpen(false), []);
-  // Hoechstens ein Menue offen: oeffnet sich ein anderes, schliesst dieses.
+  // Höchstens ein Menü offen: öffnet sich ein anderes, schließt dieses.
   usePopoverExclusive(open, close, `select-${id}`);
 
   useEffect(() => {
     if (open) setActive(Math.max(0, options.findIndex((option) => option.value === value)));
   }, [open, options, value]);
 
-  // Klick nach draussen, Scrollen der Seite und Groessenaenderung schliessen die Liste.
+  // Klick nach draußen, Scrollen der Seite und Größenänderung schließen die Liste.
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
@@ -98,7 +98,7 @@ export function Select<T extends string = string>({ value, options, onChange, ar
       if (open && options[active]) choose(options[active]);
       else setOpen(true);
     } else if (event.key === "Escape" && open) {
-      // Nur die Liste schliessen, nicht zusaetzlich einen umgebenden Dialog.
+      // Nur die Liste schließen, nicht zusätzlich einen umgebenden Dialog.
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);

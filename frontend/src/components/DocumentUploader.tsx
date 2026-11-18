@@ -14,7 +14,7 @@ interface Props {
   onError: (error: ApiError) => void;
 }
 
-/** Drag & Drop fuer beliebig viele PDFs und XML-E-Rechnungen (POST /documents/upload-batch). */
+/** Drag & Drop für beliebig viele PDFs und XML-E-Rechnungen (POST /documents/upload-batch). */
 export function DocumentUploader({ disabled, onUploaded, onError }: Props) {
   const { tr } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);

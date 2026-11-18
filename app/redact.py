@@ -1,28 +1,28 @@
 """Generisches Data-Loss-Prevention-Gateway (``POST /api/v1/redact``).
 
 Andere Anwendungen (externe Fachanwendungen, Analyse-Pipelines) schicken Text
-hierher, *bevor* sie ihn an ein Cloud-LLM geben.  Anders als der Privacy Vault der Dokumentpruefung
-schwaerzt dieses Gateway **endgueltig**: Es gibt kein Mapping, keine
-Re-Identifizierung, und die Antwort enthaelt nur den geschwaerzten Text und
-Zaehler - nie die gefundenen Werte.
+hierher, *bevor* sie ihn an ein Cloud-LLM geben.  Anders als der Privacy Vault der Dokumentprüfung
+schwärzt dieses Gateway **endgültig**: Es gibt kein Mapping, keine
+Re-Identifizierung, und die Antwort enthält nur den geschwärzten Text und
+Zähler - nie die gefundenen Werte.
 
-Regeln (deterministisch, in dieser Reihenfolge, ohne Ueberlappung):
+Regeln (deterministisch, in dieser Reihenfolge, ohne Überlappung):
 
 1. **Zugangsdaten** (API-Keys, Tokens, ``password=...``) -> ``[REDACTED_SECRET]``
 2. **Vertrauliche Dateinamen** (``internal_audit_memo.md``, ``pricing_algorithm.py``)
    -> ``[REDACTED_CONFIDENTIAL]``
-3. **Geschuetzte Parameter**: der *Wert* von Schwellwerten, Gewichten und
+3. **Geschützte Parameter**: der *Wert* von Schwellwerten, Gewichten und
    Strategie-Parametern (``threshold=0.73`` -> ``threshold=[REDACTED_CONFIDENTIAL]``)
 4. **Sperrbegriffe** aus ``DLP_TERMS`` und ``extra_terms`` -> ``[REDACTED_CONFIDENTIAL]``
-5. **Personenbezogene Daten** ueber die Muster des Privacy Gateways
+5. **Personenbezogene Daten** über die Muster des Privacy Gateways
    (E-Mail, IBAN, USt-IdNr., Steuernummer, Telefon, Adresse, Firma, Person)
-   -> ``[REDACTED_<KATEGORIE>]``; Betraege nur auf Wunsch.
+   -> ``[REDACTED_<KATEGORIE>]``; Beträge nur auf Wunsch.
 
 Grenzen: Die Erkennung ist regelbasiert.  Geheimnisse in Freitext ohne
 erkennbares Muster bleiben stehen - das Gateway senkt das Abflussrisiko, es
 garantiert keine Vertraulichkeit.
 
-CLI: ``python -m app.redact < eingabe.txt`` gibt den geschwaerzten Text aus.
+CLI: ``python -m app.redact < eingabe.txt`` gibt den geschwärzten Text aus.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def redact(
     redact_pii: bool = True,
     redact_amounts: bool = False,
 ) -> RedactionResult:
-    """Schwaerzt ``text`` endgueltig; liefert Text und Anzahl je Kategorie."""
+    """Schwärzt ``text`` endgültig; liefert Text und Anzahl je Kategorie."""
     spans: list[tuple[int, int, str, str]] = []  # start, end, kategorie, ersatz
 
     def add(start: int, end: int, category: str, replacement: str) -> None:

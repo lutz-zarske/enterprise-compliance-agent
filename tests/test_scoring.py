@@ -54,7 +54,7 @@ def test_gueltige_rechnung_erreicht_100_und_freigabe() -> None:
     assert card.ustg_fulfilled == card.ustg_required_total == 10
     formal = next(tile for tile in card.tiles if tile.key == "formal")
     assert formal.headline.startswith("Vollständig (10/10)")
-    # Der informative E-Rechnungs-Hinweis faerbt die Kachel nicht gelb.
+    # Der informative E-Rechnungs-Hinweis färbt die Kachel nicht gelb.
     assert formal.status.value == "pass"
     # Doppelter Nachweis LLM + Regex wird ausgewiesen.
     tax_check = next(check for check in formal.checks if check.id == "ustg_2_tax_id")
@@ -86,7 +86,7 @@ def test_steuerfalle_ergibt_45_und_sperre() -> None:
 
 
 def test_regex_gegenprobe_rettet_luekenhafte_llm_extraktion() -> None:
-    """Liefert das Modell nur Kernfelder, belegen die Textregeln die uebrigen Pflichtangaben."""
+    """Liefert das Modell nur Kernfelder, belegen die Textregeln die übrigen Pflichtangaben."""
     sparse = ExtractionResult.model_validate(
         {"doc_type": "invoice", "sender": "Nordlicht IT-Services GmbH", "recipient": "Brandt Maschinenbau AG",
          "document_number": "RE-2025-0142", "document_date": "2025-03-14", "total_amount": 7140,
@@ -210,12 +210,12 @@ def test_jeder_abzug_traegt_eine_risikoerklaerung() -> None:
     assert deducted
     for check in deducted:
         assert check.risk_note, check.id
-        # Genau ein Satz: Abkuerzungen wie "Abs." oder "Mio." sind kein Satzende.
+        # Genau ein Satz: Abkürzungen wie "Abs." oder "Mio." sind kein Satzende.
         assert check.risk_note.endswith("."), check.risk_note
         assert not re.search(r"[a-zäöüß)]\.\s+[A-ZÄÖÜ]", check.risk_note), check.risk_note
     tax_id = next(c for c in deducted if c.id == "ustg_2_tax_id")
     assert "§ 15 UStG" in tax_id.risk_note
-    assert card.ruleset_version == "2026.2"
+    assert card.ruleset_version == "2026.3"
 
 
 def test_hochrisiko_hinweis_auf_art_6_abs_3_und_stichtag() -> None:
@@ -235,7 +235,7 @@ def test_hybride_e_rechnung_verweist_auf_xml_vorrang() -> None:
     )
     assert card.structured_einvoice_detected is True
     en = next(c for t in card.tiles for c in t.checks if c.id == "en16931")
-    # Der rechtlich massgebliche XML-Teil wird nicht validiert -> Hinweis statt "erfuellt".
+    # Der rechtlich massgebliche XML-Teil wird nicht validiert -> Hinweis statt "erfüllt".
     assert en.status.value == "warn"
     assert "maßgeblich ist bei hybriden Rechnungen der strukturierte XML-Teil" in (en.detail or "")
     assert "15.10.2024" in (en.note or "")
@@ -250,4 +250,4 @@ def test_paragraf_14c_endverbraucher_hinweis() -> None:
     )
     calc = next(c for t in card.tiles for c in t.checks if c.id == "tax_calc")
     assert "C-378/21" in (calc.note or "") and "27.02.2024" in (calc.note or "")
-    assert calc.risk_note is None  # kein Mangel -> keine Risikoerklaerung
+    assert calc.risk_note is None  # kein Mangel -> keine Risikörklärung

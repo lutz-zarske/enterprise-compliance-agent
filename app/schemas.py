@@ -1,6 +1,6 @@
 """Pydantic-v2-Datenmodelle der gesamten Anwendung.
 
-Die Modelle erfuellen zwei Aufgaben gleichzeitig:
+Die Modelle erfüllen zwei Aufgaben gleichzeitig:
 
 * **Vertrag gegenüber dem LLM** - aus ``model_json_schema()`` wird der
   JSON-Vertrag generiert, den das Modell einhalten muss.  Diese Modelle sind
@@ -24,7 +24,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 # ---------------------------------------------------------------------------
-# Hilfsfunktionen fuer die tolerante Normalisierung von LLM-Ausgaben
+# Hilfsfunktionen für die tolerante Normalisierung von LLM-Ausgaben
 # ---------------------------------------------------------------------------
 
 #: Zeichenketten, die ein LLM anstelle von ``null`` liefert.
@@ -85,7 +85,7 @@ def parse_flexible_date(value: Any) -> Any:
         except ValueError:
             continue
 
-    # "15. Maerz 2024" / "15 Maerz 2024"
+    # "15. März 2024" / "15 März 2024"
     match = re.match(r"^(\d{1,2})\.?\s+([A-Za-zÄÖÜäöü]+)\.?\s+(\d{4})$", text)
     if match:
         day, month_name, year = match.groups()
@@ -175,7 +175,7 @@ def iban_checksum_valid(iban: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Aufzaehlungstypen
+# Aufzählungstypen
 # ---------------------------------------------------------------------------
 
 
@@ -221,7 +221,7 @@ class AnnexIIICategory(str, Enum):
     JUSTICE_AND_DEMOCRACY = "justice_and_democratic_processes"      # Nr. 8
 
 
-#: Menschenlesbare deutsche Bezeichnungen fuer Reports und UI.
+#: Menschenlesbare deutsche Bezeichnungen für Reports und UI.
 ANNEX_III_LABELS: dict[AnnexIIICategory, str] = {
     AnnexIIICategory.BIOMETRICS: "Anhang III Nr. 1 - Biometrie",
     AnnexIIICategory.CRITICAL_INFRASTRUCTURE: "Anhang III Nr. 2 - Kritische Infrastruktur",
@@ -262,7 +262,7 @@ class PIICategory(str, Enum):
     OTHER = "other_personal_data"
 
 
-#: Kategorien, die unter Art. 9/10 DSGVO besonders geschuetzt sind.
+#: Kategorien, die unter Art. 9/10 DSGVO besonders geschützt sind.
 SPECIAL_CATEGORIES: frozenset[PIICategory] = frozenset(
     {
         PIICategory.HEALTH_DATA,
@@ -300,7 +300,7 @@ PII_CATEGORY_LABELS: dict[PIICategory, str] = {
 
 
 class RiskLevel(str, Enum):
-    """Generische Risikoeinstufung für den DSGVO-Teilbericht."""
+    """Generische Risiköinstufung für den DSGVO-Teilbericht."""
 
     NONE = "none"
     LOW = "low"
@@ -335,7 +335,7 @@ class LLMModel(BaseModel):
 
 
 class ApiModel(BaseModel):
-    """Basis für alle nach aussen sichtbaren API-Modelle."""
+    """Basis für alle nach außen sichtbaren API-Modelle."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -367,7 +367,7 @@ def _clean_confidence(value: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Fachliche Extraktion (Rechnungen & Vertraege)
+# Fachliche Extraktion (Rechnungen & Verträge)
 # ---------------------------------------------------------------------------
 
 
@@ -741,7 +741,7 @@ class GDPRAssessment(LLMModel):
             return []
         if not isinstance(value, list):
             return value
-        # Treffer ohne gueltige Kategorie werden still verworfen.
+        # Treffer ohne gültige Kategorie werden still verworfen.
         valid = {member.value for member in PIICategory}
         return [
             item
@@ -770,7 +770,7 @@ class ComplianceAudit(ApiModel):
 
     # Dieses Modell wird als JSON persistiert und beim Lesen wieder validiert.
     # Berechnete Felder (``headline``) sind Teil des Dumps, aber keine Eingabe-
-    # felder - deshalb hier "ignore" statt des sonst ueblichen "forbid".
+    # felder - deshalb hier "ignore" statt des sonst üblichen "forbid".
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
     ai_act: AIActAssessment
@@ -986,7 +986,7 @@ class RetentionInfo(ApiModel):
 
 
 class HumanOverride(ApiModel):
-    """Uebersteuerung einer KI-Einstufung durch eine natürliche Person (Art. 14 Abs. 4 lit. d AI Act)."""
+    """Übersteuerung einer KI-Einstufung durch eine natürliche Person (Art. 14 Abs. 4 lit. d AI Act)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -1057,7 +1057,7 @@ class EInvoiceParty(ApiModel):
 
 
 class EInvoiceVat(ApiModel):
-    """Eine Zeile der Umsatzsteueraufschluesselung (BG-23)."""
+    """Eine Zeile der Umsatzsteueraufschlüsselung (BG-23)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -1162,6 +1162,9 @@ class EInvoiceData(ApiModel):
     lines: list[EInvoiceLine] = Field(default_factory=list)
     rule_violations: list[str] = Field(default_factory=list)
     leitweg: LeitwegCheck | None = None
+    parser_version: str | None = Field(
+        default=None, description="Version des E-Rechnungs-Parsers; None bei Datensätzen vor v2.7.2."
+    )
     public_buyer: bool = False
     public_buyer_reason: str | None = None
     visual_check: list[VisualCheck] = Field(default_factory=list)
@@ -1213,7 +1216,7 @@ class SignOffRequest(ApiModel):
 
 
 class OverrideRequest(ApiModel):
-    """Uebersteuerung der EU-AI-Act-Einstufung durch die Prüfperson."""
+    """Übersteuerung der EU-AI-Act-Einstufung durch die Prüfperson."""
 
     auditor_name: str = Field(min_length=2, max_length=120)
     risk_level: AIActRiskLevel = Field(description="Neue Risikostufe nach Würdigung durch die Prüfperson.")
@@ -1470,6 +1473,6 @@ class RedactResponse(ApiModel):
 class ReleaseApplyRequest(ApiModel):
     """Bestätigung eines Release-Wechsels durch die Administration."""
 
-    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.7.1'.")
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.7.2'.")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(default="System", min_length=2, max_length=120, description="Wer das Update auslöst.")

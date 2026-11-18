@@ -129,7 +129,7 @@ function MetaLine({ doc }: { doc: DocumentSummary }) {
   const shown = parts.filter(Boolean);
   return (
     <span className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs text-subtle">
-      {/* Trennpunkt gehoert zur folgenden Angabe: bricht die Zeile um, beginnt sie mit dem Punkt. */}
+      {/* Trennpunkt gehört zur folgenden Angabe: bricht die Zeile um, beginnt sie mit dem Punkt. */}
       {shown.map((part, index) => (
         <span key={index} className="[overflow-wrap:break-word]">
           {index > 0 && <span aria-hidden="true" className="mr-1.5">•</span>}
@@ -143,9 +143,9 @@ function MetaLine({ doc }: { doc: DocumentSummary }) {
 interface Props {
   documents: DocumentSummary[];
   selectedId: string | null;
-  /** Belege mit wartendem oder laufendem Pruef-Job. */
+  /** Belege mit wartendem oder laufendem Prüf-Job. */
   analysingIds: ReadonlySet<string>;
-  /** Batch: alle ungeprueften Belege einreihen (fehlt ohne Backend). */
+  /** Batch: alle ungeprüften Belege einreihen (fehlt ohne Backend). */
   onAnalyzeAll?: (ids: string[]) => void;
   onSelect: (id: string) => void;
   onTogglePin: (doc: DocumentSummary) => void;
@@ -212,7 +212,7 @@ export function DocumentList({ documents, selectedId, analysingIds, onAnalyzeAll
     [documents, analysingIds],
   );
 
-  /** Naechstes/vorheriges Dokument in der sichtbaren Reihenfolge (Filter und Sortierung). */
+  /** Nächstes/vorheriges Dokument in der sichtbaren Reihenfolge (Filter und Sortierung). */
   const move = useCallback(
     (delta: number, focus: boolean) => {
       if (!visible.length) return;
@@ -229,8 +229,8 @@ export function DocumentList({ documents, selectedId, analysingIds, onAnalyzeAll
     [visible, selectedId, onSelect],
   );
 
-  // J/K und Pfeiltasten wie in Linear - ausser beim Tippen und bei offenen Dialogen. Pfeiltasten nur,
-  // solange kein anderes Bedienelement den Fokus hat (sonst gehoeren sie diesem Element bzw. dem Scrollen).
+  // J/K und Pfeiltasten wie in Linear - außer beim Tippen und bei offenen Dialogen. Pfeiltasten nur,
+  // solange kein anderes Bedienelement den Fokus hat (sonst gehören sie diesem Element bzw. dem Scrollen).
   useEffect(() => {
     if (!shortcutsEnabled) return;
     const onKey = (event: KeyboardEvent) => {

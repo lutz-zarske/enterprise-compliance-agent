@@ -1,4 +1,4 @@
-"""Tests fuer JSON-Logging, Request-Tracing, PII-Filter und Rate-Limiting."""
+"""Tests für JSON-Logging, Request-Tracing, PII-Filter und Rate-Limiting."""
 
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ def test_token_bucket_erlaubt_burst_und_fuellt_nach() -> None:
         limiter.hit("extract", "1.2.3.4", per_minute=3)
     assert exc_info.value.retry_after == 20  # 3/min -> ein Token alle 20 s
 
-    # Andere Clients und andere Gruppen sind unabhaengig.
+    # Andere Clients und andere Gruppen sind unabhängig.
     limiter.hit("extract", "5.6.7.8", per_minute=3)
     limiter.hit("upload", "1.2.3.4", per_minute=3)
 

@@ -1,6 +1,6 @@
-"""EN-16931-Parser fuer strukturierte E-Rechnungen (CII und UBL).
+"""EN-16931-Parser für strukturierte E-Rechnungen (CII und UBL).
 
-Unterstuetzt
+Unterstützt
 ------------
 * **UN/CEFACT CII** (``rsm:CrossIndustryInvoice``): ZUGFeRD 2.x, Factur-X 1.x,
   XRechnung in CII-Syntax.
@@ -13,15 +13,15 @@ von § 14 Abs. 1 UStG; ZUGFeRD 1.0 ist kein EN-16931-Format.
 
 Abgrenzung
 ----------
-Geprueft wird eine Teilmenge der EN-16931-Geschaeftsregeln (Pflichtfelder und
+Geprüft wird eine Teilmenge der EN-16931-Geschäftsregeln (Pflichtfelder und
 Summenregeln BR-CO-10/13/14/15, BR-DE-15).  Das ersetzt keine Validierung gegen
 XSD und Schematron (z. B. KoSIT-Validator) - darauf weisen Scorecard und
-Zertifikat ausdruecklich hin.
+Zertifikat ausdrücklich hin.
 
 Sicherheit
 ----------
 XML aus Uploads ist nicht vertrauenswuerdig.  Geparst wird mit ``defusedxml``
-und ``forbid_dtd=True``: keine DTDs, keine Entitaeten, keine externen
+und ``forbid_dtd=True``: keine DTDs, keine Entitäten, keine externen
 Referenzen (Schutz vor XXE und "Billion Laughs").
 """
 
@@ -48,7 +48,7 @@ from app.schemas import (
     VisualCheck,
 )
 
-#: Obergrenze fuer reine XML-Uploads und eingebettete Datensaetze.
+#: Obergrenze für reine XML-Uploads und eingebettete Datensätze.
 MAX_XML_BYTES = 10 * 1024 * 1024
 
 NS_CII = {
@@ -79,7 +79,7 @@ class EInvoiceError(Exception):
 
 
 class UnsupportedEInvoiceError(EInvoiceError):
-    """Erkanntes, aber nicht unterstuetztes Format (z. B. ZUGFeRD 1.0)."""
+    """Erkanntes, aber nicht unterstütztes Format (z. B. ZUGFeRD 1.0)."""
 
     code = "unsupported_einvoice"
 
@@ -185,20 +185,20 @@ def detect_profile(specification_id: str | None) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Leitweg-ID (KoSIT-Formatspezifikation 2.0.2) und oeffentliche Auftraggeber
+# Leitweg-ID (KoSIT-Formatspezifikation 2.0.2) und öffentliche Auftraggeber
 # ---------------------------------------------------------------------------
 
 _LEITWEG = re.compile(r"^(\d{2,12})(?:-([A-Za-z0-9]{1,30}))?-(\d{2})$")
 
 
 def leitweg_check_digits(coarse: str, fine: str = "") -> str:
-    """Pruefziffer nach ISO/IEC 7064 MOD 97-10 (Buchstaben A=10 ... Z=35)."""
+    """Prüfziffer nach ISO/IEC 7064 MOD 97-10 (Buchstaben A=10 ... Z=35)."""
     digits = "".join(str(int(char, 36)) for char in (coarse + fine).upper())
     return f"{98 - int(digits + '00') % 97:02d}"
 
 
 def validate_leitweg_id(value: str) -> LeitwegCheck:
-    """Prueft Aufbau (Grob-/Feinadressierung, 5-46 Zeichen) und Pruefziffer."""
+    """Prüft Aufbau (Grob-/Feinadressierung, 5-46 Zeichen) und Prüfziffer."""
     candidate = value.strip()
     match = _LEITWEG.fullmatch(candidate)
     if not match or not 5 <= len(candidate) <= 46:
@@ -230,9 +230,9 @@ LEITWEG_SCHEME = "0204"
 
 
 def detect_public_buyer(buyer_name: str | None, invoice: EInvoiceData | None = None) -> str | None:
-    """Begruendung, warum ein oeffentlicher Auftraggeber (B2G) vorliegt, sonst ``None``.
+    """Begründung, warum ein öffentlicher Auftraggeber (B2G) vorliegt, sonst ``None``.
 
-    Heuristik: Behoerdenbegriff im Kaeufernamen, Leitweg-ID als elektronische
+    Heuristik: Behördenbegriff im Käufernamen, Leitweg-ID als elektronische
     Adresse (Peppol-Schema 0204) oder Leitweg-ID-Format in BT-10.
     """
     if invoice is not None:
@@ -342,8 +342,8 @@ def _parse_cii(root: Element) -> dict[str, Any]:
         )
         for item in (transaction.findall("ram:IncludedSupplyChainTradeLineItem", ns) if transaction is not None else [])
     ]
-    # BT-110 kann zweimal vorkommen (Rechnungs- und Buchungswaehrung) - die
-    # Rechnungswaehrung ist massgeblich.
+    # BT-110 kann zweimal vorkommen (Rechnungs- und Buchungswährung) - die
+    # Rechnungswährung ist maßgeblich.
     currency = _text(settlement, "ram:InvoiceCurrencyCode", ns)
     tax_total = None
     if totals is not None:
@@ -481,7 +481,7 @@ def _parse_ubl(root: Element, credit_note: bool) -> dict[str, Any]:
 
 
 def _business_rules(invoice: EInvoiceData) -> list[str]:
-    """Teilmenge der EN-16931-Geschaeftsregeln (Pflichtfelder und Summen)."""
+    """Teilmenge der EN-16931-Geschäftsregeln (Pflichtfelder und Summen)."""
     violations: list[str] = []
     if invoice.profile_key in NON_EINVOICE_PROFILES:
         return violations
@@ -601,6 +601,12 @@ def xrechnung_version_notice(invoice: EInvoiceData) -> str | None:
     )
 
 
+#: Version des Parsers und des XML-↔-PDF-Abgleichs.  Erhöhen, sobald sich die
+#: Auswertung eines unveränderten Datensatzes ändert; die Neuprüfung liest das
+#: Original dann ohnehin neu ein, das Protokoll vermerkt die Version.
+PARSER_VERSION = "2026.3"
+
+
 def parse_einvoice_xml(
     data: bytes, *, source: str = "standalone", attachment_name: str | None = None
 ) -> EInvoiceData:
@@ -638,6 +644,7 @@ def parse_einvoice_xml(
         is_einvoice=profile_key not in NON_EINVOICE_PROFILES and profile_key != "unknown",
         xml_sha256=hashlib.sha256(data).hexdigest(),
         xml_size=len(data),
+        parser_version=PARSER_VERSION,
         **fields,
     )
     if not (invoice.invoice_number or invoice.grand_total is not None or invoice.seller.name):
@@ -689,10 +696,10 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
     """Findet die zentralen XML-Werte im Text des PDF-Bildteils wieder.
 
     ``mismatch``: Der Bildteil zeigt an der beschrifteten Stelle einen anderen
-    Wert (z. B. „Gesamtbetrag 1.190,00“ gegenueber 1.290,00 im XML).
+    Wert (z. B. „Gesamtbetrag 1.190,00“ gegenüber 1.290,00 im XML).
     ``not_found``: Der Wert kommt im Bildteil nicht vor.
     """
-    # spaeter Import: scoring importiert keine Extraktoren
+    # später Import: scoring importiert keine Extraktoren
     from app.scoring import _DATE_TOKEN, analyze_text, labeled_amounts
 
     facts = analyze_text(text)
@@ -782,7 +789,7 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
 
 
 # ---------------------------------------------------------------------------
-# Lesefassung und Uebernahme in die Extraktion
+# Lesefassung und Übernahme in die Extraktion
 # ---------------------------------------------------------------------------
 
 
@@ -859,7 +866,7 @@ def render_reading_text(invoice: EInvoiceData) -> str:
 
 
 def to_extraction(invoice: EInvoiceData) -> ExtractionResult:
-    """Uebernimmt den XML-Datensatz deterministisch in das Extraktionsmodell."""
+    """Übernimmt den XML-Datensatz deterministisch in das Extraktionsmodell."""
     rates = {entry.rate for entry in invoice.vat_breakdown if entry.rate is not None}
     period = None
     start, end, _source, _open = service_time(invoice)

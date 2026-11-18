@@ -12,7 +12,7 @@ export function onboardingDone(): boolean {
   try {
     return window.localStorage.getItem(ONBOARDING_KEY) === "1";
   } catch {
-    return true; // Ohne Speicher keine wiederkehrende Begruessung.
+    return true; // Ohne Speicher keine wiederkehrende Begrüßung.
   }
 }
 
@@ -86,7 +86,7 @@ function spotlightBox(rect: DOMRect): { x: number; y: number; w: number; h: numb
   return { x, y, w: Math.max(0, right - x), h: Math.max(0, bottom - y) };
 }
 
-/** Rechteck mit runden Ecken als Loch in einer Vollflaeche (clip-path, evenodd). */
+/** Rechteck mit runden Ecken als Loch in einer Vollfläche (clip-path, evenodd). */
 function holePath(rect: DOMRect, radius = 14): string {
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -102,7 +102,7 @@ function holePath(rect: DOMRect, radius = 14): string {
 /**
  * Spotlight-Tour in vier Schritten: abgedunkelter, weichgezeichneter Hintergrund
  * mit Aussparung um das Ziel. Klick ins Dunkle oder Escape beendet die Tour,
- * Pfeiltasten blaettern.
+ * Pfeiltasten blättern.
  */
 export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { tr } = useI18n();
@@ -166,7 +166,7 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
   useLayoutEffect(() => {
     if (!open) return;
     const element = document.querySelector<HTMLElement>(`[data-tour="${current.target}"]`);
-    // Hohe Ziele (Inspektor) oben ausrichten - scroll-margin-top haelt die Ueberschrift unter der Kopfleiste frei.
+    // Hohe Ziele (Inspektor) oben ausrichten - scroll-margin-top hält die Überschrift unter der Kopfleiste frei.
     const tall = element ? element.getBoundingClientRect().height > window.innerHeight * 0.6 : false;
     element?.scrollIntoView({ block: tall ? "start" : "center", behavior: "instant" as ScrollBehavior });
     measure();
@@ -200,7 +200,7 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
 
   if (!open) return null;
 
-  // Unter dem Ziel, sonst darueber; ist beides zu knapp (grosses Ziel), unten rechts ins Bild.
+  // Unter dem Ziel, sonst darüber; ist beides zu knapp (großes Ziel), unten rechts ins Bild.
   const room = 230;
   const left = rect ? Math.max(16, Math.min(rect.left, window.innerWidth - CARD_WIDTH - 16)) : 0;
   const cardStyle: React.CSSProperties = !rect

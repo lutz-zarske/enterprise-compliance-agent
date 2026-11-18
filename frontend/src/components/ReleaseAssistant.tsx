@@ -11,12 +11,12 @@ import { HashBadge, Modal, Spinner } from "./ui";
 
 /** Fensterweites Ereignis: ein Release wurde eingespielt (Detail: ``ReleaseApplyResult``). */
 export const RELEASE_APPLIED_EVENT = "eca:release-applied";
-/** Ab hier zeigt die Sperre die Anleitung fuer den manuellen Neustart (weiter mit Abfrage). */
+/** Ab hier zeigt die Sperre die Anleitung für den manuellen Neustart (weiter mit Abfrage). */
 const UPDATE_FALLBACK_MS = 180_000;
 const UPDATE_POLL_MS = 1_000;
 
 /**
- * Release pruefen und per Klick einspielen. Das Backend prueft laufende Analysen,
+ * Release prüfen und per Klick einspielen. Das Backend prüft laufende Analysen,
  * legt automatisch eine Sicherungskopie von ``data/agent.db`` an und protokolliert
  * den Versionswechsel im Ledger; lokale Daten und Einstellungen bleiben erhalten.
  */
@@ -24,7 +24,7 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
   initial?: ReleaseStatus | null;
   /** Bekannte Version (aus /health) - sofort sichtbar, bevor der Release-Status da ist. */
   installedVersion?: string;
-  /** Der Aufrufer laedt den Status bereits (z. B. Einstellungen beim Oeffnen). */
+  /** Der Aufrufer lädt den Status bereits (z. B. Einstellungen beim Öffnen). */
   externalChecking?: boolean;
   onApplied?: (result: ReleaseApplyResult) => void;
   notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
@@ -55,7 +55,7 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
     if (initial) setStatus(initial);
   }, [initial]);
 
-  // Nur selbst pruefen, wenn niemand sonst den Status liefert - und nur einmal.
+  // Nur selbst prüfen, wenn niemand sonst den Status liefert - und nur einmal.
   const autoChecked = useRef(false);
   useEffect(() => {
     if (autoChecked.current || initial || externalChecking) return;
@@ -79,7 +79,7 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
           tr("Dienste von Hand neu starten, danach lädt die Seite selbst neu.", "Restart the services manually; the page reloads by itself afterwards.", "Reinicie los servicios manualmente; la página se recargará sola."),
         );
       } else {
-        // Die Sperre (UpdaterLock) uebernimmt: Neustart abwarten, dann neu laden.
+        // Die Sperre (UpdaterLock) übernimmt: Neustart abwarten, dann neu laden.
         window.dispatchEvent(new CustomEvent<ReleaseApplyResult>(RELEASE_APPLIED_EVENT, { detail: result }));
       }
     } catch (err) {
@@ -269,11 +269,11 @@ function UpdateStep({ state, title, detail }: { state: StepState; title: string;
 }
 
 /**
- * Nicht schliessbare Vollbild-Sperre waehrend eines automatischen Release-Neustarts.
+ * Nicht schließbare Vollbild-Sperre während eines automatischen Release-Neustarts.
  *
  * Wartet, bis das Backend die Zielversion meldet (oder nach einem beobachteten Ausfall
- * wieder antwortet) und die Oberflaeche selbst wieder HTTP 200 liefert - erst dann wird
- * neu geladen.  So laeuft nie ein altes Client-Bundle gegen ein neues Backend.
+ * wieder antwortet) und die Oberfläche selbst wieder HTTP 200 liefert - erst dann wird
+ * neu geladen.  So läuft nie ein altes Client-Bundle gegen ein neues Backend.
  */
 export function UpdaterLock() {
   const { tr } = useI18n();
@@ -294,8 +294,8 @@ export function UpdaterLock() {
     return () => window.removeEventListener(RELEASE_APPLIED_EVENT, onApplied);
   }, []);
 
-  // Sperre: alles ausser der Sperre wird inert (auch spaeter eingehaengte Portale),
-  // Escape und App-Kuerzel kommen nicht durch, Tab bleibt im Dialog.
+  // Sperre: alles außer der Sperre wird inert (auch später eingehängte Portale),
+  // Escape und App-Kürzel kommen nicht durch, Tab bleibt im Dialog.
   useEffect(() => {
     if (!result) return;
     const panel = panelRef.current;
@@ -344,7 +344,7 @@ export function UpdaterLock() {
     };
   }, [result]);
 
-  // Abfrage: zuerst Backend (Zielversion), danach die Oberflaeche selbst (HTTP 200).
+  // Abfrage: zuerst Backend (Zielversion), danach die Oberfläche selbst (HTTP 200).
   useEffect(() => {
     if (!result) return;
     const target = result.to_tag.replace(/^v/, "");
@@ -375,7 +375,7 @@ export function UpdaterLock() {
             return;
           }
         } catch {
-          /* Oberflaeche wird noch gebaut */
+          /* Oberfläche wird noch gebaut */
         }
       }
       if (Date.now() - started > UPDATE_FALLBACK_MS) setStalled(true);

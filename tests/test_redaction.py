@@ -52,7 +52,7 @@ def test_regelscan_findet_iban_gesundheitsbezug_und_kontaktdaten() -> None:
 
 
 def test_ungueltige_iban_wird_vom_regelscan_ignoriert() -> None:
-    """Die MOD-97-Pruefung haelt Fehlalarme aus Bestellnummern heraus."""
+    """Die MOD-97-Prüfung hält Fehlalarme aus Bestellnummern heraus."""
     findings = scan_text("Referenz DE00123456789012345678 ohne gueltige Pruefsumme.")
     assert not [f for f in findings if f.category is PIICategory.BANK_ACCOUNT]
 

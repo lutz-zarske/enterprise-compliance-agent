@@ -1,4 +1,4 @@
-"""Extraktoren fuer strukturierte Rechnungsdaten (EN 16931: ZUGFeRD, Factur-X, XRechnung)."""
+"""Extraktoren für strukturierte Rechnungsdaten (EN 16931: ZUGFeRD, Factur-X, XRechnung)."""
 
 from app.extractors.einvoice import (
     EInvoiceError,

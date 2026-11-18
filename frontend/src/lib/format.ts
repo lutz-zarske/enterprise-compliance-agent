@@ -101,8 +101,8 @@ export function formatModel(model: string): string {
 }
 
 function displayToken(token: string): string {
-  if (/^\d+(\.\d+)?[bkm]$/i.test(token)) return token.toUpperCase(); // Parametergroesse: 14B
-  if (/^[a-z]+$/i.test(token) && token.length <= 3 && token === token.toUpperCase()) return token; // Kuerzel bleiben
+  if (/^\d+(\.\d+)?[bkm]$/i.test(token)) return token.toUpperCase(); // Parametergröße: 14B
+  if (/^[a-z]+$/i.test(token) && token.length <= 3 && token === token.toUpperCase()) return token; // Kürzel bleiben
   return token.charAt(0).toUpperCase() + token.slice(1);
 }
 
@@ -157,7 +157,7 @@ export function docTypeLabel(docType: string | null | undefined): string {
   }
 }
 
-/** Semantische Tonalitaet fuer Chips, Ringe und Kacheln. */
+/** Semantische Tonalität für Chips, Ringe und Kacheln. */
 export type Tone = "ok" | "warn" | "bad" | "pii" | "neutral" | "accent";
 
 export function toneForBand(band: ScoreBand | null | undefined): Tone {

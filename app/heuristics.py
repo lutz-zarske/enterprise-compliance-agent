@@ -1,16 +1,16 @@
 """Regelbasiertes Referenz-Audit: Stufe 5 der Kaskade ("Zero-Failure-Garantie").
 
-Scheitern alle KI-Stufen an Ueberlast, Ausfall, Zeitueberschreitung oder dem
-Tagesbudget, schliesst dieses Modul die Pruefung trotzdem regulaer ab - mit
+Scheitern alle KI-Stufen an Überlast, Ausfall, Zeitüberschreitung oder dem
+Tagesbudget, schließt dieses Modul die Prüfung trotzdem regulär ab - mit
 denselben deterministischen Kontrollen wie jeder Live-Lauf (Paragraf-14-Katalog,
-IBAN-Pruefsumme, Regex-PII-Scanner, Eskalationsregeln, Scorecard, Ledger).
+IBAN-Prüfsumme, Regex-PII-Scanner, Eskalationsregeln, Scorecard, Ledger).
 
 Ehrliche Grenzen: Die Felder werden per Mustererkennung gelesen, nicht
-verstanden.  Das Ergebnis ist deshalb in Oberflaeche, Zertifikat und Ledger
-ausdruecklich als "Regelbasiertes Referenz-Audit - KI nicht verfuegbar"
+verstanden.  Das Ergebnis ist deshalb in Oberfläche, Zertifikat und Ledger
+ausdrücklich als "Regelbasiertes Referenz-Audit - KI nicht verfügbar"
 gekennzeichnet; die Einstufung nach dem EU AI Act ist konservativ (lieber ein
-Hochrisiko-Hinweis zu viel als einer zu wenig) und durch eine Pruefperson zu
-bestaetigen oder zu uebersteuern (Art. 14).
+Hochrisiko-Hinweis zu viel als einer zu wenig) und durch eine Prüfperson zu
+bestätigen oder zu übersteuern (Art. 14).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from app.llm import ComplianceAuditPayload
 from app.schemas import AnnexIIICategory, DocType, ExtractionResult
 from app.scoring import RULESET_VERSION, analyze_text
 
-#: Kennung im Ledger, in der Datenbank und in der Oberflaeche.
+#: Kennung im Ledger, in der Datenbank und in der Oberfläche.
 HEURISTIC_PROVIDER = "heuristic"
 HEURISTIC_MODEL = f"regelwerk-{RULESET_VERSION}"
 HEURISTIC_LABEL = "Regelbasiertes Referenz-Audit – KI nicht verfügbar"
@@ -57,7 +57,7 @@ _AI_SYSTEM = re.compile(
     re.IGNORECASE,
 )
 _TRANSPARENCY = re.compile(r"chatbot|deepfake|synthetisch|generative", re.IGNORECASE)
-#: Anhang-III-Indikatoren (konservativ: ein Treffer genuegt fuer den Hochrisiko-Hinweis).
+#: Anhang-III-Indikatoren (konservativ: ein Treffer genügt für den Hochrisiko-Hinweis).
 _ANNEX_III: tuple[tuple[AnnexIIICategory, re.Pattern[str]], ...] = (
     (AnnexIIICategory.EMPLOYMENT, re.compile(
         r"bewerb|recruiting|personalauswahl|vorauswahl|lebensl(?:ä|ae)uf|\bCV\b|leistungsbewertung|"
@@ -89,7 +89,7 @@ _PAGE_MARKER = re.compile(r"^-{2,}\s*Seite\s+\d+\s*-{2,}$", re.IGNORECASE)
 
 
 def heuristic_extraction(text: str) -> ExtractionResult:
-    """Kerndaten per Mustererkennung; Zweifelsfaelle bleiben leer statt geraten."""
+    """Kerndaten per Mustererkennung; Zweifelsfälle bleiben leer statt geraten."""
     lines = [line.strip() for line in text.splitlines() if line.strip() and not _PAGE_MARKER.match(line.strip())]
     doc_type = next((kind for kind, pattern in _KIND if pattern.search(text)), DocType.OTHER)
     facts = analyze_text(text)
@@ -151,7 +151,7 @@ def heuristic_audit(text: str) -> ComplianceAuditPayload:
             reasoning = (
                 f"{HEURISTIC_LABEL}. Der Beleg nennt ein KI-System{f' [Z. {line}]' if line else ''} und Begriffe "
                 "aus Anhang III; konservativ als Hochrisiko eingestuft (Art. 6 Abs. 2). Bitte durch eine "
-                "Prüfperson bestätigen oder uebersteuern (Art. 14 Abs. 4 lit. d)."
+                "Prüfperson bestätigen oder übersteuern (Art. 14 Abs. 4 lit. d)."
             )
             obligations = [
                 "Risikomanagementsystem nach Art. 9 prüfen.",
@@ -238,7 +238,7 @@ _HEURISTIC_COPY: dict[str, dict[str, str]] = {
 
 
 def heuristic_copilot_answer(record: Any, question: str, reason: str, *, lang: str = "de") -> str:
-    """Deterministische Antwort aus Pruefergebnis und Belegtext (Copilot-Rueckfall)."""
+    """Deterministische Antwort aus Prüfergebnis und Belegtext (Copilot-Rückfall)."""
     c = _HEURISTIC_COPY.get(lang, _HEURISTIC_COPY["de"])
     scorecard = record.scorecard or {}
     extraction = record.extraction or {}

@@ -1,15 +1,15 @@
-"""System-Signatur fuer Pruefpakete (Ed25519).
+"""System-Signatur für Prüfpakete (Ed25519).
 
-Der Schluessel wird beim ersten Bedarf unter ``data/.signing.key`` erzeugt
+Der Schlüssel wird beim ersten Bedarf unter ``data/.signing.key`` erzeugt
 (Dateirechte 0600, nie im Repository).  Die Signatur belegt, dass ein Manifest
-unveraendert aus *dieser* Installation stammt.
+unverändert aus *dieser* Installation stammt.
 
-Abgrenzung: Das ist ein selbst erzeugter Schluessel - weder ein qualifiziertes
+Abgrenzung: Das ist ein selbst erzeugter Schlüssel - weder ein qualifiziertes
 elektronisches Siegel nach eIDAS noch ein qualifizierter Zeitstempel.  Damit die
-Signatur Beweiswert hat, muss der Pruefer den Fingerabdruck des oeffentlichen
-Schluessels unabhaengig vom Paket kennen (``GET /api/audit/signing-key``,
+Signatur Beweiswert hat, muss der Prüfer den Fingerabdruck des öffentlichen
+Schlüssels unabhängig vom Paket kennen (``GET /api/audit/signing-key``,
 z. B. in der Verfahrensdokumentation hinterlegt).  Ein im Paket mitgelieferter
-Schluessel allein beweist nichts - ein Angreifer koennte neu signieren.
+Schlüssel allein beweist nichts - ein Angreifer könnte neu signieren.
 """
 
 from __future__ import annotations
@@ -40,13 +40,13 @@ def canonical_bytes(payload: dict[str, Any]) -> bytes:
 
 
 def fingerprint(public_raw: bytes) -> str:
-    """SHA-256 ueber den rohen oeffentlichen Schluessel, in Vierergruppen."""
+    """SHA-256 über den rohen öffentlichen Schlüssel, in Vierergruppen."""
     digest = hashlib.sha256(public_raw).hexdigest()
     return ":".join(digest[i : i + 4] for i in range(0, 32, 4))
 
 
 class SystemSigner:
-    """Laedt oder erzeugt den Ed25519-Schluessel und signiert Manifeste."""
+    """Lädt oder erzeugt den Ed25519-Schlüssel und signiert Manifeste."""
 
     def __init__(self, key_file: Path) -> None:
         self._key_file = key_file
@@ -68,7 +68,7 @@ class SystemSigner:
                         os.chmod(self._key_file, 0o600)
                     except OSError:  # pragma: no cover - z. B. Windows ohne POSIX-Rechte
                         pass
-                    logger.info("Neuer Signaturschluessel erzeugt (%s).", self._key_file.name)
+                    logger.info("Neuer Signaturschlüssel erzeugt (%s).", self._key_file.name)
             return self._private
 
     @property
@@ -89,13 +89,13 @@ class SystemSigner:
         return self.sign_bytes(canonical_bytes(unsigned))
 
     def sign_bytes(self, data: bytes) -> dict[str, str]:
-        """Ed25519-Signatur ueber beliebige Bytes, samt oeffentlichem Schluessel und Fingerabdruck."""
+        """Ed25519-Signatur über beliebige Bytes, samt öffentlichem Schlüssel und Fingerabdruck."""
         signature = self._key().sign(data)
         return {**self.public_info(), "value": base64.b64encode(signature).decode("ascii")}
 
 
 def verify_signature(signature: dict[str, Any], data: bytes, *, expected_fingerprint: str | None = None) -> tuple[bool, str]:
-    """Prueft eine Signatur aus ``SystemSigner.sign_bytes`` ueber ``data``."""
+    """Prüft eine Signatur aus ``SystemSigner.sign_bytes`` über ``data``."""
     if signature.get("algorithm") != ALGORITHM:
         return False, "Signaturverfahren fehlt oder wird nicht unterstützt."
     try:
@@ -104,7 +104,7 @@ def verify_signature(signature: dict[str, Any], data: bytes, *, expected_fingerp
     except (KeyError, ValueError, TypeError):
         return False, "Signaturfelder sind unvollständig."
     if expected_fingerprint and fingerprint(public_raw) != expected_fingerprint:
-        return False, "Mit einem fremden Schlüssel signiert (Fingerabdruck weicht vom System-Schluessel ab)."
+        return False, "Mit einem fremden Schlüssel signiert (Fingerabdruck weicht vom System-Schlüssel ab)."
     try:
         Ed25519PublicKey.from_public_bytes(public_raw).verify(value, data)
     except (InvalidSignature, ValueError):
@@ -113,7 +113,7 @@ def verify_signature(signature: dict[str, Any], data: bytes, *, expected_fingerp
 
 
 def verify_signed_payload(payload: dict[str, Any], *, expected_fingerprint: str | None = None) -> tuple[bool, str]:
-    """Prueft die Signatur eines Manifests; optional gegen einen bekannten Fingerabdruck."""
+    """Prüft die Signatur eines Manifests; optional gegen einen bekannten Fingerabdruck."""
     unsigned = {key: item for key, item in payload.items() if key != "signature"}
     ok, message = verify_signature(
         payload.get("signature") or {}, canonical_bytes(unsigned), expected_fingerprint=expected_fingerprint

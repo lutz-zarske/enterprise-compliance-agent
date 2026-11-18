@@ -7,6 +7,10 @@ param(
     [int]$FrontendPort = 3001
 )
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 | Out-Null
+$ProgressPreference = "SilentlyContinue"
+
 $AppDir = $PSScriptRoot
 $RunDir = Join-Path $AppDir ".run"
 $beendet = 0
@@ -18,7 +22,7 @@ function Baum-Beenden([int]$prozessId, [string]$was) {
     return $true
 }
 
-# 1. Beenden ueber PID-Dateien
+# 1. Beenden über PID-Dateien
 foreach ($eintrag in @(@("backend.pid", "FastAPI Backend"), @("frontend.pid", "Next.js Frontend"))) {
     $datei = Join-Path $RunDir $eintrag[0]
     if (Test-Path $datei) {
@@ -30,7 +34,7 @@ foreach ($eintrag in @(@("backend.pid", "FastAPI Backend"), @("frontend.pid", "N
     }
 }
 
-# 2. Beenden ueber Ports, falls manuell oder verwaist gestartet
+# 2. Beenden über Ports, falls manuell oder verwaist gestartet
 foreach ($port in @($BackendPort, $FrontendPort)) {
     $verbindungen = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
     foreach ($v in $verbindungen) {
@@ -40,7 +44,7 @@ foreach ($port in @($BackendPort, $FrontendPort)) {
         $passt = ($kommando -match "uvicorn" -and $kommando -match "app\.main") -or ($kommando -match "next" -and ($kommando -match "dev|start|next-server|next\\dist"))
         if ($passt -and (Baum-Beenden $p.ProcessId "Port $port ($($p.Name))")) { $beendet++ }
         elseif (-not $passt) {
-            Write-Host "Port $port gehoert einem fremden Prozess ($($p.Name), PID $($p.ProcessId)) -- nicht angefasst." -ForegroundColor Yellow
+            Write-Host "Port $port gehört einem fremden Prozess ($($p.Name), PID $($p.ProcessId)) -- nicht angefasst." -ForegroundColor Yellow
         }
     }
 }
