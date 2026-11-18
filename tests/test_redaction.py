@@ -121,7 +121,7 @@ def test_kurze_schluesselwoerter_nur_am_wortanfang() -> None:
     # "reha" steckt in "Softwarehaus", "rezept" in "Rezeption" - beides kein Gesundheitsdatum.
     assert scan_text("Softwarehaus Nordhessen GmbH, Hotel-Rezeption") == []
     categories = {finding.masked_value for finding in scan_text("Reha-Massnahme laut Rezept, Arztattest anbei")}
-    assert {"Schluesselwort: reha", "Schluesselwort: rezept", "Schluesselwort: attest"} <= categories
+    assert {"Schlüsselwort: reha", "Schlüsselwort: rezept", "Schlüsselwort: attest"} <= categories
 
 
 def test_leitweg_id_ist_keine_telefonnummer() -> None:

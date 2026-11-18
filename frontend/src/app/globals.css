@@ -425,6 +425,11 @@ body {
     scrollbar-color: var(--scroll-thumb-hover) transparent;
   }
 
+  /* Tour-Ziele: beim Hineinscrollen unter der fixierten Kopfleiste bleiben. */
+  [data-tour] {
+    scroll-margin-top: 76px;
+  }
+
   /* --- Copilot-Eingabe: Textfeld und Senden in einer Fläche --------------- */
   .composer {
     border-radius: 0.75rem;

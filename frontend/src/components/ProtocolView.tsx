@@ -3,14 +3,50 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
 import { cx, formatDate, formatModel, providerLabel, TONE_TEXT, toneForScore } from "../lib/format";
-import { useI18n } from "../lib/i18n";
+import { normalizeStored, useI18n } from "../lib/i18n";
 import type { DocumentDetail, DocumentSummary, LedgerEntry, LedgerVerification } from "../types/api";
-import { BookOpen, Download, Fingerprint, Layers, Link, Lock, Package, RefreshCw, Scale, ShieldAlert, ShieldCheck } from "./icons";
+import { AlertTriangle, BookOpen, Download, Fingerprint, Hash, Layers, Link, Lock, Package, RefreshCw, Scale } from "./icons";
 import { Chip, EmptyState, HashBadge, PillTabs, Skeleton, Spinner, Tooltip } from "./ui";
 
 type Filter = "all" | "document" | "system";
 
 const MILESTONES = new Set(["sign_off", "human_override", "model_change", "release_update"]);
+/** Prüfer-Ereignisse, die seit Einführung der Systemsignatur Ed25519-signiert sind. */
+const SIGNED_REVIEWER_EVENTS = new Set(["sign_off", "human_override"]);
+
+type ChainSnapshot = { inference_mode: string; model: string; fallbacks?: { provider: string; model: string; stage: string }[] };
+const STAGE_LABELS: Record<string, string> = { ausweichmodell: "Ausweichmodell", ausweich_schluessel: "Ausweich-Schlüssel", fallback: "Anbieter-Fallback" };
+
+/** Wie ``describe_model_change`` im Backend - auch für Einträge älterer Versionen („A -> A“). */
+function describeModelChange(before: ChainSnapshot, after: ChainSnapshot): string {
+  const primaryBefore = `${before.inference_mode}/${before.model}`;
+  const primaryAfter = `${after.inference_mode}/${after.model}`;
+  if (primaryBefore !== primaryAfter) return `Modellwechsel ${primaryBefore} → ${primaryAfter}`;
+  const stages = (snapshot: ChainSnapshot) =>
+    (snapshot.fallbacks ?? []).map((stage) => `${STAGE_LABELS[stage.stage] ?? stage.stage} ${stage.provider}/${stage.model}`);
+  const previous = stages(before);
+  const next = stages(after);
+  const removed = previous.filter((stage) => !next.includes(stage));
+  const added = next.filter((stage) => !previous.includes(stage));
+  if (removed.length === 1 && added.length === 1 && removed[0].split(" ")[0] === added[0].split(" ")[0]) {
+    const [label, from] = removed[0].split(" ");
+    return `Ausweich-Kaskade geändert: ${label} ${from} → ${added[0].split(" ")[1]}`;
+  }
+  const parts = [...added.map((stage) => `+ ${stage}`), ...removed.map((stage) => `− ${stage}`)];
+  return parts.length ? `Ausweich-Kaskade geändert: ${parts.join(", ")}` : "Ausweich-Kaskade neu geordnet";
+}
+
+/** Zusammenfassung widerspruchsfrei anzeigen, auch für gespeicherte Einträge älterer Versionen. */
+function entrySummary(entry: LedgerEntry): string {
+  const details = entry.details as { before?: ChainSnapshot; after?: ChainSnapshot } | null | undefined;
+  if (entry.event_type === "model_change" && details?.before && details.after) return describeModelChange(details.before, details.after);
+  let text = normalizeStored(entry.result_summary ?? "");
+  // Bis v2.4 betrachtete die Kurzfassung nur EU AI Act und DSGVO: „Freigabe gesperrt | Keine Auffälligkeiten“.
+  if (text.startsWith("Freigabe gesperrt") && text.includes("Keine Compliance-Auffälligkeiten") && entry.compliance_score != null) {
+    text = text.replace("Keine Compliance-Auffälligkeiten", `Score ${entry.compliance_score}`);
+  }
+  return text;
+}
 
 function IntegrityStrip({ ledger, fingerprint, onRefresh, refreshing }: {
   ledger: LedgerVerification | null;
@@ -24,7 +60,7 @@ function IntegrityStrip({ ledger, fingerprint, onRefresh, refreshing }: {
     <section className="card flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3" aria-label={tr("Integrität der Hash-Kette", "Hash chain integrity", "Integridad de la cadena de hash")}>
       <div className="flex items-center gap-2.5">
         <span className={cx("rounded-lg border p-2", state === "broken" ? "border-bad-line bg-bad-soft text-bad" : state === "ok" ? "border-ok-line bg-ok-soft text-ok" : "border-line bg-surface-2 text-subtle")}>
-          {state === "broken" ? <ShieldAlert size={16} aria-hidden="true" /> : <ShieldCheck size={16} aria-hidden="true" />}
+          {state === "broken" ? <AlertTriangle size={16} aria-hidden="true" /> : <Link size={16} aria-hidden="true" />}
         </span>
         <div>
           <p className="text-sm font-semibold text-fg">
@@ -60,7 +96,7 @@ function IntegrityStrip({ ledger, fingerprint, onRefresh, refreshing }: {
           )}
         >
           <span className="inline-flex items-center gap-1.5">
-            <Link size={13} className="text-subtle" aria-hidden="true" />
+            <Hash size={13} className="text-subtle" aria-hidden="true" />
             <HashBadge
               value={ledger.head_hash}
               label={tr("Kopf-Hash", "Head hash", "Hash raíz")}
@@ -133,6 +169,19 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
                 {entry.signature_status === "invalid" && (
                   <span className="mt-1 block"><Chip tone="bad">{tr("Signatur ungültig", "Signature invalid", "Firma inválida")}</Chip></span>
                 )}
+                {entry.signature_status === "unsigned" && SIGNED_REVIEWER_EVENTS.has(entry.event_type) && (
+                  <span className="mt-1 block">
+                    <Tooltip
+                      content={tr(
+                        "Eintrag aus einer älteren Version, bevor Prüfer-Einträge zusätzlich Ed25519-signiert wurden. Die Hash-Kette schützt ihn trotzdem vor Änderungen.",
+                        "Entry from an older version, before reviewer entries were additionally Ed25519-signed. The hash chain still protects it from changes.",
+                        "Entrada de una versión anterior, antes de firmar con Ed25519 las entradas de revisores. La cadena de hash la sigue protegiendo.",
+                      )}
+                    >
+                      <span tabIndex={0}><Chip tone="neutral">{tr("ohne Signatur (ältere Version)", "unsigned (older version)", "sin firma (versión anterior)")}</Chip></span>
+                    </Tooltip>
+                  </span>
+                )}
               </td>
               <td className="max-w-[14rem] border-b border-line px-3 py-2 text-muted">
                 <span className="block truncate" title={system ? tr("Systemereignis", "System event", "Evento del sistema") : names.get(entry.document_id) ?? entry.document_id}>
@@ -140,7 +189,7 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
                 </span>
                 {entry.model_name && <span className="block truncate text-subtle">{formatModel(entry.model_name)}</span>}
               </td>
-              <td className="border-b border-line px-3 py-2 text-muted [overflow-wrap:anywhere]">{td(entry.result_summary)}</td>
+              <td className="border-b border-line px-3 py-2 text-muted [overflow-wrap:anywhere]">{td(entrySummary(entry))}</td>
               <td className={cx("border-b border-line px-3 py-2 text-right font-medium tabular-nums", entry.compliance_score == null ? "text-subtle" : TONE_TEXT[toneForScore(entry.compliance_score)])}>{entry.compliance_score ?? "–"}</td>
               <td className="whitespace-nowrap border-b border-line px-3 py-2"><HashBadge value={entry.entry_hash} label="SHA-256" /></td>
             </tr>

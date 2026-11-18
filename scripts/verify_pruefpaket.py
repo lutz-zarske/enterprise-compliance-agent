@@ -37,7 +37,7 @@ def main() -> int:
         print(f"[{'OK ' if item['ok'] else 'FEHLER'}] {item['path']}")
     for name in result["unexpected_files"]:
         print(f"[FEHLER] nicht im Manifest: {name}")
-    print(f"Signatur: {result['signature']} (Schluessel {result['fingerprint']})")
+    print(f"Signatur: {result['signature']} (Schlüssel {result['fingerprint']})")
     if not args.fingerprint:
         print("Hinweis: Ohne --fingerprint ist nur die Unverändertheit belegt, nicht die Herkunft.")
     print("ERGEBNIS: gültig" if result["valid"] else "ERGEBNIS: UNGUELTIG")

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
 import { buildCorrectionRequest, correctionDefects } from "../lib/correction";
-import { cx, formatElapsed, formatModel } from "../lib/format";
+import { cx, formatElapsed, formatModel, localizePageMarker } from "../lib/format";
 import { type Locale, useI18n } from "../lib/i18n";
 import { Markdown } from "../lib/markdown";
 import type { CopilotTurn, DocumentDetail, DocumentSummary, ThinkingLevel } from "../types/api";
@@ -13,6 +13,7 @@ import { AutoTextarea, CopyButton, EmptyState, Kbd, Segmented, Spinner } from ".
 
 const QUESTIONS: Record<Locale, {
   fields: string;
+  fieldsComplete: string;
   aiActRef: string;
   aiActGeneral: string;
   correction: string;
@@ -21,6 +22,7 @@ const QUESTIONS: Record<Locale, {
 }> = {
   de: {
     fields: "Welche Pflichtangaben fehlen in dieser Rechnung?",
+    fieldsComplete: "Sind alle Pflichtangaben nach § 14 UStG vorhanden?",
     aiActRef: "Warum stuft das System dieses PDF als Anhang III Nr. 4 ein?",
     aiActGeneral: "Welche Pflichten ergeben sich aus der EU-AI-Act-Einstufung dieses Dokuments?",
     correction: "Wie muss die Rechnung korrigiert werden, um vorsteuerabzugsberechtigt zu sein?",
@@ -29,6 +31,7 @@ const QUESTIONS: Record<Locale, {
   },
   en: {
     fields: "Which mandatory fields are missing from this invoice?",
+    fieldsComplete: "Are all mandatory fields under Sec. 14 UStG present?",
     aiActRef: "Why does the system classify this PDF as Annex III No. 4?",
     aiActGeneral: "What obligations result from the EU AI Act classification of this document?",
     correction: "How must the invoice be corrected to qualify for input VAT deduction?",
@@ -37,6 +40,7 @@ const QUESTIONS: Record<Locale, {
   },
   es: {
     fields: "¿Qué datos obligatorios faltan en esta factura?",
+    fieldsComplete: "¿Están presentes todos los datos obligatorios del § 14 UStG?",
     aiActRef: "¿Por qué clasifica el sistema este PDF como Anexo III n.º 4?",
     aiActGeneral: "¿Qué obligaciones derivan de la clasificación del Reglamento de IA para este documento?",
     correction: "¿Cómo debe corregirse la factura para poder deducir el IVA soportado?",
@@ -56,8 +60,13 @@ function suggestionsFor(document: DocumentDetail | null, locale: Locale): Sugges
   const invoice = document.extraction?.doc_type === "invoice";
   const ai = Boolean(document.compliance?.ai_act.describes_ai_system || document.compliance?.ai_act.is_high_risk);
   const q = QUESTIONS[locale];
+  // Nur passende Fragen: Bei vollständigen Rechnungen nicht nach „fehlenden“ Angaben fragen,
+  // eine Korrekturanforderung nur bei echten Mängeln vorschlagen.
+  const formalDefects = (document.scorecard?.tiles.find((tile) => tile.key === "formal")?.checks ?? []).some((check) => check.status === "fail");
+  const defects = correctionDefects(document).length > 0;
+  const fields = formalDefects ? q.fields : q.fieldsComplete;
   const list: Suggestion[] = [
-    ...(invoice ? [{ label: q.fields, prompt: q.fields }] : []),
+    ...(invoice ? [{ label: fields, prompt: fields }] : []),
     ...(ai
       ? [
           document.provider === "reference"
@@ -65,7 +74,7 @@ function suggestionsFor(document: DocumentDetail | null, locale: Locale): Sugges
             : { label: q.aiActGeneral, prompt: q.aiActGeneral },
         ]
       : []),
-    ...(invoice ? [{ label: q.correction, prompt: q.correction }] : []),
+    ...(invoice && defects ? [{ label: q.correction, prompt: q.correction }] : []),
   ];
   return list.length
     ? list
@@ -118,7 +127,7 @@ function SourceText({ document, cited }: { document: DocumentDetail; cited: numb
           <li key={index} data-line={index + 1} className="grid grid-cols-[2.75rem_minmax(0,1fr)]">
             <span className="select-none pr-3 text-right tabular-nums text-subtle">{index + 1}</span>
             <span className="doc-line whitespace-pre-wrap break-words" data-cited={cited === index + 1 ? "true" : undefined}>
-              {line || " "}
+              {localizePageMarker(line) || " "}
             </span>
           </li>
         ))}
@@ -164,6 +173,23 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
 
   const messages = document ? threads[document.id] ?? [] : [];
   const defects = correctionDefects(document);
+  // Einheitlich mit der Prüfkarte zählen: fehlende Pflichtangaben (§ 14 UStG) und Rechenfehler getrennt.
+  const failedIn = (key: string) =>
+    (document?.scorecard?.tiles.find((tile) => tile.key === key)?.checks ?? []).filter((check) => check.status === "fail").length;
+  const missingFields = failedIn("formal");
+  const mathErrors = failedIn("math");
+  const defectParts = [
+    missingFields > 0
+      ? missingFields === 1
+        ? tr("1 fehlende Pflichtangabe nach § 14 UStG", "1 missing mandatory field under Sec. 14 UStG", "1 dato obligatorio ausente según § 14 UStG")
+        : tr(`${missingFields} fehlende Pflichtangaben nach § 14 UStG`, `${missingFields} missing mandatory fields under Sec. 14 UStG`, `${missingFields} datos obligatorios ausentes según § 14 UStG`)
+      : null,
+    mathErrors > 0
+      ? mathErrors === 1
+        ? tr("1 Rechenfehler", "1 arithmetic error", "1 error de cálculo")
+        : tr(`${mathErrors} Rechenfehler`, `${mathErrors} arithmetic errors`, `${mathErrors} errores de cálculo`)
+      : null,
+  ].filter((part): part is string => Boolean(part));
   const isReference = document?.provider === "reference";
   const suggestions = suggestionsFor(document, locale);
 
@@ -360,8 +386,10 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5">
             <p className="text-xs text-muted">
               <span className="font-semibold tabular-nums text-warn">{defects.length}</span>{" "}
-              {defects.length === 1 ? tr("Mangel", "defect", "defecto") : tr("Mängel", "defects", "defectos")}{" "}
-              {tr("nach § 14 UStG – Lieferanten um eine berichtigte Rechnung bitten.", "under Sec. 14 UStG – request a corrected invoice from the supplier.", "según § 14 UStG – solicitar una factura rectificada.")}
+              {defects.length === 1 ? tr("Mangel", "defect", "defecto") : tr("Mängel", "defects", "defectos")}
+              {defectParts.length > 0 && <>: {defectParts.join(", ")}</>}
+              {" – "}
+              {tr("Lieferanten um eine berichtigte Rechnung bitten.", "request a corrected invoice from the supplier.", "solicitar una factura rectificada.")}
             </p>
             <button className="btn btn-sm" onClick={() => setDraft(buildCorrectionRequest(document))}>
               <Mail size={13} aria-hidden="true" /> {tr("Korrekturanforderung erstellen", "Draft correction request", "Redactar solicitud de corrección")}
@@ -371,7 +399,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
 
         <div className="scroll-area min-h-0 flex-1 space-y-4 px-4 py-4">
           {messages.length === 0 && (
-            <div className="flex h-full flex-col justify-center py-4">
+            <div className="flex min-h-full flex-col justify-center !mb-0">
               <div className="mx-auto w-full max-w-xl">
                 <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-accent-line bg-accent-soft text-accent" aria-hidden="true">
                   <MessageSquare size={18} />
@@ -461,7 +489,8 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
               {startedAt && <span className="tabular-nums">· {formatElapsed(now - startedAt)}</span>}
             </div>
           )}
-          <div ref={endRef} />
+          {/* Sprungmarke ohne eigene Höhe; der leere Zustand trägt keinen space-y-Abstand (kein Scrollbalken). */}
+          <div ref={endRef} className="h-0" aria-hidden="true" />
         </div>
 
         {isReference && messages.length > 0 && (

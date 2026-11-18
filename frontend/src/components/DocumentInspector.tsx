@@ -32,6 +32,7 @@ import {
   docTypeLabel,
   formatDate,
   formatMoney,
+  localizePageMarker,
   riskLabel,
   TONE_CLASSES,
   TONE_TEXT,
@@ -50,7 +51,7 @@ import {
   MinusCircle,
   RefreshCw,
   Scale,
-  ShieldAlert,
+  Link,
   Stamp,
 } from "./icons";
 import { Chip, CopyValue, EmptyState, HashBadge, Kbd, Spinner, StatusIcon, Tabs, Tooltip, useModifierLabel } from "./ui";
@@ -210,7 +211,7 @@ function TextViewer({ view, evidenceLines, evidenceTone: tone, activeSpans, acti
             data-evidence={evidenceLines.has(index) && tone ? tone : undefined}
           >
             {row.parts.map((part, partIndex) => {
-              if (part.spanIndex === undefined) return <React.Fragment key={partIndex}>{part.text}</React.Fragment>;
+              if (part.spanIndex === undefined) return <React.Fragment key={partIndex}>{localizePageMarker(part.text)}</React.Fragment>;
               const span = view.spans[part.spanIndex];
               const label = td(span.label);
               return (
@@ -995,7 +996,7 @@ function LedgerSeal({ ledger, onOpen }: { ledger: LedgerVerification | null; onO
         className={cx("chip py-1 transition-colors duration-150 hover:border-line-strong", TONE_CLASSES[tone[state]])}
         aria-label={`${label} – ${tr("Protokoll öffnen", "Open audit trail", "Abrir registro")}`}
       >
-        {state === "broken" ? <ShieldAlert size={12} aria-hidden="true" /> : <Lock size={12} aria-hidden="true" />}
+        {state === "broken" ? <AlertTriangle size={12} aria-hidden="true" /> : <Link size={12} aria-hidden="true" />}
         {label}
       </button>
     </Tooltip>

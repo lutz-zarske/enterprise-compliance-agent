@@ -42,9 +42,9 @@ export function WelcomeModal({ open, onStartTour, onSkip }: { open: boolean; onS
         <div>
           <p className="text-sm font-medium text-fg">
             {tr(
-              "Revisionssichere KI-Dokumentenprüfung nach GoBD & EU AI Act",
-              "Audit-proof AI document inspection under GoBD & EU AI Act",
-              "Auditoría documental con IA conforme a GoBD y Reglamento de IA de la UE",
+              "KI-Dokumentenvorprüfung mit revisionssicherem Protokoll – an GoBD und EU AI Act ausgerichtet",
+              "AI document pre-audit with a tamper-evident audit trail – aligned with GoBD and the EU AI Act",
+              "Revisión previa de documentos con IA y registro a prueba de manipulaciones, alineada con GoBD y el Reglamento de IA",
             )}
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted">
@@ -77,14 +77,20 @@ interface Step {
 const PAD = 8;
 const CARD_WIDTH = 340;
 
+/** Hervorhebung um das Ziel, im Fenster gehalten (Ziele am oberen Rand werden nicht angeschnitten). */
+function spotlightBox(rect: DOMRect): { x: number; y: number; w: number; h: number } {
+  const x = Math.max(2, rect.left - PAD);
+  const y = Math.max(2, rect.top - PAD);
+  const right = Math.min(window.innerWidth - 2, rect.right + PAD);
+  const bottom = Math.min(window.innerHeight - 2, rect.bottom + PAD);
+  return { x, y, w: Math.max(0, right - x), h: Math.max(0, bottom - y) };
+}
+
 /** Rechteck mit runden Ecken als Loch in einer Vollflaeche (clip-path, evenodd). */
 function holePath(rect: DOMRect, radius = 14): string {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const x = rect.left - PAD;
-  const y = rect.top - PAD;
-  const rw = rect.width + PAD * 2;
-  const rh = rect.height + PAD * 2;
+  const { x, y, w: rw, h: rh } = spotlightBox(rect);
   const r = Math.min(radius, rw / 2, rh / 2);
   return (
     `path(evenodd, "M0 0H${w}V${h}H0Z ` +
@@ -133,14 +139,14 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
     },
     {
       target: "actions",
-      title: tr("Action-Leiste & Siegel", "Action Bar & Seal", "Barra de acciones y sello"),
+      title: tr("Aktionsleiste & Siegel", "Action Bar & Seal", "Barra de acciones y sello"),
       text: (m) => (
         <>
           {tr("Mit", "With", "Con")} <Kbd>{m} ↵</Kbd>{" "}
           {tr(
-            "revisionssicher nach GoBD Ed25519-siegeln & Verfahrensdokumentation exportieren.",
-            "seal audit-proof under GoBD (Ed25519) & export procedural documentation.",
-            "sella conforme a GoBD con Ed25519 y exporta la documentación de procedimientos.",
+            "den Prüfentscheid mit Ed25519 siegeln und die Verfahrensdokumentation exportieren.",
+            "seal the audit decision with Ed25519 and export the procedural documentation.",
+            "sella la decisión de auditoría con Ed25519 y exporta la documentación de procedimientos.",
           )}
         </>
       ),
@@ -160,7 +166,9 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
   useLayoutEffect(() => {
     if (!open) return;
     const element = document.querySelector<HTMLElement>(`[data-tour="${current.target}"]`);
-    element?.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+    // Hohe Ziele (Inspektor) oben ausrichten - scroll-margin-top haelt die Ueberschrift unter der Kopfleiste frei.
+    const tall = element ? element.getBoundingClientRect().height > window.innerHeight * 0.6 : false;
+    element?.scrollIntoView({ block: tall ? "start" : "center", behavior: "instant" as ScrollBehavior });
     measure();
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
@@ -214,7 +222,7 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
       {rect && (
         <div
           className="tour-ring"
-          style={{ top: rect.top - PAD, left: rect.left - PAD, width: rect.width + PAD * 2, height: rect.height + PAD * 2 }}
+          style={(({ x, y, w, h }) => ({ top: y, left: x, width: w, height: h }))(spotlightBox(rect))}
           aria-hidden="true"
         />
       )}
@@ -244,9 +252,11 @@ export function SpotlightTour({ open, onClose }: { open: boolean; onClose: () =>
             {tr("Tour beenden", "End tour", "Finalizar recorrido")}
           </button>
           <div className="flex gap-2">
-            <button className="btn" onClick={() => setStep((value) => value - 1)} disabled={step === 0}>
-              {tr("Zurück", "Back", "Atrás")}
-            </button>
+            {step > 0 && (
+              <button className="btn" onClick={() => setStep((value) => value - 1)}>
+                {tr("Zurück", "Back", "Atrás")}
+              </button>
+            )}
             {step < steps.length - 1 ? (
               <button className="btn btn-primary" onClick={() => setStep((value) => value + 1)} autoFocus>
                 {tr("Weiter", "Next", "Siguiente")}

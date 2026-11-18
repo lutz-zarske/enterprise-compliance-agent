@@ -563,7 +563,7 @@ STANDARD_QUESTIONS = (
 
 REFERENCE_ANSWERS: dict[str, tuple[str, str, str]] = {
     "Rechnung_Gueltig_14UStG.pdf": (
-        "Keine. Alle Pflichtangaben nach § 14 Abs. 4 Satz 1 UStG sind vorhanden:\n"
+        "Es fehlt keine Pflichtangabe – alle nach § 14 Abs. 4 Satz 1 UStG sind vorhanden:\n"
         "- Name und Anschrift des Ausstellers [Z. 2] [Z. 3] und des Empfängers [Z. 5] [Z. 6] (Nr. 1)\n"
         "- Steuernummer und USt-IdNr. [Z. 4] (Nr. 2)\n"
         "- Ausstellungsdatum [Z. 8] und Rechnungsnummer [Z. 7] (Nr. 3 und 4)\n"
@@ -620,7 +620,7 @@ REFERENCE_ANSWERS: dict[str, tuple[str, str, str]] = {
 
 
 REFERENCE_ANSWERS[HYBRID_FILENAME] = (
-    "Keine. Maßgeblich ist der eingebettete XML-Datensatz factur-x.xml [Z. 18] (BMF-Schreiben vom 15.10.2024, "
+    "Es fehlt keine Pflichtangabe. Maßgeblich ist der eingebettete XML-Datensatz factur-x.xml [Z. 18] (BMF-Schreiben vom 15.10.2024, "
     "Rz. 36); er enthält alle Pflichtangaben nach § 14 Abs. 4 Satz 1 UStG:\n"
     "- Name und Anschrift von Leistendem [Z. 2] [Z. 3] und Empfänger [Z. 5] [Z. 6] (Nr. 1)\n"
     "- Steuernummer und USt-IdNr. [Z. 4] (Nr. 2; BT-31 im XML)\n"
@@ -653,7 +653,7 @@ STANDARD_QUESTIONS_ES = (
 
 REFERENCE_ANSWERS_EN: dict[str, tuple[str, str, str]] = {
     "Rechnung_Gueltig_14UStG.pdf": (
-        "None. All mandatory fields under § 14(4) sent. 1 UStG are present:\n"
+        "No mandatory field is missing – all under § 14(4) sent. 1 UStG are present:\n"
         "- Supplier name and address [Z. 2] [Z. 3] and recipient [Z. 5] [Z. 6] (No. 1)\n"
         "- Tax number and VAT ID [Z. 4] (No. 2)\n"
         "- Issue date [Z. 8] and invoice number [Z. 7] (Nos. 3 & 4)\n"
@@ -686,7 +686,7 @@ REFERENCE_ANSWERS_EN: dict[str, tuple[str, str, str]] = {
 
 REFERENCE_ANSWERS_ES: dict[str, tuple[str, str, str]] = {
     "Rechnung_Gueltig_14UStG.pdf": (
-        "Ninguno. Todos los requisitos obligatorios del § 14(4) frase 1 UStG están presentes:\n"
+        "No falta ningún dato obligatorio: todos los requisitos del § 14(4) frase 1 UStG están presentes:\n"
         "- Nombre y dirección del emisor [Z. 2] [Z. 3] y destinatario [Z. 5] [Z. 6] (n.º 1)\n"
         "- NIF e ID de IVA [Z. 4] (n.º 2)\n"
         "- Fecha de emisión [Z. 8] y número de factura [Z. 7] (n.os 3 y 4)\n"
@@ -713,13 +713,13 @@ REFERENCE_ANSWERS_ES: dict[str, tuple[str, str, str]] = {
 }
 
 REFERENCE_ANSWERS_EN[HYBRID_FILENAME] = (
-    "None. The embedded XML dataset factur-x.xml prevails [Z. 18] (BMF 15 Oct 2024, para. 36) and contains all mandatory § 14(4) sent. 1 UStG fields, matching the visual PDF across all eight core values, plus a valid B2G Leitweg-ID [Z. 7].",
+    "No mandatory field is missing. The embedded XML dataset factur-x.xml prevails [Z. 18] (BMF 15 Oct 2024, para. 36) and contains all mandatory § 14(4) sent. 1 UStG fields, matching the visual PDF across all eight core values, plus a valid B2G Leitweg-ID [Z. 7].",
     "Not at all. The invoice covers hosting and operational support [Z. 11] [Z. 12] with no AI system; verified deterministically from XML without an LLM.",
     "No correction required. Sums reconcile (4,800.00 + 912.00 = 5,712.00 EUR [Z. 13]–[Z. 15]), IBAN passes MOD-97 [Z. 16], and XML matches PDF. Archive the received file including embedded XML (§ 14b UStG, § 147 AO).",
 )
 
 REFERENCE_ANSWERS_ES[HYBRID_FILENAME] = (
-    "Ninguno. El XML incrustado factur-x.xml prevalece [Z. 18] (BMF 15/10/2024) e incluye todos los campos del § 14(4) UStG en consonancia con el PDF visual, además de una Leitweg-ID válida [Z. 7].",
+    "No falta ningún dato obligatorio. El XML incrustado factur-x.xml prevalece [Z. 18] (BMF 15/10/2024) e incluye todos los campos del § 14(4) UStG en consonancia con el PDF visual, además de una Leitweg-ID válida [Z. 7].",
     "De ningún modo. Factura por alojamiento y soporte operativo [Z. 11] [Z. 12] sin sistema de IA; verificada de forma determinista mediante XML.",
     "No requiere corrección. Los importes cuadran (4.800,00 + 912,00 = 5.712,00 EUR [Z. 13]–[Z. 15]) y el IBAN supera MOD-97 [Z. 16]. Conservar el archivo íntegro con su XML (§ 14b UStG, § 147 AO).",
 )
@@ -730,10 +730,20 @@ def normalize_question(question: str) -> str:
     return "".join(char for char in question.casefold() if char.isalnum())
 
 
+#: Gleiche Musterantwort wie Frage 1 - für Rechnungen ohne fehlende Pflichtangaben schlägt die
+#: Oberfläche diese Formulierung vor (statt „Welche Pflichtangaben fehlen …?“).
+COMPLETE_FIELDS_QUESTIONS = (
+    "Sind alle Pflichtangaben nach § 14 UStG vorhanden?",
+    "Are all mandatory fields under Sec. 14 UStG present?",
+    "¿Están presentes todos los datos obligatorios del § 14 UStG?",
+)
+
 _STANDARD_KEYS: dict[str, int] = {}
 for _qs in (STANDARD_QUESTIONS, STANDARD_QUESTIONS_EN, STANDARD_QUESTIONS_ES):
     for _idx, _q in enumerate(_qs):
         _STANDARD_KEYS[normalize_question(_q)] = _idx
+for _q in COMPLETE_FIELDS_QUESTIONS:
+    _STANDARD_KEYS[normalize_question(_q)] = 0
 
 _BY_LANG = {
     "de": REFERENCE_ANSWERS,

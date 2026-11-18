@@ -224,15 +224,18 @@ function KeyInput({ value, onChange, placeholder, name, label, disabled = false 
 }) {
   const { tr } = useI18n();
   const [show, setShow] = useState(false);
+  // Eigenes <form> ohne Autovervollständigung: Browser behandeln den Key nicht als zu speicherndes Passwort.
   return (
-    <div className="relative">
+    <form className="relative" autoComplete="off" onSubmit={(event) => event.preventDefault()}>
       <input
         className="input h-9 pr-10 font-mono placeholder:font-sans disabled:cursor-not-allowed disabled:opacity-50"
         type={show ? "text" : "password"}
         name={name}
         value={value}
         aria-label={label}
-        autoComplete="off"
+        autoComplete="new-password"
+        data-1p-ignore
+        data-lpignore="true"
         spellCheck={false}
         disabled={disabled}
         placeholder={placeholder}
@@ -247,7 +250,7 @@ function KeyInput({ value, onChange, placeholder, name, label, disabled = false 
       >
         {show ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
       </button>
-    </div>
+    </form>
   );
 }
 
@@ -1175,16 +1178,21 @@ function ConnectionSection({ open, health, onAccessChanged, notify }: {
             label={tr("Zugangsschlüssel", "Access key", "Clave de acceso")}
             hint={tr("Vom Administrator des Servers (API_KEY). Wird nur in diesem Browser gespeichert und als X-API-Key mitgesendet.", "From the server administrator (API_KEY). Stored only in this browser and sent as X-API-Key.", "Del administrador del servidor (API_KEY). Solo se guarda en este navegador y se envía como X-API-Key.")}
           >
-            <input
-              className="input font-mono placeholder:font-sans"
-              type="password"
-              value={accessKey}
-              onChange={(event) => setAccessKeyState(event.target.value)}
-              placeholder={tr("Zugangsschlüssel einfügen …", "Paste access key …", "Pegar clave de acceso …")}
-              name="access-key"
-              autoComplete="off"
-              spellCheck={false}
-            />
+            <form autoComplete="off" onSubmit={(event) => event.preventDefault()}>
+              <input
+                className="input font-mono placeholder:font-sans"
+                type="password"
+                value={accessKey}
+                onChange={(event) => setAccessKeyState(event.target.value)}
+                placeholder={tr("Zugangsschlüssel einfügen …", "Paste access key …", "Pegar clave de acceso …")}
+                name="access-key"
+                aria-label={tr("Zugangsschlüssel", "Access key", "Clave de acceso")}
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                spellCheck={false}
+              />
+            </form>
           </Field>
           <div className="flex justify-end">
             <button

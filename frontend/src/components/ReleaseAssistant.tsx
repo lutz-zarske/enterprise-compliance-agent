@@ -3,10 +3,10 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, ApiError, fetchHealth } from "../lib/api";
-import { cx, formatElapsed } from "../lib/format";
+import { cx, formatElapsed, formatTime } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import type { ReleaseApplyResult, ReleaseStatus } from "../types/api";
-import { AlertTriangle, ArrowUpCircle, CheckCircle, RefreshCw, ShieldAlert, ShieldCheck } from "./icons";
+import { AlertTriangle, ArrowUpCircle, CheckCircle, RefreshCw } from "./icons";
 import { HashBadge, Modal, Spinner } from "./ui";
 
 /** Fensterweites Ereignis: ein Release wurde eingespielt (Detail: ``ReleaseApplyResult``). */
@@ -37,8 +37,13 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
 
   const check = useCallback(async () => {
     setChecking(true);
+    const started = Date.now();
     try {
-      setStatus(await api.release(true));
+      const result = await api.release(true);
+      // Kurz sichtbarer Ladezustand, auch wenn der Abgleich sofort fertig ist.
+      const rest = 600 - (Date.now() - started);
+      if (rest > 0) await new Promise((resolve) => window.setTimeout(resolve, rest));
+      setStatus(result);
     } catch (err) {
       notify("bad", tr("Update-Prüfung fehlgeschlagen", "Update check failed", "Error al buscar actualizaciones"), err instanceof ApiError ? td(err.message) : String(err));
     } finally {
@@ -90,8 +95,8 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
   // Stichpunkte aus den Commit-Texten; ältere Backends liefern nur die Betreffzeilen.
   const notes = latest?.notes ?? latest?.changelog.map((line) => line.replace(/^[0-9a-f]{7,}\s+/, "")) ?? [];
   const signatureMap: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
-    valid: { label: tr("Tag-Signatur gültig", "Valid tag signature", "Firma válida"), tone: "border-ok-line bg-ok-soft text-ok", icon: <ShieldCheck size={12} aria-hidden="true" /> },
-    invalid: { label: tr("Tag-Signatur ungültig", "Invalid tag signature", "Firma inválida"), tone: "border-bad-line bg-bad-soft text-bad", icon: <ShieldAlert size={12} aria-hidden="true" /> },
+    valid: { label: tr("Tag-Signatur gültig", "Valid tag signature", "Firma válida"), tone: "border-ok-line bg-ok-soft text-ok", icon: <CheckCircle size={12} aria-hidden="true" /> },
+    invalid: { label: tr("Tag-Signatur ungültig", "Invalid tag signature", "Firma inválida"), tone: "border-bad-line bg-bad-soft text-bad", icon: <AlertTriangle size={12} aria-hidden="true" /> },
   };
   const signature = latest ? signatureMap[latest.signature] : null;
 
@@ -103,7 +108,8 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
           {status?.current_commit && <span className="ml-2 font-mono text-xs text-subtle">{status.current_commit.slice(0, 10)}</span>}
         </p>
         <button className="btn" onClick={() => void check()} disabled={searching || busy}>
-          {searching ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />} {tr("Nach Updates suchen", "Check for updates", "Buscar actualizaciones")}
+          {searching ? <Spinner size={13} /> : <RefreshCw size={14} aria-hidden="true" />}{" "}
+          {searching ? tr("Wird geprüft …", "Checking …", "Comprobando …") : tr("Nach Updates suchen", "Check for updates", "Buscar actualizaciones")}
         </button>
       </div>
 
@@ -112,8 +118,13 @@ export function ReleasePanel({ initial, installedVersion, externalChecking = fal
         <p className="text-xs text-subtle" role="status">{tr("Suche nach Updates …", "Checking for updates …", "Buscando actualizaciones …")}</p>
       )}
       {!searching && status && status.git && !latest && (
-        <p className="flex items-center gap-2 text-xs text-ok">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ok" role="status">
           <CheckCircle size={14} aria-hidden="true" /> {tr("Aktuellste Version.", "Latest version.", "Versión más reciente.")}
+          {status.checked_at && (
+            <span className="text-subtle">
+              {tr("Zuletzt geprüft um", "Last checked at", "Última comprobación a las")} {formatTime(status.checked_at)}
+            </span>
+          )}
         </p>
       )}
 

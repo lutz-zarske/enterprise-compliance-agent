@@ -273,7 +273,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (337 Tests, Stand v2.6.4) deckt die Kette vom HTTP-Request bis zur
+`pytest` (340 Tests, Stand v2.7.0) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die

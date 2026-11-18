@@ -104,7 +104,7 @@ def verify_signature(signature: dict[str, Any], data: bytes, *, expected_fingerp
     except (KeyError, ValueError, TypeError):
         return False, "Signaturfelder sind unvollständig."
     if expected_fingerprint and fingerprint(public_raw) != expected_fingerprint:
-        return False, "Mit einem fremden Schluessel signiert (Fingerabdruck weicht vom System-Schluessel ab)."
+        return False, "Mit einem fremden Schlüssel signiert (Fingerabdruck weicht vom System-Schluessel ab)."
     try:
         Ed25519PublicKey.from_public_bytes(public_raw).verify(value, data)
     except (InvalidSignature, ValueError):
@@ -121,5 +121,5 @@ def verify_signed_payload(payload: dict[str, Any], *, expected_fingerprint: str 
     if not ok and message.startswith("Signatur ungültig"):
         return False, "Signatur ungültig - das Manifest wurde verändert."
     if not ok and message.startswith("Mit einem fremden"):
-        return False, "Fingerabdruck des Schlüssels weicht vom erwarteten System-Schluessel ab."
+        return False, "Fingerabdruck des Schlüssels weicht vom erwarteten System-Schlüssel ab."
     return ok, message

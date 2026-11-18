@@ -194,3 +194,63 @@ def test_musterantworten_vollstaendig_und_zeilengenau() -> None:
         STANDARD_QUESTIONS[0]
     )
     assert reference_answer("unbekannt.pdf", STANDARD_QUESTIONS[0]) is None
+
+
+def test_gescheiterte_neupruefung_ueberdeckt_kein_gueltiges_ergebnis(
+    make_full_client: Callable[..., TestClient], fake_ollama: FakeOllama
+) -> None:
+    """Fällt eine Neuprüfung aus, bleibt das gültige (versiegelte) Ergebnis Hauptstatus; der Fehler ist Hinweis."""
+    client = make_full_client(heuristic_fallback=False)
+    document_id = _seed(client)["Rechnung_Gueltig_14UStG.pdf"]["id"]
+    before = client.get(f"/documents/{document_id}").json()
+    assert before["sign_off"]["status"] == "SEALED_APPROVED"
+
+    fake_ollama.offline = True
+    assert client.post(f"/documents/{document_id}/extract?wait=true").status_code == 503
+    after = client.get(f"/documents/{document_id}").json()
+    assert after["status"] == "extracted"  # nicht „failed“
+    assert after["scorecard"]["score"] == before["scorecard"]["score"]
+    assert after["sign_off"] == before["sign_off"]
+    assert after["error"] and "Error:" not in after["error"]  # lesbar, ohne Klassennamen
+    row = next(item for item in client.get("/documents").json()["items"] if item["id"] == document_id)
+    assert row["status"] == "extracted" and row["sender"]
+
+
+def test_altzustand_wird_beim_start_repariert(settings) -> None:
+    """Belege aus älteren Versionen mit ``failed`` über einem gültigen Ergebnis erhalten ihren Status zurück."""
+    import sqlalchemy as sa
+
+    from app.db import build_repository, documents_table, utcnow
+
+    engine, _ = build_repository(settings)
+    with engine.begin() as connection:
+        connection.execute(sa.insert(documents_table).values(
+            id="alt-1", original_filename="alt.pdf", stored_filename="alt.pdf", content_type="application/pdf",
+            size_bytes=1, sha256="0" * 64, status="failed", scorecard={"score": 100},
+            created_at=utcnow(), updated_at=utcnow(),
+            error="ProviderUnavailableError: Google Gemini antwortet mit HTTP 503 (Ueberlast/Kontingent).",
+        ))
+    engine.dispose()
+    engine, _ = build_repository(settings)
+    with engine.connect() as connection:
+        status, error = connection.execute(
+            sa.select(documents_table.c.status, documents_table.c.error).where(documents_table.c.id == "alt-1")
+        ).one()
+    assert status == "extracted"
+    assert error == "Google Gemini antwortet mit HTTP 503 (Überlast/Kontingent)."
+
+
+def test_siegel_und_kaskade_lesbar_im_protokoll(full_client: TestClient) -> None:
+    document_id = _seed(full_client)["Rechnung_Gueltig_14UStG.pdf"]["id"]
+    trail = full_client.get("/api/audit/trail", params={"document_id": document_id}).json()["items"]
+    seal = next(entry for entry in trail if entry["event_type"] == "sign_off")
+    assert seal["result_summary"].startswith("Freigegeben und versiegelt durch")
+    assert seal["details"]["decision"] == "SEALED_APPROVED" and seal["signature_status"] == "valid"
+
+    full_client.post("/api/settings", json={"inference_mode": "gemini", "api_keys": {"gemini": "AIza-key-1234567890"}})
+    full_client.post("/api/settings", json={"ausweich_modelle": {"gemini": "gemini-3.5-flash-lite"}})
+    system = full_client.get("/api/audit/trail", params={"document_id": "system"}).json()["items"]
+    summaries = [entry["result_summary"] for entry in system]
+    assert any(text.startswith("Modellwechsel local/") and "→ gemini/" in text for text in summaries)
+    assert any(text == "Ausweich-Kaskade geändert: + Ausweichmodell gemini/gemini-3.5-flash-lite" for text in summaries)
+    assert not any(" -> " in text for text in summaries)

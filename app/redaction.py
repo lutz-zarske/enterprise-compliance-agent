@@ -294,7 +294,7 @@ def scan_text(text: str) -> list[PIIFinding]:
                 continue
             add(
                 category,
-                f"Schluesselwort: {keyword}",
+                f"Schlüsselwort: {keyword}",
                 match.start(),
                 match.end(),
                 0.6,

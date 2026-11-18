@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 337 pytest](https://img.shields.io/badge/pytest-337_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 340 pytest](https://img.shields.io/badge/pytest-340_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -24,7 +24,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > every result lands in a SHA-256 hash chain with Ed25519-signed reviewer
 > events, and a fail-safe AI cascade (local Ollama or cloud LLMs behind a
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
-> FastAPI · Next.js 15 · 337 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 340 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -61,7 +61,8 @@ docker compose up --build
 ```
 
 Danach <http://127.0.0.1:3001> öffnen, oben rechts **Musterdaten** wählen – vier
-Referenzbelege sind in Sekunden vollständig geprüft, ohne GPU und ohne API-Key.
+Referenzbelege sind in Sekunden vollständig geprüft, ohne GPU und ohne API-Key
+(alle Angaben darin sind frei erfunden).
 Für die KI-Prüfung eigener Belege einen Cloud-Key unter **Einstellungen › KI-Einrichtung**
 hinterlegen oder mit `docker compose --profile full up --build` zusätzlich einen
 Ollama-Container starten.
@@ -231,7 +232,7 @@ Einordnung: [`docs/RECHTLICHE_ANALYSE_2026.md`](docs/RECHTLICHE_ANALYSE_2026.md)
 | **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 aus dem echten Systemzustand plus Anhang je Beleg; als Word-Datei (.docx) mit gelb markierten Platzhaltern zum Ergänzen oder als A4-HTML |
 | **DLP-Gateway** | `POST /api/v1/redact`: endgültige Schwärzung für andere Anwendungen vor jedem Cloud-LLM-Aufruf |
 | **Release-Assistent** | Neue Version per `git fetch --tags` prüfen und per Klick installieren – mit automatischer Datenbanksicherung, Erhalt aller lokalen Daten und Ledger-Eintrag |
-| **Musterdaten** | Vier Referenzbelege (gültig, Steuerfalle, KI-Recruiting nach Anhang III, ZUGFeRD an eine Kommune), sofort nutzbar ohne Modell |
+| **Musterdaten** | Vier Referenzbelege (gültig, Steuerfalle, KI-Recruiting nach Anhang III, ZUGFeRD an eine Kommune), sofort nutzbar ohne Modell. Alle Firmen, Personen, Adressen, Steuernummern und IBANs darin sind frei erfunden. |
 
 ---
 
@@ -419,12 +420,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 337 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 340 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-337 Tests (Stand v2.6.4) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+340 Tests (Stand v2.7.0) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -547,3 +548,6 @@ die Freigabe durch die Prüfperson.
 [MIT](LICENSE) © 2026 Lutz Zarske · Änderungen je Version im
 [Changelog](CHANGELOG.md) · Sicherheitslücken bitte vertraulich melden
 ([SECURITY.md](SECURITY.md)).
+---
+
+Entwickelt von Lutz Zarske · MIT-Lizenz

@@ -60,6 +60,7 @@ from app.runtime_settings import (
     RuntimeSettingsStore,
     RuntimeSnapshot,
     SettingsError,
+    describe_model_change,
 )
 from app.model_catalog import parse_catalog, suggest_upgrade
 from app.redact import RULESET_VERSION as DLP_RULESET
@@ -1056,7 +1057,7 @@ def _register_routes(application: FastAPI) -> None:
         "/api/documents/{document_id}/override",
         response_model=DocumentDetail,
         tags=["Human Oversight"],
-        summary="KI-Einstufung durch eine Prüfperson uebersteuern (Art. 14 Abs. 4 lit. d AI Act)",
+        summary="KI-Einstufung durch eine Prüfperson übersteuern (Art. 14 Abs. 4 lit. d AI Act)",
         dependencies=[Depends(require_api_key)],
         responses={
             **error_responses,
@@ -1377,10 +1378,7 @@ def _register_routes(application: FastAPI) -> None:
                 sha256_hash=NO_DOCUMENT_HASH,
                 model_name=after["model"],
                 prompt_hash=PROMPT_HASH,
-                result_summary=(
-                    f"Modellwechsel {before['inference_mode']}/{before['model']} -> "
-                    f"{after['inference_mode']}/{after['model']}"
-                ),
+                result_summary=describe_model_change(before, after),
                 compliance_score=None,
                 risk_tier="none",
                 details={"before": before, "after": after},
@@ -1638,7 +1636,7 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/audit/signing-key",
         tags=["Audit-Ledger"],
-        summary="Öffentlicher Schluessel der System-Signatur (Ed25519)",
+        summary="Öffentlicher Schlüssel der System-Signatur (Ed25519)",
         dependencies=[Depends(require_api_key)],
     )
     async def signing_key(request: Request) -> dict[str, str]:

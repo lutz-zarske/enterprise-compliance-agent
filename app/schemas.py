@@ -1021,7 +1021,7 @@ class Scorecard(ApiModel):
     computed_at: datetime
     ruleset_version: str
     human_override: HumanOverride | None = Field(
-        default=None, description="Gesetzt, wenn eine Prüfperson die KI-Einstufung uebersteuert hat."
+        default=None, description="Gesetzt, wenn eine Prüfperson die KI-Einstufung übersteuert hat."
     )
     retention: RetentionInfo | None = Field(
         default=None, description="Aufbewahrungsfrist bei Rechnungen mit Belegdatum (BEG IV)."
@@ -1242,12 +1242,12 @@ InferenceModeLiteral = Literal["local", "gemini", "anthropic", "openai"]
 
 
 class BackupKeyInput(ApiModel):
-    """Ein Ausweich-Schluessel der Kaskade (Schluessel wird verschlüsselt gespeichert, nie zurückgegeben)."""
+    """Ein Ausweich-Schlüssel der Kaskade (wird verschlüsselt gespeichert, nie zurückgegeben)."""
 
     id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,40}$", description="Stabile Kennung des Eintrags.")
     provider: Literal["gemini", "anthropic", "openai"]
     model: str | None = Field(default=None, max_length=120, description="Leer = Hauptmodell des Anbieters.")
-    api_key: str | None = Field(default=None, max_length=400, description="Leer = gespeicherten Schluessel behalten.")
+    api_key: str | None = Field(default=None, max_length=400, description="Leer = gespeicherten Schlüssel behalten.")
 
 
 class SettingsUpdate(ApiModel):
@@ -1280,8 +1280,8 @@ class SettingsUpdate(ApiModel):
         default=None,
         max_length=6,
         description=(
-            "Ganze Liste der Ausweich-Schluessel in Reihenfolge; Einträge ohne api_key behalten "
-            "den gespeicherten Schluessel derselben id."
+            "Ganze Liste der Ausweich-Schlüssel in Reihenfolge; Einträge ohne api_key behalten "
+            "den gespeicherten Schlüssel derselben id."
         ),
     )
 
@@ -1465,6 +1465,6 @@ class RedactResponse(ApiModel):
 class ReleaseApplyRequest(ApiModel):
     """Bestätigung eines Release-Wechsels durch die Administration."""
 
-    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.6.4'.")
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.7.0'.")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(default="System", min_length=2, max_length=120, description="Wer das Update auslöst.")

@@ -29,6 +29,21 @@ export function formatDate(value: string | null | undefined, withTime = false): 
   );
 }
 
+const PAGE_WORD: Record<string, string> = { de: "Seite", en: "Page", es: "Página" };
+
+/** Seitenmarker des Textlayers („--- Seite 1 ---“) in der Sprache der Oberfläche; Offsets bleiben unberührt. */
+export function localizePageMarker(text: string): string {
+  return text.replace(/^--- Seite (\d+) ---$/, (_match, page: string) => `--- ${PAGE_WORD[getActiveLocale()] ?? "Seite"} ${page} ---`);
+}
+
+/** Uhrzeit (HH:MM) in Ortszeit. */
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return "–";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString(LOCALE_TAG[getActiveLocale()], { hour: "2-digit", minute: "2-digit" });
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

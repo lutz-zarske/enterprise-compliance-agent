@@ -8,7 +8,7 @@ import { DocumentList } from "../components/DocumentList";
 import { DocumentUploader } from "../components/DocumentUploader";
 import { ExportModal } from "../components/ExportModal";
 import { Header, type View } from "../components/Header";
-import { Download, FileText, Layers, RefreshCw, ShieldCheck, WifiOff, Zap } from "../components/icons";
+import { Download, FileText, Info, Layers, RefreshCw, WifiOff, Zap } from "../components/icons";
 import { NACHLAUF_MS, type FinishedJob } from "../components/JobMonitor";
 import { KpiStrip } from "../components/KpiStrip";
 import { markOnboardingDone, onboardingDone, ShortcutsModal, SpotlightTour, WelcomeModal } from "../components/Onboarding";
@@ -534,7 +534,7 @@ export default function DashboardPage() {
               <div className="min-w-0 space-y-4 2xl:space-y-5">
                 {!detail && !loadingDetail && (
                   <div className="card">
-                    <EmptyState icon={<ShieldCheck size={20} aria-hidden="true" />} title={tr("Noch kein Dokument ausgewählt", "No document selected yet", "Ningún documento seleccionado")}>
+                    <EmptyState icon={<FileText size={20} aria-hidden="true" />} title={tr("Noch kein Dokument ausgewählt", "No document selected yet", "Ningún documento seleccionado")}>
                       <p>
                         {tr(
                           "Mit den Musterdaten sehen Sie in Sekunden einen vollständigen Prüfdurchlauf – auch ohne KI-Modell: eine gültige Rechnung, eine Steuerfalle, einen KI-Recruiting-Vertrag nach Anhang III und eine hybride ZUGFeRD-E-Rechnung an eine Kommune.",
@@ -565,8 +565,21 @@ export default function DashboardPage() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <h2 className="truncate text-sm font-semibold text-fg">{detail.filename}</h2>
-                            <span className={cx("chip", detail.status === "failed" ? "border-bad-line bg-bad-soft text-bad" : "border-line bg-surface-2 text-muted")}>
-                              {activeJob ? statusLabels.processing : statusLabels[detail.status] ?? detail.status}
+                            <span
+                              className={cx(
+                                "chip",
+                                detail.status === "failed"
+                                  ? "border-bad-line bg-bad-soft text-bad"
+                                  : detail.sign_off && !activeJob
+                                    ? "border-ok-line bg-ok-soft text-ok"
+                                    : "border-line bg-surface-2 text-muted",
+                              )}
+                            >
+                              {activeJob
+                                ? statusLabels.processing
+                                : detail.sign_off && detail.status === "extracted"
+                                  ? tr("Versiegelt", "Sealed", "Sellado")
+                                  : statusLabels[detail.status] ?? detail.status}
                             </span>
                             {isReference && (
                               <Tooltip
@@ -635,7 +648,20 @@ export default function DashboardPage() {
 
                     {detail.status === "failed" && detail.error && !activeJob && (
                       <div className="rounded-lg border border-bad-line bg-bad-soft px-4 py-3 text-xs text-fg">
-                        <strong className="text-bad">{tr("Letzte Prüfung fehlgeschlagen:", "Last audit failed:", "Última auditoría fallida:")}</strong> {detail.error}
+                        <strong className="text-bad">{tr("Prüfung fehlgeschlagen:", "Audit failed:", "Auditoría fallida:")}</strong> {td(detail.error)}
+                      </div>
+                    )}
+                    {detail.status === "extracted" && detail.scorecard && detail.error && !activeJob && (
+                      <div className="flex items-start gap-2 rounded-lg border border-line bg-surface-2 px-4 py-2.5 text-xs text-muted" role="status">
+                        <Info size={14} className="mt-px shrink-0 text-subtle" aria-hidden="true" />
+                        <span>
+                          {tr(
+                            `Letzte Neuprüfung am ${formatDate(detail.updated_at, true)} fehlgeschlagen – das gültige Ergebnis vom ${formatDate(detail.sign_off?.sealed_at ?? detail.extracted_at)} bleibt bestehen.`,
+                            `Last re-audit on ${formatDate(detail.updated_at, true)} failed – the valid result from ${formatDate(detail.sign_off?.sealed_at ?? detail.extracted_at)} remains in force.`,
+                            `La última reauditoría del ${formatDate(detail.updated_at, true)} falló; el resultado válido del ${formatDate(detail.sign_off?.sealed_at ?? detail.extracted_at)} se mantiene.`,
+                          )}{" "}
+                          <span className="text-subtle">{td(detail.error)}</span>
+                        </span>
                       </div>
                     )}
 

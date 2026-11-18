@@ -593,10 +593,17 @@ const MESSAGE_RULES: [RegExp, string, string][] = [
   [/Ein schnelleres Modell wählen oder in einigen Minuten erneut prüfen\./g,
     "Choose a faster model or try again in a few minutes.", "Elija un modelo más rápido o reintente en unos minutos."],
   [/^Wechsel (\S+) -> (\S+) \(([^)]+)\)$/, "Provider switch $1 -> $2 ($3)", "Cambio de proveedor $1 -> $2 ($3)"],
-  [/^Modellwechsel (.+) -> (.+)$/, "Model change $1 -> $2", "Cambio de modelo $1 -> $2"],
+  [/^Modellwechsel (.+) → (.+)$/, "Model change $1 → $2", "Cambio de modelo $1 → $2"],
+  [/^Ausweich-Kaskade neu geordnet$/, "Fallback cascade reordered", "Cascada de respaldo reordenada"],
+  [/^Ausweich-Kaskade geändert: /, "Fallback cascade changed: ", "Cascada de respaldo modificada: "],
+  [/Ausweichmodell (?=\S+\/)/g, "fallback model ", "modelo alternativo "],
+  [/Ausweich-Schlüssel (?=\S+\/)/g, "backup key ", "clave de respaldo "],
+  [/Anbieter-Fallback (?=\S+\/)/g, "provider fallback ", "proveedor alternativo "],
   [/^Release-Wechsel (\S+) -> (\S+) durch (.+)$/, "Release change $1 -> $2 by $3", "Cambio de versión $1 -> $2 por $3"],
   [/^Einstufung (\S+) -> (\S+) durch (.+); Score (\S+) -> (\S+)$/, "Classification $1 -> $2 by $3; score $4 -> $5", "Clasificación $1 -> $2 por $3; puntuación $4 -> $5"],
-  [/^(SEALED_[A-Z]+) durch (.+)$/, "$1 by $2", "$1 por $2"],
+  [/^Freigegeben und versiegelt durch (.+)$/, "Approved and sealed by $1", "Aprobado y sellado por $1"],
+  [/^Freigabe verweigert und versiegelt durch (.+)$/, "Rejected and sealed by $1", "Rechazado y sellado por $1"],
+  [/Überlast\/Kontingent/g, "overload/quota", "saturación/cuota"],
   [/^Score (\d+): /, "Score $1: ", "Puntuación $1: "],
   [/§ 14 UStG −/g, "Sec. 14 UStG −", "§ 14 UStG −"],
   [/Finanzmathematik −/g, "Financial math −", "Matemática financiera −"],
@@ -631,8 +638,34 @@ const MESSAGE_RULES: [RegExp, string, string][] = [
     "Inicie la IA local (Ajustes › Configuración IA) o ejecute 'ollama serve' en una terminal; compruebe la conexión con scripts/smoke_test_ollama.py."],
 ];
 
+/**
+ * Gespeicherte Texte älterer Versionen lesbar machen (Prüfprotokoll ist append-only, Fehlertexte
+ * bleiben stehen): Umlaute statt ae/oe/ue, Entscheidung statt Enum-Wert, Pfeil statt „->“,
+ * keine Klassennamen. Gilt für alle Sprachen, vor der Übersetzung.
+ */
+const LEGACY_REPLACEMENTS: [RegExp, string][] = [
+  [/^[A-Z][A-Za-z]*(?:Error|Exception):\s*/, ""],
+  [/^SEALED_APPROVED durch /, "Freigegeben und versiegelt durch "],
+  [/^SEALED_REJECTED durch /, "Freigabe verweigert und versiegelt durch "],
+  [/^Modellwechsel (.+) -> (.+)$/, "Modellwechsel $1 → $2"],
+  [/Auffaelligkeit/g, "Auffälligkeit"],
+  [/\bUeberlast/g, "Überlast"],
+  [/\bueberlast/g, "überlast"],
+  [/Zeitueberschreitung/g, "Zeitüberschreitung"],
+  [/\bSchluesselwort/g, "Schlüsselwort"],
+  [/Ausweich-Schluessel/g, "Ausweich-Schlüssel"],
+];
+
+export function normalizeStored(text: string): string {
+  let out = text;
+  for (const [pattern, replacement] of LEGACY_REPLACEMENTS) out = out.replace(pattern, replacement);
+  return out;
+}
+
 export function translateDynamic(text: string | null | undefined, locale: Locale = getActiveLocale()): string {
-  if (!text || locale === "de") return text ?? "";
+  if (!text) return "";
+  text = normalizeStored(text);
+  if (locale === "de") return text;
   const map = locale === "en" ? EXACT_EN : EXACT_ES;
   if (map[text]) return map[text];
   // Zusammengesetzte Protokoll-Zeilen ("A | B | C") Teil fuer Teil uebersetzen.

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import type { CheckStatus } from "../types/api";
 import { cx, formatEta, TONE_CLASSES, type Tone } from "../lib/format";
 import { tr, useI18n } from "../lib/i18n";
-import { AlertTriangle, Check, CheckCircle, Copy, Info, MinusCircle, ShieldAlert, ShieldCheck, X, XCircle } from "./icons";
+import { AlertTriangle, Check, CheckCircle, Copy, Info, MinusCircle, X, XCircle } from "./icons";
 
 export function Chip({ tone = "neutral", children, className, title }: {
   tone?: Tone;
@@ -806,8 +806,8 @@ export function HashBadge({ value, label = "SHA-256", verified = null, verifiedL
         className={cx("chip min-w-0 font-mono text-xs tabular-nums", TONE_CLASSES[tone])}
         title={`${label} ${value}`}
       >
-        {statusIcon && verified === true && <ShieldCheck size={11} aria-hidden="true" />}
-        {statusIcon && verified === false && <ShieldAlert size={11} aria-hidden="true" />}
+        {statusIcon && verified === true && <CheckCircle size={11} aria-hidden="true" />}
+        {statusIcon && verified === false && <AlertTriangle size={11} aria-hidden="true" />}
         <span className="opacity-70">{label}</span> {short}
         {status && <span className="font-sans opacity-80">· {status}</span>}
       </span>

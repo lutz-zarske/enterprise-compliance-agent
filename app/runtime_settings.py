@@ -8,7 +8,7 @@ Ausweich-Kaskade
 ----------------------------
 1. Hauptmodell des aktiven Providers (Hauptschluessel)
 2. Ausweichmodell desselben Anbieters (``ausweich_modelle``, gleicher Schluessel)
-3. Ausweich-Schluessel der Reihe nach (``ausweich_schluessel``, hoechstens sechs, auch
+3. Ausweich-Schlüssel der Reihe nach (``ausweich_schluessel``, hoechstens sechs, auch
    mehrere Schluessel desselben Anbieters, z. B. ein zweiter Gemini-Key)
 4. Anbieter-Fallbacks (``fallbacks``: weitere Anbieter mit ihrem Hauptschluessel,
    ``local`` = lokales Ollama)
@@ -19,7 +19,7 @@ lokal eingestellte Pruefung geht nie automatisch in die Cloud.
 
 Schluesselverwaltung
 --------------------
-Provider-API-Keys und Ausweich-Schluessel werden mit **Fernet** (AES-128-CBC +
+Provider-API-Keys und Ausweich-Schlüssel werden mit **Fernet** (AES-128-CBC +
 HMAC-SHA256, ``cryptography``) verschluesselt abgelegt.  Der Fernet-Schluessel
 stammt aus ``SETTINGS_ENCRYPTION_KEY``; fehlt er, wird einmalig
 ``data/.settings.key`` (Dateirechte 0600) erzeugt.  Ehrliche Einordnung: Liegt
@@ -74,7 +74,7 @@ CLOUD_PROVIDERS: tuple[InferenceMode, ...] = (
     InferenceMode.OPENAI,
 )
 
-#: Hoechstzahl der Ausweich-Schluessel.
+#: Hoechstzahl der Ausweich-Schlüssel.
 MAX_BACKUP_KEYS = 6
 
 #: Auswahl im Einstellungsdialog, solange kein Key hinterlegt ist (mit Key liefert die
@@ -122,7 +122,7 @@ def mask_secret(value: str | None) -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class BackupKey:
-    """Ein Ausweich-Schluessel (Stufe 3 der Kaskade)."""
+    """Ein Ausweich-Schlüssel (Stufe 3 der Kaskade)."""
 
     id: str
     provider: InferenceMode
@@ -167,7 +167,7 @@ class RuntimeSnapshot:
     fallbacks: tuple[InferenceMode, ...] = ()
     #: Ausweichmodell desselben Anbieters je Cloud-Provider ("" = aus).
     ausweich_modelle: dict[str, str] = field(default_factory=dict)
-    #: Ausweich-Schluessel in Reihenfolge.
+    #: Ausweich-Schlüssel in Reihenfolge.
     ausweich_schluessel: tuple[BackupKey, ...] = field(default=(), repr=False)
 
     @property
@@ -217,6 +217,29 @@ class RuntimeSnapshot:
         return self.keys.get(provider)
 
 
+_STAGE_LABELS = {"ausweichmodell": "Ausweichmodell", "ausweich_schluessel": "Ausweich-Schlüssel", "fallback": "Anbieter-Fallback"}
+
+
+def describe_model_change(before: dict[str, Any], after: dict[str, Any]) -> str:
+    """Lesbare Kurzfassung eines ``model_change``: was sich an Hauptmodell oder Kaskade geändert hat."""
+    primary_before = f"{before['inference_mode']}/{before['model']}"
+    primary_after = f"{after['inference_mode']}/{after['model']}"
+    if primary_before != primary_after:
+        return f"Modellwechsel {primary_before} → {primary_after}"
+
+    def stages(snapshot: dict[str, Any]) -> list[tuple[str, str]]:
+        return [(_STAGE_LABELS.get(s["stage"], s["stage"]), f"{s['provider']}/{s['model']}")
+                for s in snapshot.get("fallbacks", [])]
+
+    old, new = stages(before), stages(after)
+    removed = [stage for stage in old if stage not in new]
+    added = [stage for stage in new if stage not in old]
+    if len(removed) == 1 and len(added) == 1 and removed[0][0] == added[0][0]:
+        return f"Ausweich-Kaskade geändert: {added[0][0]} {removed[0][1]} → {added[0][1]}"
+    parts = [f"+ {label} {model}" for label, model in added] + [f"− {label} {model}" for label, model in removed]
+    return "Ausweich-Kaskade geändert: " + ", ".join(parts) if parts else "Ausweich-Kaskade neu geordnet"
+
+
 def _load_fernet(settings: Settings) -> Fernet:
     if settings.settings_encryption_key:
         return Fernet(settings.settings_encryption_key.encode())
@@ -230,7 +253,7 @@ def _load_fernet(settings: Settings) -> Fernet:
         os.chmod(key_file, 0o600)
     except OSError:  # pragma: no cover - z. B. Windows ohne POSIX-Rechte
         pass
-    logger.info("Neuer Settings-Schluessel erzeugt (%s).", key_file.name)
+    logger.info("Neuer Settings-Schlüssel erzeugt (%s).", key_file.name)
     return Fernet(key)
 
 
@@ -384,25 +407,25 @@ class RuntimeSettingsStore:
     def _merge_backup_keys(self, entries: list[dict[str, Any]]) -> tuple[BackupKey, ...]:
         """Ganze Liste uebernehmen; Eintraege ohne ``api_key`` behalten den Schluessel gleicher ID."""
         if len(entries) > MAX_BACKUP_KEYS:
-            raise SettingsError(f"Höchstens {MAX_BACKUP_KEYS} Ausweich-Schluessel.")
+            raise SettingsError(f"Höchstens {MAX_BACKUP_KEYS} Ausweich-Schlüssel.")
         known = {key.id: key for key in self._state["ausweich_schluessel"]}
         merged: list[BackupKey] = []
         for entry in entries:
             backup_id = str(entry.get("id") or "").strip()
             if not _BACKUP_ID.fullmatch(backup_id) or any(item.id == backup_id for item in merged):
-                raise SettingsError("Ausweich-Schluessel braucht eine eindeutige ID (Buchstaben, Ziffern, - und _).")
+                raise SettingsError("Ausweich-Schlüssel braucht eine eindeutige ID (Buchstaben, Ziffern, - und _).")
             try:
                 provider = InferenceMode(entry.get("provider"))
             except ValueError as exc:
-                raise SettingsError("Unbekannter Anbieter für einen Ausweich-Schluessel.") from exc
+                raise SettingsError("Unbekannter Anbieter für einen Ausweich-Schlüssel.") from exc
             if provider not in CLOUD_PROVIDERS:
-                raise SettingsError("Ausweich-Schluessel gibt es nur für Cloud-Anbieter (Gemini, Claude, OpenAI).")
+                raise SettingsError("Ausweich-Schlüssel gibt es nur für Cloud-Anbieter (Gemini, Claude, OpenAI).")
             secret = (entry.get("api_key") or "").strip()
             previous = known.get(backup_id)
             if not secret and previous is not None and previous.provider is provider:
                 secret = previous.api_key
             if not secret:
-                raise SettingsError(f"Ausweich-Schluessel '{backup_id}' ohne API-Key.")
+                raise SettingsError(f"Ausweich-Schlüssel '{backup_id}' ohne API-Key.")
             model = (entry.get("model") or "").strip() or self._state["models"][provider.value]
             merged.append(BackupKey(backup_id, provider, model[:120], secret))
         return tuple(merged)

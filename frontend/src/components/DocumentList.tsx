@@ -36,9 +36,12 @@ function StatusBadge({ doc }: { doc: DocumentSummary }) {
           "Decisión sellada como entrada firmada con Ed25519",
         )}
       >
-        <Lock size={12} aria-hidden="true" /> {tr("Versiegelt (Ed25519)", "Sealed (Ed25519)", "Sellado (Ed25519)")}
+        <Lock size={12} aria-hidden="true" /> {tr("Versiegelt", "Sealed", "Sellado")}
       </span>
     );
+  }
+  if (doc.status === "extracted" && doc.compliance_score == null) {
+    return <span className="chip border-line bg-surface-2 text-muted">{tr("Noch nicht geprüft", "Not yet audited", "Aún sin auditar")}</span>;
   }
   if (doc.status === "failed") {
     return (
@@ -366,7 +369,13 @@ export function DocumentList({ documents, selectedId, analysingIds, onAnalyzeAll
                         : tr("Noch nicht geprüft", "Not yet audited", "Aún sin analizar")
                     }
                   >
-                    {analysingIds.has(doc.id) ? <Spinner size={14} /> : <span className="text-sm font-semibold tabular-nums" aria-hidden="true">{doc.compliance_score ?? "–"}</span>}
+                    {analysingIds.has(doc.id) ? (
+                      <Spinner size={14} />
+                    ) : doc.compliance_score != null ? (
+                      <span className="text-sm font-semibold tabular-nums" aria-hidden="true">{doc.compliance_score}</span>
+                    ) : (
+                      <span className="text-xs font-medium" aria-hidden="true">{tr("offen", "open", "abierto")}</span>
+                    )}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">

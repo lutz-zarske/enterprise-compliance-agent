@@ -76,6 +76,7 @@ from app.schemas import (
     OverrideRequest,
     Scorecard,
     SignOff,
+    SignOffDecision,
     SignOffRequest,
     iban_checksum_valid,
 )
@@ -161,7 +162,7 @@ class OverrideWithoutChangeError(ServiceError):
 
     code = "override_without_change"
     status_code = 422
-    hint = "Eine Uebersteuerung muss die Risikostufe ändern; zur reinen Freigabe das Siegel verwenden."
+    hint = "Eine Übersteuerung muss die Risikostufe ändern; zur reinen Freigabe das Siegel verwenden."
 
 
 class OriginalMissingError(ServiceError):
@@ -212,6 +213,11 @@ TILE_SHORT_LABELS: dict[str, str] = {
     "math": "Finanzmathematik",
 }
 NO_COMPLIANCE_FINDINGS = "Keine Compliance-Auffälligkeiten"
+#: Lesbare Entscheidung im Prüfprotokoll (statt des Enum-Werts).
+SIGN_OFF_LABELS: dict[SignOffDecision, str] = {
+    SignOffDecision.APPROVED: "Freigegeben und versiegelt",
+    SignOffDecision.REJECTED: "Freigabe verweigert und versiegelt",
+}
 
 
 def fallback_explanation(exc: BaseException, stages: int) -> str:
@@ -705,7 +711,7 @@ class DocumentService:
                     enforce_ustg=enforce_ustg, escalate=escalate, einvoice=einvoice, failover=switches,
                     stages=int(getattr(client, "stage_count", 1) or 1),
                 )
-            await self._repository.mark_failed(record.id, describe_failure(exc))
+            await self._record_failure(record, previous_status, exc)
             progress.clear(record.id)
             raise
 
@@ -838,7 +844,9 @@ class DocumentService:
                 }
             )
         except Exception as exc:
-            await self._repository.mark_failed(record.id, describe_failure(exc))
+            await self._record_failure(
+                record, DocumentStatus.EXTRACTED.value if record.scorecard else DocumentStatus.UPLOADED.value, exc
+            )
             progress.clear(record.id)
             raise
         return await self._finalize_analysis(
@@ -1069,6 +1077,14 @@ class DocumentService:
         return results
 
     # --- Human Oversight (EU AI Act Art. 14) --------------------------------
+    async def _record_failure(self, record: DocumentRecord, previous_status: str, exc: BaseException) -> None:
+        """Gescheiterte Prüfung: Ein vorhandenes gültiges Ergebnis bleibt Hauptstatus, der Fehler wird Hinweis."""
+        message = describe_failure(exc)
+        if record.scorecard:
+            await self._repository.mark_recheck_failed(record.id, previous_status, message)
+        else:
+            await self._repository.mark_failed(record.id, message)
+
     async def sign_off(self, record: DocumentRecord, request: SignOffRequest) -> DocumentRecord:
         """Versiegelt das Pruefergebnis durch eine natuerliche Person."""
         if record.status != DocumentStatus.EXTRACTED.value or not record.scorecard:
@@ -1084,10 +1100,12 @@ class DocumentService:
                 sha256_hash=record.sha256,
                 model_name=record.model or "",
                 prompt_hash=PROMPT_HASH,
-                result_summary=f"{request.decision.value} durch {request.auditor_name}",
+                result_summary=f"{SIGN_OFF_LABELS[request.decision]} durch {request.auditor_name}",
+                # Maschinenlesbar bleibt die Entscheidung in den Details.
+                details={"auditor_name": request.auditor_name, "note": request.note[:500],
+                         "decision": request.decision.value},
                 compliance_score=score,
                 risk_tier=((record.compliance or {}).get("ai_act") or {}).get("overall_risk_level", "unknown"),
-                details={"auditor_name": request.auditor_name, "note": request.note[:500]},
             )
         sign_off = SignOff(
             status=request.decision,
@@ -1184,7 +1202,7 @@ class DocumentService:
             ledger_entry_hash=entry.entry_hash if entry else "",
         )
         logger.info(
-            "Dokument %s: Einstufung durch Prüfperson uebersteuert (%s -> %s, Score %s -> %s)",
+            "Dokument %s: Einstufung durch Prüfperson übersteuert (%s -> %s, Score %s -> %s)",
             record.id, previous_level.value, request.risk_level.value, previous_score, scorecard.score,
             extra={"document_id": record.id},
         )

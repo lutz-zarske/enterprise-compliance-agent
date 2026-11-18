@@ -3,6 +3,30 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.7.0 – 18.11.2026
+
+**Ergebnisse und Prüfprotokoll**
+
+- Eine gescheiterte Neuprüfung überdeckt kein gültiges Ergebnis mehr: Status, Score und Siegel bleiben, ein dezenter Hinweis nennt Datum und Ursache („Letzte Neuprüfung am … fehlgeschlagen – gültiges Ergebnis bleibt bestehen“). Belege, die eine ältere Version so hinterlassen hat, repariert der Start automatisch (Status zurück, Fehlertext ohne Klassennamen).
+- Siegel im Protokoll lesbar: „Freigegeben und versiegelt durch …“ statt `SEALED_APPROVED`; die Entscheidung bleibt maschinenlesbar in den Details.
+- Änderungen an der KI-Kaskade heißen, was sie sind („Ausweich-Kaskade geändert: Ausweichmodell … → …“), statt „Modellwechsel A → A“. Ältere Einträge werden in der Anzeige aus ihren Details genauso beschrieben.
+- Prüfer-Einträge aus Versionen vor der Ed25519-Signatur tragen den Hinweis „ohne Signatur (ältere Version)“.
+- Copilot-Hinweis zählt einheitlich: „4 Mängel: 2 fehlende Pflichtangaben nach § 14 UStG, 2 Rechenfehler“.
+
+**Texte**
+
+- Umlaute statt ae/oe/ue in allen sichtbaren Meldungen und API-Beschreibungen; gespeicherte Alttexte (z. B. „Auffaelligkeiten“, „Ueberlast“) werden in der Anzeige korrigiert.
+- Begrüßung und Tour ohne Zertifizierungsanspruch: „KI-Dokumentenvorprüfung mit revisionssicherem Protokoll – an GoBD und EU AI Act ausgerichtet“; „Aktionsleiste“.
+- Copilot-Vorschläge passend zum Beleg (bei vollständigen Rechnungen „Sind alle Pflichtangaben … vorhanden?“, Korrekturanforderung nur bei Mängeln); Seitenmarker im Belegtext in der Sprache der Oberfläche.
+
+**Oberfläche**
+
+- Ketten-Status mit eigenem Symbol (Kette statt Schild) – nicht mehr mit dem Logo zu verwechseln; Kopf-Hash mit #-Symbol.
+- Tour: Überschriften bleiben unter der Kopfleiste sichtbar, Hervorhebungen am Fensterrand werden nicht angeschnitten, „Zurück“ erst ab Schritt 2.
+- Updater: sichtbarer Ladezustand beim Suchen und „Zuletzt geprüft um …“.
+- API-Key-Felder in eigenen Formularen ohne Passwort-Autovervollständigung.
+- Belegliste: ungeprüfte Belege zeigen „offen“ und „Noch nicht geprüft“ statt „–“; Statuschip „Versiegelt“.
+
 ## v2.6.4 – 18.11.2026
 
 - **Update-Hinweis:** Die Änderungen stehen vollständig als Stichpunkte im Update-Dialog (aus den Commit-Texten bis zum neuen Release) statt als aufklappbare Commit-Liste. Git-Ausgaben werden als UTF-8 gelesen – unter Windows erschienen Umlaute vorher verfälscht.

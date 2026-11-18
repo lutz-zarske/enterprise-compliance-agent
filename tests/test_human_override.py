@@ -185,7 +185,7 @@ def test_fremder_schluessel_wird_erkannt(tmp_path, settings) -> None:
     anyio.run(write)
     reader = AuditLedger(engine, signer=SystemSigner(tmp_path / "b" / ".signing.key"))
     result = anyio.run(reader.verify_chain)
-    assert result.valid is False and "fremden Schluessel" in (result.reason or "")
+    assert result.valid is False and "fremden Schlüssel" in (result.reason or "")
 
 
 def test_pruefpaket_enthaelt_signierten_override(full_client: TestClient) -> None:

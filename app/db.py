@@ -18,6 +18,7 @@ Event-Loop frei und der spaetere Umstieg auf einen echten Async-Treiber
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -257,6 +258,8 @@ class DocumentRepository(Protocol):
 
     async def mark_failed(self, document_id: str, error: str) -> None: ...
 
+    async def mark_recheck_failed(self, document_id: str, status: str, error: str) -> None: ...
+
     async def restore_status(self, document_id: str, status: str) -> None: ...
 
     async def ping(self) -> dict[str, Any]: ...
@@ -442,6 +445,12 @@ class SqlDocumentRepository:
             partial(self._update, document_id, {"status": "failed", "error": error[:2000]})
         )
 
+    async def mark_recheck_failed(self, document_id: str, status: str, error: str) -> None:
+        """Neuprüfung gescheitert: Status und gültiges Ergebnis bleiben, der Fehler steht als Hinweis."""
+        await anyio.to_thread.run_sync(
+            partial(self._update, document_id, {"status": status, "error": error[:2000]})
+        )
+
     async def restore_status(self, document_id: str, status: str) -> None:
         """Nach einem Abbruch: vorheriger Status, vorhandenes Ergebnis bleibt unangetastet."""
         await anyio.to_thread.run_sync(partial(self._update, document_id, {"status": status, "error": None}))
@@ -524,10 +533,44 @@ def _install_immutability_triggers(engine: Engine) -> None:
             connection.execute(sa.text(statement))
 
 
+_CLASS_PREFIX = re.compile(r"^[A-Z][A-Za-z]*(?:Error|Exception):\s*")
+_LEGACY_WORDS = (("Ueberlast", "Überlast"), ("ueberlast", "überlast"), ("Zeitueberschreitung", "Zeitüberschreitung"),
+                 ("Kontingent erschoepft", "Kontingent erschöpft"), ("pruefen", "prüfen"), ("Pruefung", "Prüfung"))
+
+
+def clean_legacy_error(message: str | None) -> str | None:
+    """Fehlertext älterer Versionen lesbar machen: ohne Klassennamen, mit Umlauten."""
+    if not message:
+        return message
+    text = _CLASS_PREFIX.sub("", message.strip())
+    for old, new in _LEGACY_WORDS:
+        text = text.replace(old, new)
+    return text
+
+
+def _repair_legacy_failures(engine: Engine) -> None:
+    """Altzustand vor v2.7: Eine gescheiterte Neuprüfung setzte ``failed`` über ein gültiges Ergebnis.
+
+    Solche Belege erhalten ihren Status zurück; der Fehler bleibt als lesbarer Hinweis stehen.
+    Das Prüfprotokoll (append-only) bleibt unberührt.
+    """
+    table = documents_table
+    with engine.begin() as connection:
+        rows = connection.execute(
+            sa.select(table.c.id, table.c.error).where(table.c.status == "failed", table.c.scorecard.is_not(None))
+        ).fetchall()
+        for document_id, error in rows:
+            connection.execute(
+                sa.update(table).where(table.c.id == document_id)
+                .values(status="extracted", error=clean_legacy_error(error))
+            )
+
+
 def init_database(engine: Engine) -> None:
     """Legt fehlende Tabellen/Spalten und die Ledger-Trigger an (idempotent)."""
     metadata.create_all(engine)
     _migrate_columns(engine)
+    _repair_legacy_failures(engine)
     _install_immutability_triggers(engine)
 
 
