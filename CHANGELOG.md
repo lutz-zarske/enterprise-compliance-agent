@@ -3,6 +3,15 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.7.4 – 18.11.2026
+
+Verbesserungen aus einem End-to-End-Stresstest mit Mischsatz-, Kleinbetrags-, Reverse-Charge-, Groß- und Sonderzeichendokumenten:
+
+- **Konformitätsnachweise mit Verneinung (`EU AI Act`):** Sätze wie „eine Konformitätsbewertung nach Art. 43 liegt noch nicht vor“ oder „ohne CE-Kennzeichnung“ werden nicht mehr fälschlich als positiver Konformitätsnachweis gezählt – die Hochrisiko-Sperre (Score-Deckel 59) bleibt zuverlässig aktiv.
+- **Mischsteuersätze in PDF-Rechnungen:** Erkennt das System mehrere gesetzliche Steuersätze im Text (z. B. 19 % und 7 %) bei korrekter Endsumme (`Netto + USt = Brutto`), erscheint ein Prüfhinweis ohne Punktabzug statt einer falschen Steuerfalle.
+- **PDF-Kopfzeile & Anhang A:** Überlange Dateinamen in Kopf- und Fußzeilen des PDF-Zertifikats werden dynamisch anhand der tatsächlichen Textbreite gekürzt, sodass sich Titel und Dateiname nicht berühren; leeres AI-Act-Reasoning erzeugt keinen alleinstehenden Gedankenstrich mehr; Anhang A der Verfahrensdokumentation lokalisiert die Belegart (`Rechnung`/`Vertrag` statt `invoice`/`contract`) und erweitert die Modellspalte.
+- **Upload-Feedback:** Auch leere (0-Byte-)Dateien werden beim Upload ans Backend durchgereicht, damit die Oberfläche die konkrete Ablehnungsmeldung anzeigt statt sie still zu ignorieren.
+
 ## v2.7.3 – 18.11.2026
 
 - **Direkter A4-PDF-Export (`reportlab`):** Prüfzertifikat (`GET /documents/{id}/report?format=pdf`) und GoBD-Verfahrensdokumentation (`GET /api/documents/{id}/export/procedural-doc?format=pdf`) werden serverseitig als fertig gesetztes A4-PDF mit laufender Kopf-/Fußzeile (`Seite X von Y`), geschützten Seitenumbrüchen und sauberem Tabellensatz erzeugt – ohne Umweg über den Browser-Druckdialog. Das GoBD-Prüfdatenpaket (ZIP) enthält nun `audit_certificate.pdf` und `verfahrensdokumentation.pdf` neben den HTML-Fassungen.

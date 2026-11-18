@@ -139,6 +139,32 @@ def test_html_zertifikat_kein_wortumbruch_in_normcodes_und_kein_fuehrender_stric
     report["ustg_matrix"].append(
         {"label": "Testpunkt", "legal_reference": "BR-DE-15", "status": "pass", "detail": None, "note": "Hinweis ohne Detail"},
     )
+    report["ai_act"]["reasoning"] = ""
     html = render_html(report, lang="de")
     assert "<td><div class=small>Hinweis ohne Detail</div></td>" in html
     assert "<td>–<div class=small>Hinweis ohne Detail</div></td>" not in html
+    assert "<p class='small'>–</p>" not in html
+
+
+def test_pdf_ueberlanger_dateiname_und_leeres_ai_reasoning_und_vertrag_belegart(client: TestClient) -> None:
+    raw = build_pdf(["Rahmenvertrag KI-Dienstleistung, Vertragspartner A und B, Verguetung 1000 EUR monatlich, kein weiteres Element."])
+    long_name = "W" * 160 + "_Vertrag.pdf"
+    document_id = uploaded_document_id(client, raw, filename=long_name)
+    assert client.post(f"/documents/{document_id}/extract?wait=true").status_code == 200
+
+    # Leeres reasoning testen (ohne „–“-Zeile unter EU AI Act) + langen Kopfzeilen-Dateinamen
+    from app.pdf_export import render_report_pdf
+
+    report = client.get(f"/documents/{document_id}/report?format=json&lang=de").json()
+    report["ai_act"]["reasoning"] = ""
+    pdf_bytes = render_report_pdf(report, lang="de")
+    assert pdf_bytes.startswith(b"%PDF-")
+    pages = _extract_pages(pdf_bytes)
+    assert f"Seite 1 von {len(pages)}" in pages[0]
+    assert "Kein KI-System beschrieben\r\n–\r\n" not in pages[0] and "Kein KI-System beschrieben\n–\n" not in "\n".join(pages)
+
+    # Verfahrensdokumentation für Vertrag nutzt lokalisiertes „Vertrag“/„Contract“/„Contrato“ statt rohem Enum
+    for lang, expected in [("de", "Vertrag"), ("en", "Contract"), ("es", "Contrato")]:
+        doc_resp = client.get(f"/api/documents/{document_id}/export/procedural-doc?format=pdf&lang={lang}")
+        assert doc_resp.status_code == 200
+        assert expected in "\n".join(_extract_pages(doc_resp.content))

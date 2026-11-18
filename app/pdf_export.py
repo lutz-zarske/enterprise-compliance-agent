@@ -151,28 +151,51 @@ class _NumberedCanvas(canvas.Canvas):
             super().showPage()
         super().save()
 
+    def _fit_left_right(self, text: str, font_name: str, font_size: float, max_width: float) -> str:
+        text = _w(text)
+        if max_width <= 0:
+            return ""
+        if self.stringWidth(text, font_name, font_size) <= max_width:
+            return text
+        ellipsis = "…"
+        lo, hi = 0, len(text)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if self.stringWidth(text[:mid] + ellipsis, font_name, font_size) <= max_width:
+                lo = mid
+            else:
+                hi = mid - 1
+        return (text[:lo] + ellipsis) if lo > 0 else ""
+
     def _draw_chrome(self, total_pages: int) -> None:
         page_num = self._pageNumber
         self.saveState()
-        # Kopfzeile
+        # Kopfzeile – mindestens 8 mm Abstand zwischen linkem Titel und rechtem Dateinamen
         top_y = _PAGE_H - 11.5 * mm
         self.setFillColor(_C_SUBTLE)
         self.setFont("Helvetica-Bold", 7.3)
         self.drawString(_MARGIN_L, top_y, self._top_left)
+        left_w = self.stringWidth(self._top_left, "Helvetica-Bold", 7.3)
+        right_str = self._fit_left_right(self._top_right, "Helvetica", 7.3, _CONTENT_W - left_w - 8 * mm)
         self.setFont("Helvetica", 7.3)
-        self.drawRightString(_PAGE_W - _MARGIN_R, top_y, self._top_right)
+        if right_str:
+            self.drawRightString(_PAGE_W - _MARGIN_R, top_y, right_str)
         self.setStrokeColor(_C_LINE)
         self.setLineWidth(0.6)
         self.line(_MARGIN_L, _PAGE_H - 14.5 * mm, _PAGE_W - _MARGIN_R, _PAGE_H - 14.5 * mm)
 
-        # Fußzeile
+        # Fußzeile – Seitenzahl darf linken Metatext nie überschreiben
         bot_rule_y = 13.5 * mm
         self.line(_MARGIN_L, bot_rule_y, _PAGE_W - _MARGIN_R, bot_rule_y)
         bot_y = 9.5 * mm
         self.setFillColor(_C_SUBTLE)
         self.setFont("Helvetica", 7.3)
-        self.drawString(_MARGIN_L, bot_y, self._bottom_left)
-        self.drawRightString(_PAGE_W - _MARGIN_R, bot_y, f"{self._page_label} {page_num} {self._of_label} {total_pages}")
+        page_txt = f"{self._page_label} {page_num} {self._of_label} {total_pages}"
+        page_w = self.stringWidth(page_txt, "Helvetica", 7.3)
+        bot_left = self._fit_left_right(self._bottom_left, "Helvetica", 7.3, _CONTENT_W - page_w - 8 * mm)
+        if bot_left:
+            self.drawString(_MARGIN_L, bot_y, bot_left)
+        self.drawRightString(_PAGE_W - _MARGIN_R, bot_y, page_txt)
         self.restoreState()
 
 
@@ -717,9 +740,9 @@ def render_report_pdf(report: dict[str, Any], *, lang: str | None = None) -> byt
             f"<b>{_xml(ai['risk_label'])}</b>{(' · ' + _xml(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}",
             st["body"],
         ),
-        Spacer(1, 1 * mm),
-        Paragraph(_xml(ai["reasoning"]), st["small"]),
     ]
+    if ai.get("reasoning"):
+        ai_parts += [Spacer(1, 1 * mm), Paragraph(_xml(ai["reasoning"]), st["small"])]
     if ai["article_references"]:
         ai_parts += [Spacer(1, 1 * mm), Paragraph(f"{_xml(t['articles_html'])}: {_xml(', '.join(ai['article_references']))}", st["small"])]
     for chk in ai["checks"]:
@@ -923,7 +946,7 @@ def render_procedural_pdf(doc: dict[str, Any], *, lang: str | None = None) -> by
             ])
         if len(led_rows) == 1:
             led_rows.append([Paragraph(_xml(ui["no_ledger"]), st["td"]), "", "", "", "", "", ""])
-        story += [_styled_table(led_rows, [11 * mm, 41 * mm, 36 * mm, 29 * mm, 13 * mm, 33 * mm, 17 * mm], num_cols={0, 4}), Spacer(1, 5 * mm)]
+        story += [_styled_table(led_rows, [11 * mm, 38 * mm, 35 * mm, 34 * mm, 13 * mm, 32 * mm, 17 * mm], num_cols={0, 4}), Spacer(1, 5 * mm)]
 
     story.append(Paragraph(_xml(ui["footer"]), st["legal"]))
 

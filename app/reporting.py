@@ -911,7 +911,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
         sections.append((t["einvoice_h"], einvoice_head, einvoice_tables))
     ai_body = (
         f"<p><strong>{_e(ai['risk_label'])}</strong>{(' · ' + _e(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}</p>"
-        f"<p class='small'>{_e(ai['reasoning'])}</p>"
+        + (f"<p class='small'>{_e(ai['reasoning'])}</p>" if ai.get("reasoning") else "")
         + (f"<p class='small'>{_e(t['articles_html'])}: {_e(', '.join(ai['article_references']))}</p>" if ai["article_references"] else "")
         + "".join(f"<p class='small'>{_e(c['note'])}</p>" for c in ai["checks"] if c.get("note"))
         + "".join(f"<p class='risk'>{_e(c['risk_note'])}</p>" for c in ai["checks"] if c.get("risk_note"))

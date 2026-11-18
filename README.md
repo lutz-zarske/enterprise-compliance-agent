@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 359 pytest](https://img.shields.io/badge/pytest-359_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 362 pytest](https://img.shields.io/badge/pytest-362_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
 > Checks mandatory invoice details and arithmetic; it does not replace full
 > EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
-> FastAPI · Next.js 15 · 359 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 362 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -435,12 +435,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 359 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 362 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-359 Tests (Stand v2.7.3) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+362 Tests (Stand v2.7.4) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.

@@ -233,6 +233,13 @@ def _fmt_ts(value: Any) -> str:
     return parsed.strftime("%d.%m.%Y, %H:%M:%S UTC")
 
 
+_DOC_TYPE_LABELS_I18N: dict[str, dict[str, str]] = {
+    "de": {"invoice": "Rechnung", "contract": "Vertrag", "offer": "Angebot", "reminder": "Mahnung", "other": "Sonstiges Dokument"},
+    "en": {"invoice": "Invoice", "contract": "Contract", "offer": "Offer", "reminder": "Reminder", "other": "Other document"},
+    "es": {"invoice": "Factura", "contract": "Contrato", "offer": "Oferta", "reminder": "Recordatorio", "other": "Otro documento"},
+}
+
+
 def procedural_ui(lang: str) -> dict[str, str]:
     """Feste Texte der Verfahrensdokumentation in der gewünschten Sprache (auch für den Word-Export)."""
     return _PD_UI.get(lang, _PD_UI["de"])
@@ -873,7 +880,13 @@ def _document_annex(record: DocumentRecord, entries: list[LedgerEntry], *, lang:
             (
                 f"{einvoice.profile} ({einvoice.syntax})"
                 if einvoice and not einvoice.error
-                else (extraction.doc_type.value if extraction else ui["not_analyzed"])
+                else (
+                    _DOC_TYPE_LABELS_I18N.get(lang, _DOC_TYPE_LABELS_I18N["de"]).get(
+                        extraction.doc_type.value, extraction.doc_type.value
+                    )
+                    if extraction
+                    else ui["not_analyzed"]
+                )
             ),
         ],
         [ui["row_path"], path_labels.get(record.provider or "", record.provider or "–")],

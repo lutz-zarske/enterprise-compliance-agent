@@ -251,3 +251,49 @@ def test_paragraf_14c_endverbraucher_hinweis() -> None:
     calc = next(c for t in card.tiles for c in t.checks if c.id == "tax_calc")
     assert "C-378/21" in (calc.note or "") and "27.02.2024" in (calc.note or "")
     assert calc.risk_note is None  # kein Mangel -> keine Risikörklärung
+
+
+def test_verneinte_konformitaet_verhindert_keine_hochrisiko_sperre() -> None:
+    negated = (
+        "Der Auftragnehmer dokumentiert Trainingsdaten nicht; eine Konformitätsbewertung nach Art. 43 "
+        "EU AI Act liegt zum Vertragsabschluss noch nicht vor. Einsatz ohne CE-Kennzeichnung."
+    )
+    card = compute_scorecard(
+        ExtractionResult(doc_type="contract"), _compliance("high", annex=["employment_and_worker_management"]), negated
+    )
+    assert card.score == 59
+    assert card.release_blocked is True
+    assert card.cap_applied is not None
+
+    positive = "Die Konformitätsbewertung nach Art. 43 und CE-Kennzeichnung liegen vollständig vor."
+    card_pos = compute_scorecard(
+        ExtractionResult(doc_type="contract"), _compliance("high", annex=["employment_and_worker_management"]), positive
+    )
+    assert card_pos.score == 90
+    assert card_pos.release_blocked is False
+
+
+def test_mischsteuersatz_reine_pdf_rechnung_als_pruefhinweis() -> None:
+    text = (
+        "Muster GmbH, Musterweg 1, 12345 Musterstadt\n"
+        "Empfänger AG, Zielweg 2, 54321 Zielstadt\n"
+        "USt-IdNr.: DE123456789\n"
+        "Rechnung Nr. R-99 vom 01.11.2026 | Leistungsdatum: 31.10.2026\n"
+        "Pos. 1 Beratung: 6.000,00 EUR (19 % USt = 1.140,00 EUR)\n"
+        "Pos. 2 Fachbuch: 200,00 EUR (7 % USt = 14,00 EUR)\n"
+        "Summe netto: 6.200,00 EUR\n"
+        "Umsatzsteuer gesamt: 1.154,00 EUR\n"
+        "Gesamtbetrag: 7.354,00 EUR\n"
+    )
+    extraction = ExtractionResult.model_validate({
+        "doc_type": "invoice", "sender": "Muster GmbH", "recipient": "Empfänger AG",
+        "sender_address": "Musterweg 1, 12345 Musterstadt", "recipient_address": "Zielweg 2, 54321 Zielstadt",
+        "sender_vat_id": "DE123456789", "document_number": "R-99", "document_date": "2026-11-01",
+        "service_date": "2026-10-31", "items_description": "Beratung + Fachbuch",
+        "net_amount": 6200, "tax_rate": 19, "tax_amount": 1154, "total_amount": 7354, "currency": "EUR",
+    })
+    card = compute_scorecard(extraction, _compliance(), text)
+    calc = next(c for t in card.tiles for c in t.checks if c.id == "tax_calc")
+    assert calc.status.value == "warn" and calc.deduction == 0
+    assert "Mischsteuersätze" in (calc.detail or "")
+    assert card.score == 100 and card.release_blocked is False

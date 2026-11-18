@@ -89,6 +89,25 @@ _CONFORMITY = re.compile(
     r"konformit(?:ä|ae)tsbewertung|ce-kennzeichnung|eu-konformit(?:ä|ae)tserkl(?:ä|ae)rung|art\.?\s?43",
     re.IGNORECASE,
 )
+_CONFORMITY_NEGATION = re.compile(
+    r"\b(?:kein\w*|nicht|ohne|fehl\w*|ausstehend\w*|verzicht\w*|unvollst(?:ä|ae)ndig\w*|"
+    r"not|no|without|missing|pending)\b",
+    re.IGNORECASE,
+)
+
+
+_SENTENCE_SEP = re.compile(
+    r"(?<!\bArt)(?<!\bAbs)(?<!\bNr)(?<!\blit)(?<!\bbzw)(?<!\bggf)\.\s+|[;]|\n\s*\n|\n(?=\s*[•\-*§])"
+)
+
+
+def _has_conformity_evidence(text: str) -> bool:
+    """Erkennt Konformitätshinweise, ignoriert aber verneinte Aussagen („noch nicht vor“)."""
+    for clause in _SENTENCE_SEP.split(text):
+        match = _CONFORMITY.search(clause)
+        if match and not _CONFORMITY_NEGATION.search(clause[max(0, match.start() - 120) : match.end() + 120]):
+            return True
+    return False
 _POSITIONS = re.compile(
     r"\bpos(?:ition)?\.?\s*\d|\bmenge\b|\bstk\.?|\bst(?:ü|ue)ck\b|\banzahl\b|leistungsbeschreibung|\bartikel\b",
     re.IGNORECASE,
@@ -125,6 +144,7 @@ class TextFacts:
     gross_amount: Decimal | None
     conformity_evidence: bool
     positions: bool
+    tax_rates: tuple[Decimal, ...] = ()
 
 
 #: Datumsangaben (15.12.2024, 15.12.24, 15.12., 2024-12-15) sind nie Beträge.
@@ -205,11 +225,15 @@ def _pick(candidates: list[tuple[int, Decimal]], *, last: bool = False) -> Decim
 
 def analyze_text(text: str) -> TextFacts:
     rate = None
+    seen_rates: list[Decimal] = []
     for line in text.splitlines():
         low = line.casefold()
-        if rate is None and _TAX_WORD.search(low) and not _TAX_ID_WORD.search(low):
+        if _TAX_WORD.search(low) and not _TAX_ID_WORD.search(low):
             percents = [value for value in (_to_decimal(m) for m in _PERCENT.findall(line)) if value is not None]
-            if percents:
+            for pct in percents:
+                if pct not in seen_rates:
+                    seen_rates.append(pct)
+            if rate is None and percents:
                 rate = percents[0]
     labeled = labeled_amounts(text)
     net = _pick(labeled["net"])
@@ -225,8 +249,9 @@ def analyze_text(text: str) -> TextFacts:
         tax_amount=tax,
         tax_rate=rate,
         gross_amount=gross,
-        conformity_evidence=bool(_CONFORMITY.search(text)),
+        conformity_evidence=_has_conformity_evidence(text),
         positions=bool(_POSITIONS.search(text)),
+        tax_rates=tuple(seen_rates),
     )
 
 
@@ -781,16 +806,38 @@ def _math_tile(
         if net is not None and tax is not None and rate is not None:
             expected = (net * rate / Decimal(100)).quantize(Decimal("0.01"))
             ok = abs(expected - tax) <= _MONEY_TOLERANCE
-            checks.append(
-                ScoreCheck(
-                    id="tax_calc", label="Umsatzsteuer = Netto x Steuersatz",
-                    legal_reference="§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
-                    status=CheckStatus.PASS if ok else CheckStatus.FAIL,
-                    deduction=0 if ok else 10,
-                    detail=None if ok else f"Erwartet {expected}, ausgewiesen {tax}.",
-                    evidence_source="rule_based",
-                )
+            allowed = _allowed_rates(extraction.document_date)
+            positive_rates = sorted({r.normalize() for r in facts.tax_rates if r > 0 and r.normalize() in allowed})
+            mixed_plausible = (
+                not ok
+                and len(positive_rates) > 1
+                and gross is not None
+                and abs(net + tax - gross) <= _MONEY_TOLERANCE
+                and (net * positive_rates[0] / Decimal(100) - _MONEY_TOLERANCE) <= tax <= (net * positive_rates[-1] / Decimal(100) + _MONEY_TOLERANCE)
             )
+            if mixed_plausible:
+                rates_str = " / ".join(f"{r} %" for r in positive_rates)
+                checks.append(
+                    ScoreCheck(
+                        id="tax_calc", label="Umsatzsteuer = Netto x Steuersatz",
+                        legal_reference="§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
+                        status=CheckStatus.WARN,
+                        deduction=0,
+                        detail=f"Mischsteuersätze ({rates_str}) erkannt – Netto + USt = Brutto stimmt; Aufschlüsselung im PDF-Text manuell prüfen.",
+                        evidence_source="rule_based",
+                    )
+                )
+            else:
+                checks.append(
+                    ScoreCheck(
+                        id="tax_calc", label="Umsatzsteuer = Netto x Steuersatz",
+                        legal_reference="§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
+                        status=CheckStatus.PASS if ok else CheckStatus.FAIL,
+                        deduction=0 if ok else 10,
+                        detail=None if ok else f"Erwartet {expected}, ausgewiesen {tax}.",
+                        evidence_source="rule_based",
+                    )
+                )
 
     iban_part = next(c for c in checks if c.id == "iban_mod97")
     parts = []
@@ -800,11 +847,12 @@ def _math_tile(
         parts.append("IBAN ungültig")
     vat_checks = [c for c in checks if c.id in {"vat_rate", "sum_check", "tax_calc"}]
     if vat_checks:
-        parts.append(
-            "MwSt. korrekt berechnet"
-            if all(c.status is CheckStatus.PASS for c in vat_checks)
-            else "MwSt.-Fehler"
-        )
+        if any(c.status is CheckStatus.FAIL for c in vat_checks):
+            parts.append("MwSt.-Fehler")
+        elif any(c.status is CheckStatus.WARN for c in vat_checks):
+            parts.append("Mischsätze (Prüfhinweis)")
+        else:
+            parts.append("MwSt. korrekt berechnet")
     return _tile("math", "Mathematische Validität (MOD-97 & MwSt.)", checks, " · ".join(parts) or "Keine Beträge prüfbar")
 
 

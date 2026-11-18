@@ -23,7 +23,7 @@ export function DocumentUploader({ disabled, onUploaded, onError }: Props) {
   const dragging = dragCount !== null;
 
   async function upload(fileList: FileList | null) {
-    const files = Array.from(fileList ?? []).filter((file) => file.size > 0);
+    const files = Array.from(fileList ?? []);
     if (!files.length) return;
     setBusy(files.length);
     try {
