@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 340 pytest](https://img.shields.io/badge/pytest-340_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 351 pytest](https://img.shields.io/badge/pytest-351_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -18,13 +18,20 @@ dass keine Prüfung an einer überlasteten KI scheitert.
 Läuft ohne GPU: Musterdaten und das Regelwerk-Audit funktionieren sofort, mit
 eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 
+> **Prüfumfang:** Prüft Pflichtangaben nach § 14 UStG und Rechenwerte, bei
+> E-Rechnungen zusätzlich Profil, XRechnung-Version und ausgewählte
+> Geschäftsregeln. Eine vollständige Schematron-Validierung nach EN 16931 bzw.
+> XRechnung ersetzt das nicht (dafür z. B. den KoSIT-Validator nutzen).
+
 > **English summary:** Audit-proof pre-screening of invoices and contracts
 > under German VAT law (§ 14 UStG), EU e-invoicing (EN 16931), the EU AI Act
 > and the GDPR. A deterministic rule engine computes the compliance score,
 > every result lands in a SHA-256 hash chain with Ed25519-signed reviewer
 > events, and a fail-safe AI cascade (local Ollama or cloud LLMs behind a
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
-> FastAPI · Next.js 15 · 340 offline tests · runs without GPU or API key.
+> Checks mandatory invoice details and arithmetic; it does not replace full
+> EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
+> FastAPI · Next.js 15 · 351 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -291,8 +298,13 @@ festen, versionierten Regeln (Regelwerk 2026.2).
 | | Amtliche Kennnummern natürlicher Personen | −5 |
 
 Bänder: **≥ 85 grün** (verkehrsfähig) · **60–84 gelb** (Nachbesserung) ·
-**< 60 rot** (Revisionssperre). Musterdaten: gültige Rechnung 100, Steuerfalle
-45, KI-Recruiting-Vertrag 59 (gedeckelt), ZUGFeRD-Rechnung 100.
+**< 60 rot** (Revisionssperre). Die Ampel folgt der Freigabeentscheidung: Grün
+gibt es nur ohne Mangel und ohne Vorbehalt; eine gesperrte Freigabe
+(„Nachforderung nötig“) oder ein Vorbehalt zeigt höchstens Gelb, auch bei
+Score 90. Reine Hinweise ohne Punktabzug – etwa eine nicht mehr gültige
+XRechnung-Version oder ein Verstoß gegen BR-DE-2 – ändern Score und Ampel nicht.
+Musterdaten: gültige Rechnung 100, Steuerfalle 45, KI-Recruiting-Vertrag 59
+(gedeckelt), ZUGFeRD-Rechnung 100.
 
 ---
 
@@ -420,12 +432,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 340 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 351 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-340 Tests (Stand v2.7.0) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+351 Tests (Stand v2.7.1) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -434,7 +446,7 @@ mit Cloud-Keys) wird in Tests ignoriert.
 |---|---|
 | API und Workflow | Kernendpunkte, Fehlerformat, Auth, Scorecard, Zertifikat (inkl. XSS-Escaping), Siegel, Batch, Musterdaten, KPIs |
 | KI-Kaskade und Jobs | Neuversuch je HTTP-Status, Ausweichmodell, mehrere Keys eines Anbieters durch den Vault, kein Wechsel bei 401, Regelwerk-Fallback mit Ledger-Kennzeichnung, Tagesbudget, `localhost`-Normalisierung, Fortschritt, Batch und Abbruch |
-| E-Rechnung | CII/UBL-Mapping, Profile, XXE/DTD-Abwehr, Geschäftsregeln, Leitweg-ID, PDF-Anhang, Diskrepanzen, ZIP-Paket inkl. Manipulationsnachweis |
+| E-Rechnung | CII/UBL-Mapping, Profile, XXE/DTD-Abwehr, Geschäftsregeln, Leitweg-ID, Leistungszeitraum (BT-72, BG-14, BG-26), PDF-Anhang, Diskrepanzen, ZIP-Paket inkl. Manipulationsnachweis; offizielle Testbelege der KoSIT und des Mustangproject (Herkunft und Lizenz in [`tests/fixtures/NOTICE`](tests/fixtures/NOTICE)) |
 | Prüfprotokoll | Verkettung, Trigger, Manipulations- und Löschnachweis, Ed25519, Übersteuerung, Verfahrensdokumentation |
 | Datenschutz | Vault, Provider-Payloads ohne Klartext-PII, verschlüsselte Keys, Regex-Scan, DLP-Gateway |
 | Betrieb | JSON-Logs, PII-Filter im Log, Request-ID, Rate-Limit, VIES-Ausfälle, Release-Assistent |
@@ -525,8 +537,10 @@ die Freigabe durch die Prüfperson.
 * **Digitaler Text-Layer & EN-16931-Kernprüfung:** PDF-Dokumente werden über
   ihren eingebetteten Text- bzw. XML-Layer gelesen (reine Bild-Scans ohne
   Text-Layer werden mit Hinweis abgewiesen). Bei E-Rechnungen prüft der Parser
-  Profil, Pflichtfelder, Summenregeln und Leitweg-ID; für eine vollständige
-  XSD-/Schematron-Abnahme im Behördenbetrieb ergänzt der KoSIT-Validator.
+  Profil, XRechnung-Version, Pflichtfelder, Summenregeln, ausgewählte
+  Geschäftsregeln (BR-CO, BR-DE) und Leitweg-ID. Eine vollständige
+  Schematron-Validierung nach EN 16931 bzw. XRechnung ersetzt das nicht – dafür
+  z. B. den KoSIT-Validator nutzen.
 * **Regelbasierte Pseudonymisierung & Heuristik-Notbetrieb:** Privacy Vault und
   DLP-Gateway arbeiten deterministisch über Muster, Kontextanker und
   Prüfsummen (ohne schwergewichtiges NER-Modell). Das Regelwerk-Audit als
@@ -545,7 +559,8 @@ die Freigabe durch die Prüfperson.
 
 ## Lizenz
 
-[MIT](LICENSE) © 2026 Lutz Zarske · Änderungen je Version im
+[MIT](LICENSE) © 2026 Lutz Zarske · Testbelege Dritter in `tests/fixtures/official`
+unter Apache 2.0 ([NOTICE](tests/fixtures/NOTICE)) · Änderungen je Version im
 [Changelog](CHANGELOG.md) · Sicherheitslücken bitte vertraulich melden
 ([SECURITY.md](SECURITY.md)).
 ---

@@ -1,0 +1,49 @@
+Testbelege Dritter in tests/fixtures/official
+=============================================
+
+Die folgenden Dateien stammen unverändert aus öffentlichen Open-Source-Projekten
+und dienen ausschließlich als Regressionstests (tests/test_official_samples.py).
+Sie sind keine Musterdaten der Anwendung. Beide Projekte stehen unter der
+Apache License, Version 2.0; der Lizenztext liegt in LICENSE-APACHE-2.0.txt.
+Die übrigen Dateien dieses Repositorys stehen unter der MIT-Lizenz (LICENSE).
+
+01.01a-INVOICE_ubl.xml
+  Projekt:  XRechnung-Testsuite der Koordinierungsstelle für IT-Standards (KoSIT)
+  Quelle:   https://github.com/itplr-kosit/xrechnung-testsuite
+  Pfad:     src/test/business-cases/standard/01.01a-INVOICE_ubl.xml
+  Commit:   33cf3bdf13fb0d8443c51371ab892f25a9468d79
+  Lizenz:   Apache License 2.0
+  SHA-256:  74fb09c609d5fba15a8c543060998d3b92858f56a81fb5b0ed244d6794e498d1
+
+EN16931_Einfach.pdf
+  Projekt:  Mustangproject (ZUGFeRD/Factur-X-Bibliothek)
+  Quelle:   https://github.com/ZUGFeRD/mustangproject
+  Pfad:     library/src/test/resources/EN16931_Einfach.pdf
+  Commit:   678d3ba6a184f05256a10d579b29bd0446bdb35d
+  Lizenz:   Apache License 2.0
+  SHA-256:  05b5a382db8fdc60d1e9ec31fef7fb09c91d68413b9187f7ca116aed116ed1d0
+
+invalidXRechnung.pdf
+  Projekt:  Mustangproject (ZUGFeRD/Factur-X-Bibliothek)
+  Quelle:   https://github.com/ZUGFeRD/mustangproject
+  Pfad:     validator/src/test/resources/invalidXRechnung.pdf
+  Commit:   ca392054e5f85d3b2120d4e30e082a6dc5de3c13
+  Lizenz:   Apache License 2.0
+  SHA-256:  79c0dfcf642e17303310827c0a54c8a5b2b1ae15324256f87f91a57178ffc709
+
+Hinweis aus der NOTICE-Datei des Mustangproject:
+
+  Mustangproject
+  Copyright 2014 Jochen Staerk
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.

@@ -57,6 +57,11 @@ const EXACT_EN: Record<string, string> = {
   "Vollständig verkehrsfähig & konform": "Fully compliant & valid",
   "Nachbesserung erforderlich": "Remediation required",
   "Revisionssperre / schwerer Rechtsverstoß": "Audit lock / severe compliance violation",
+  "Nachforderung nötig": "Supplier correction required",
+  "Freigabe unter Vorbehalt": "Conditional approval",
+  "Freigabe gesperrt": "Approval blocked",
+  "XRechnung-Version": "XRechnung version",
+  "KoSIT, Versionen und Bundles": "KoSIT, versions and bundles",
   "Gedeckelt auf 59: Hochrisiko-KI (Anhang III) ohne Konformitätsnachweis":
     "Capped at 59: High-risk AI (Annex III) without conformity evidence",
   "Gedeckelt auf 20: Verbotene Praktik nach Art. 5 EU AI Act":
@@ -321,6 +326,11 @@ const EXACT_ES: Record<string, string> = {
   "Vollständig verkehrsfähig & konform": "Totalmente conforme y válido",
   "Nachbesserung erforderlich": "Subsanación necesaria",
   "Revisionssperre / schwerer Rechtsverstoß": "Bloqueo de auditoría / infracción grave",
+  "Nachforderung nötig": "Rectificación requerida",
+  "Freigabe unter Vorbehalt": "Aprobación condicional",
+  "Freigabe gesperrt": "Aprobación bloqueada",
+  "XRechnung-Version": "Versión XRechnung",
+  "KoSIT, Versionen und Bundles": "KoSIT, versiones y paquetes",
   "Gedeckelt auf 59: Hochrisiko-KI (Anhang III) ohne Konformitätsnachweis":
     "Limitado a 59: IA de alto riesgo (Anexo III) sin certificado de conformidad",
   "Gedeckelt auf 20: Verbotene Praktik nach Art. 5 EU AI Act":
@@ -684,13 +694,18 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
       .replace(/^(\d+) Datensätze erkannt und maskiert\.$/, "$1 records detected and masked.")
       .replace(/^Art\. 9\/10: (\d+) Kategorie\(n\)$/, "Art. 9/10: $1 category(ies)")
       .replace(/^Alle (\d+) Kernwerte stimmen im XML und im Bildteil überein\.$/, "All $1 core values match between XML and visual PDF.")
-      .replace(/^Im Bildteil nicht wiedergefunden: (.+?)\. Maßgeblich ist der XML-Datensatz\. Kein Punktabzug\.$/, "Not found in visual PDF: $1. The XML dataset governs. No score deduction.")
+      .replace(/^Im Bildteil nicht (?:eindeutig )?wiedergefunden: (.+?)\. Maßgeblich ist der XML-Datensatz\. Kein Punktabzug\.$/, "Not clearly found in visual PDF: $1. The XML dataset governs. No score deduction.")
+      .replace(/^(.*?) (\d+) von (\d+) Positionen ohne eigenen Zeitraum – die KoSIT-Regel BR-DE-TMP-32 empfiehlt ihn in jeder Position oder auf Belegebene\. Kein Punktabzug\.$/,
+        (_m, head: string, open: string, total: string) => `${head.replace(/^Aus dem XML-Datensatz: /, "From the XML dataset: ").replace(/Positionszeitraum/g, "line period").replace(/Lieferdatum/g, "delivery date")} ${open} of ${total} lines without their own period – KoSIT rule BR-DE-TMP-32 recommends one per line or at document level. No score deduction.`)
+      .replace(/^Aus dem XML-Datensatz: (.+)\.$/, (_m, parts: string) => `From the XML dataset: ${parts.replace(/Lieferdatum/g, "delivery date").replace(/Rechnungszeitraum/g, "invoicing period").replace(/Positionszeitraum/g, "line period")}.`)
+      .replace(/^XRechnung (\S+) galt laut KoSIT nur bis ([\d.]+); in Kraft ist XRechnung (\S+) \(seit ([\d.]+)\)\. Eingangsplattformen prüfen gegen die aktuelle Version und weisen ältere Datensätze in der Regel zurück\. Kein Punktabzug\.$/,
+        "According to KoSIT, XRechnung $1 was only valid until $2; XRechnung $3 is in force (since $4). Receiving platforms validate against the current version and usually reject older datasets. No score deduction.")
       .replace(/^Diskrepanz zwischen visuellem PDF und maßgeblichem XML-Datensatz \(BMF 15\.10\.2024: XML hat Vorrang\)\. (.+)$/, "Mismatch between visual PDF and authoritative XML (BMF 15 Oct 2024: XML prevails). $1")
       .replace(/^Steuersatz (.+) ist zum Rechnungsdatum nicht zulässig\.$/, "VAT rate $1 is not valid on the invoice date.")
       .replace(/^(.+) \+ (.+) ergibt (.+), ausgewiesen sind (.+)\.$/, "$1 + $2 equals $3, but $4 is stated.")
       .replace(/^Erwartet (.+), ausgewiesen (.+)\.$/, "Expected $1, stated $2.")
-      .replace(/^Profil ([^,]+), Syntax ([^(]+) \((eingebettet als ([^)]+)|reines XML)\)\. Geprüft: Profilkennung BT-24, Pflichtfelder und Summenregeln \(BR-CO-10\/13\/14\/15, BR-DE-15\)\. Keine Validierung gegen XSD und Schematron \(z\. B\. KoSIT-Validator\)\.(.*)$/,
-        (_m, prof, syn, cont, att, rest) => `Profile ${prof}, syntax ${syn} (${att ? `embedded as ${att}` : "standalone XML"}). Checked: BT-24 profile ID, mandatory fields and totals rules (BR-CO-10/13/14/15, BR-DE-15). No XSD/Schematron (KoSIT) validation.${rest}`)
+      .replace(/^Profil ([^,]+), Syntax ([^(]+) \((eingebettet als ([^)]+)|reines XML)\)\. Geprüft: Profilkennung BT-24, Pflichtfelder und Summenregeln \(BR-CO-10\/13\/14\/15, (BR-DE-2, )?BR-DE-15\)\. Keine (?:vollständige )?Validierung gegen XSD und Schematron \(z\. B\. KoSIT-Validator\)\.(.*)$/,
+        (_m, prof, syn, _cont, att, de2, rest) => `Profile ${prof}, syntax ${syn} (${att ? `embedded as ${att}` : "standalone XML"}). Checked: BT-24 profile ID, mandatory fields and totals rules (BR-CO-10/13/14/15, ${de2 ?? ""}BR-DE-15). No full XSD/Schematron validation (e.g. KoSIT validator).${rest}`)
       .replace(/ Verstöße: (.+?) Kein Punktabzug\.$/, " Violations: $1 No score deduction.")
       .replace(/^Profil ([^(]+) \((eingebettet als ([^)]+)|reines XML)\) erfüllt nicht die Anforderungen an eine E-Rechnung \(BMF-Schreiben vom 15\.10\.2024\)\. Rechnung ist der Bildteil – eine „sonstige Rechnung“, zulässig in der Übergangsfrist\. Kein Punktabzug\.$/,
         (_m, prof, _cont, att) => `Profile ${prof} (${att ? `embedded as ${att}` : "standalone XML"}) does not meet E-Invoice requirements (BMF 15 Oct 2024). The visual PDF governs during the transitional period. No score deduction.`)
@@ -719,13 +734,18 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
       .replace(/^(\d+) Datensätze erkannt und maskiert\.$/, "$1 registros detectados y enmascarados.")
       .replace(/^Art\. 9\/10: (\d+) Kategorie\(n\)$/, "Art. 9/10: $1 categoría(s)")
       .replace(/^Alle (\d+) Kernwerte stimmen im XML und im Bildteil überein\.$/, "Los $1 valores clave coinciden entre el XML y el PDF visual.")
-      .replace(/^Im Bildteil nicht wiedergefunden: (.+?)\. Maßgeblich ist der XML-Datensatz\. Kein Punktabzug\.$/, "No hallado en el PDF visual: $1. Prevalece el XML. Sin penalización.")
+      .replace(/^Im Bildteil nicht (?:eindeutig )?wiedergefunden: (.+?)\. Maßgeblich ist der XML-Datensatz\. Kein Punktabzug\.$/, "No hallado con claridad en el PDF visual: $1. Prevalece el XML. Sin penalización.")
+      .replace(/^(.*?) (\d+) von (\d+) Positionen ohne eigenen Zeitraum – die KoSIT-Regel BR-DE-TMP-32 empfiehlt ihn in jeder Position oder auf Belegebene\. Kein Punktabzug\.$/,
+        (_m, head: string, open: string, total: string) => `${head.replace(/^Aus dem XML-Datensatz: /, "Del XML: ").replace(/Positionszeitraum/g, "periodo de línea").replace(/Lieferdatum/g, "fecha de entrega")} ${open} de ${total} líneas sin periodo propio – la regla KoSIT BR-DE-TMP-32 lo recomienda en cada línea o a nivel de documento. Sin penalización.`)
+      .replace(/^Aus dem XML-Datensatz: (.+)\.$/, (_m, parts: string) => `Del XML: ${parts.replace(/Lieferdatum/g, "fecha de entrega").replace(/Rechnungszeitraum/g, "periodo de facturación").replace(/Positionszeitraum/g, "periodo de línea")}.`)
+      .replace(/^XRechnung (\S+) galt laut KoSIT nur bis ([\d.]+); in Kraft ist XRechnung (\S+) \(seit ([\d.]+)\)\. Eingangsplattformen prüfen gegen die aktuelle Version und weisen ältere Datensätze in der Regel zurück\. Kein Punktabzug\.$/,
+        "Según KoSIT, XRechnung $1 solo fue válida hasta $2; está en vigor XRechnung $3 (desde $4). Las plataformas de recepción validan contra la versión actual y suelen rechazar datos antiguos. Sin penalización.")
       .replace(/^Diskrepanz zwischen visuellem PDF und maßgeblichem XML-Datensatz \(BMF 15\.10\.2024: XML hat Vorrang\)\. (.+)$/, "Discrepancia entre el PDF visual y el XML vinculante (BMF 15/10/2024). $1")
       .replace(/^Steuersatz (.+) ist zum Rechnungsdatum nicht zulässig\.$/, "El tipo de IVA $1 no es válido en la fecha de la factura.")
       .replace(/^(.+) \+ (.+) ergibt (.+), ausgewiesen sind (.+)\.$/, "$1 + $2 suma $3, pero figura $4.")
       .replace(/^Erwartet (.+), ausgewiesen (.+)\.$/, "Esperado $1, consignado $2.")
-      .replace(/^Profil ([^,]+), Syntax ([^(]+) \((eingebettet als ([^)]+)|reines XML)\)\. Geprüft: Profilkennung BT-24, Pflichtfelder und Summenregeln \(BR-CO-10\/13\/14\/15, BR-DE-15\)\. Keine Validierung gegen XSD und Schematron \(z\. B\. KoSIT-Validator\)\.(.*)$/,
-        (_m, prof, syn, cont, att, rest) => `Perfil ${prof}, sintaxis ${syn} (${att ? `incrustado como ${att}` : "XML puro"}). Verificados BT-24, campos obligatorios y sumas (BR-CO-10/13/14/15, BR-DE-15). Sin validación XSD/Schematron.${rest}`)
+      .replace(/^Profil ([^,]+), Syntax ([^(]+) \((eingebettet als ([^)]+)|reines XML)\)\. Geprüft: Profilkennung BT-24, Pflichtfelder und Summenregeln \(BR-CO-10\/13\/14\/15, (BR-DE-2, )?BR-DE-15\)\. Keine (?:vollständige )?Validierung gegen XSD und Schematron \(z\. B\. KoSIT-Validator\)\.(.*)$/,
+        (_m, prof, syn, _cont, att, de2, rest) => `Perfil ${prof}, sintaxis ${syn} (${att ? `incrustado como ${att}` : "XML puro"}). Verificados BT-24, campos obligatorios y sumas (BR-CO-10/13/14/15, ${de2 ?? ""}BR-DE-15). Sin validación XSD/Schematron completa (p. ej. validador KoSIT).${rest}`)
       .replace(/ Verstöße: (.+?) Kein Punktabzug\.$/, " Infracciones: $1 Sin penalización.")
       .replace(/^Profil ([^(]+) \((eingebettet als ([^)]+)|reines XML)\) erfüllt nicht die Anforderungen an eine E-Rechnung \(BMF-Schreiben vom 15\.10\.2024\)\. Rechnung ist der Bildteil – eine „sonstige Rechnung“, zulässig in der Übergangsfrist\. Kein Punktabzug\.$/,
         (_m, prof, _cont, att) => `El perfil ${prof} (${att ? `incrustado como ${att}` : "XML puro"}) no cumple los requisitos de factura electrónica (BMF 15/10/2024); prevalece el PDF visual. Sin penalización.`)

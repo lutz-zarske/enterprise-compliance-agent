@@ -3,6 +3,27 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.7.1 – 18.11.2026
+
+Praxistest mit offiziellen Musterrechnungen der KoSIT (XRechnung-Testsuite) und des Mustangproject.
+
+**E-Rechnung**
+
+- Leistungszeitpunkt (§ 14 Abs. 4 Satz 1 Nr. 6 UStG) wird aus Lieferdatum (BT-72), Rechnungszeitraum (BG-14) **und** Positionszeiträumen (BG-26) gelesen – in UBL und CII. Fehlt der Zeitraum in einzelnen Positionen, erscheint ein Hinweis auf die KoSIT-Regel BR-DE-TMP-32 ohne Punktabzug.
+- Abgleich XML ↔ PDF-Bildteil liest Beträge nur hinter Summen-Bezeichnern („Rechnungssumme ohne USt.“, „Summe netto“, „Steuerbetrag“, „Bruttosumme“ …). Datumsangaben und Zahlungsbedingungen („netto bis 15.12.2024“) zählen nie als Betrag; im Zweifel heißt es „nicht eindeutig wiedergefunden“ ohne Abzug statt einer Abweichung mit Abzug.
+- Hinweis ohne Punktabzug bei XRechnung-Versionen, die nicht mehr in Kraft sind (laut KoSIT gilt XRechnung 3.0 seit 01.02.2024); neue Geschäftsregel BR-DE-2 (Kontaktangaben des Verkäufers).
+- Prüfumfang ehrlich benannt (README, Einstellungen › Über): Pflichtangaben und Rechenwerte – keine vollständige Schematron-Validierung nach EN 16931 bzw. XRechnung.
+
+**Ampel**
+
+- Ampel und Etikett folgen der Freigabeentscheidung: Grün („Vollständig verkehrsfähig & konform“) nur ohne Mangel und ohne Vorbehalt, sonst „Nachforderung nötig“ bzw. „Freigabe unter Vorbehalt“ in Gelb. Ältere gespeicherte Ergebnisse werden in Liste, Scorecard und Berichten genauso angezeigt.
+- Verfahrensdokumentation nennt das Siegel lesbar („Freigegeben und versiegelt“) statt `SEALED_APPROVED`.
+
+**Tests**
+
+- Drei offizielle Testbelege als Regressionstests (Herkunft und Lizenz in `tests/fixtures/NOTICE`), dazu CII-Fälle für BG-14, BG-26 und BT-72; 351 Tests.
+- Key-Formulare mit verstecktem Benutzerfeld (Chrome-Hinweis zu Passwortformularen).
+
 ## v2.7.0 – 18.11.2026
 
 **Ergebnisse und Prüfprotokoll**

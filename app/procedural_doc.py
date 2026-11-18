@@ -32,7 +32,7 @@ from app.extractors.einvoice import MAX_XML_BYTES
 from app.llm import PROMPT_HASH
 from app.print_layout import BASE_CSS, page_rules
 from app.retention import RETENTION_NOTE, RETENTION_RULES, invoice_retention
-from app.scoring import RULESET_VERSION
+from app.scoring import RULESET_VERSION, presented_band
 from app.services import STRUCTURED_PROVIDER, parse_einvoice, parse_extraction, parse_scorecard, parse_sign_off
 
 ZU_ERGAENZEN = "[vom Unternehmen zu ergänzen]"
@@ -137,6 +137,8 @@ _PD_UI: dict[str, dict[str, str]] = {
         "unsealed": "nicht versiegelt",
         "by": "durch",
         "on": "am",
+        "SEALED_APPROVED": "Freigegeben und versiegelt",
+        "SEALED_REJECTED": "Freigabe verweigert und versiegelt",
     },
     "en": {
         "todo": "[to be completed by company]",
@@ -175,6 +177,8 @@ _PD_UI: dict[str, dict[str, str]] = {
         "unsealed": "unsealed",
         "by": "by",
         "on": "on",
+        "SEALED_APPROVED": "Approved and sealed",
+        "SEALED_REJECTED": "Approval refused and sealed",
     },
     "es": {
         "todo": "[a completar por la empresa]",
@@ -213,6 +217,8 @@ _PD_UI: dict[str, dict[str, str]] = {
         "unsealed": "sin sellar",
         "by": "por",
         "on": "el",
+        "SEALED_APPROVED": "Aprobado y sellado",
+        "SEALED_REJECTED": "Aprobación denegada y sellada",
     },
 }
 
@@ -871,12 +877,15 @@ def _document_annex(record: DocumentRecord, entries: list[LedgerEntry], *, lang:
             ),
         ],
         [ui["row_path"], path_labels.get(record.provider or "", record.provider or "–")],
-        [ui["row_score"], f"{scorecard.score}/100 ({scorecard.band_label})" if scorecard else "–"],
+        [
+            ui["row_score"],
+            f"{scorecard.score}/100 ({presented_band(scorecard.model_dump(mode='json'))[1]})" if scorecard else "–",
+        ],
         [ui["row_rec"], scorecard.release_recommendation if scorecard else "–"],
         [
             ui["row_seal"],
             (
-                f"{sign_off.status.value} {ui['by']} {sign_off.auditor_name} {ui['on']} {_fmt_ts(sign_off.sealed_at.isoformat())}"
+                f"{ui.get(sign_off.status.value, sign_off.status.value)} {ui['by']} {sign_off.auditor_name} {ui['on']} {_fmt_ts(sign_off.sealed_at.isoformat())}"
                 if sign_off
                 else ui["unsealed"]
             ),

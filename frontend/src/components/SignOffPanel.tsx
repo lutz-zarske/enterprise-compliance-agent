@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import type { DocumentDetail, SignOffDecision } from "../types/api";
-import { cx, formatDate } from "../lib/format";
+import { cx, formatDate, TONE_TEXT, verdictTone } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { Check, Stamp } from "./icons";
 import { AutoTextarea, HashBadge, isModEnter, Kbd, Modal, Spinner, useModifierLabel } from "./ui";
@@ -215,7 +215,7 @@ export function SealModal({ document, open, onClose, onSealed, notify }: {
             Score <span className="font-semibold tabular-nums text-fg">{card.score}</span>
             <span className="tabular-nums"> / 100</span>
           </span>
-          <span className={card.release_blocked ? "text-bad" : "text-ok"}>{td(card.release_recommendation)}</span>
+          <span className={TONE_TEXT[verdictTone(card)]}>{td(card.release_recommendation)}</span>
         </div>
       )}
       <SignOffPanel

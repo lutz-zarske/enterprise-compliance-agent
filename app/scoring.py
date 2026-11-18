@@ -35,6 +35,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from app.db import utcnow
 from app.schemas import (
@@ -126,24 +127,94 @@ class TextFacts:
     positions: bool
 
 
+#: Datumsangaben (15.12.2024, 15.12.24, 15.12., 2024-12-15) sind nie Beträge.
+_DATE_TOKEN = re.compile(r"(?<![\d.,])\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})?(?!\d)|\b\d{4}-\d{2}-\d{2}\b")
+#: Zahlungsbedingungen („Zahlbar innerhalb 30 Tagen netto bis …“) tragen keine Summen.
+_PAYMENT_TERMS = re.compile(
+    r"zahlbar|skonto|zahlungsziel|zahlungsbedingung|f(?:ä|ae)llig|innerhalb\s+\d+\s+tag", re.IGNORECASE
+)
+_TAX_WORD = re.compile(r"\b(?:ust|mwst|umsatzsteuer|mehrwertsteuer)\b")
+_TAX_ID_WORD = re.compile(r"id|nr\.|nummer|identifikation")
+_EXCLUDING_TAX = re.compile(r"(?:ohne|exkl\.?|excl\.?|zzgl\.?\s+der)\s*(?:ust|mwst|umsatzsteuer|mehrwertsteuer)")
+
+#: Summen-Bezeichner je Betrag, Rang 1 = eindeutige Summe, Rang 2 = schwächerer Hinweis.
+_AMOUNT_LABELS: dict[str, tuple[re.Pattern[str], re.Pattern[str]]] = {
+    "net": (
+        re.compile(
+            r"summe\s*netto|netto\s*-?\s*summe|nettosumme|gesamt\s*netto|netto\s*gesamt|nettobetrag|"
+            r"nettogesamt|rechnungssumme\s+(?:ohne|exkl)|summe\s+(?:ohne|exkl)|entgelt\s+netto"
+        ),
+        re.compile(r"positionssumme|zwischensumme|warenwert|\bnetto\b"),
+    ),
+    "tax": (
+        re.compile(
+            r"(?:umsatzsteuer|mehrwertsteuer|ust\.?|mwst\.?)\s*gesamt|gesamt\s*(?:ust|mwst|umsatzsteuer)|"
+            r"summe\s*(?:der\s*)?(?:ust|mwst|umsatzsteuer|mehrwertsteuer|steuer)|steuerbetrag|"
+            r"(?:ust|mwst)\.?-?\s*betrag|umsatzsteuerbetrag|mehrwertsteuerbetrag"
+        ),
+        _TAX_WORD,
+    ),
+    "gross": (
+        re.compile(
+            r"gesamtbetrag(?!\s+der\b)|rechnungsbetrag|bruttosumme|bruttobetrag|summe\s*brutto|brutto\s*gesamt|"
+            r"gesamt\s*brutto|endbetrag|rechnungssumme(?!\s+(?:ohne|exkl|netto))|rechnungsgesamtbetrag"
+        ),
+        re.compile(r"zahlbetrag|zu\s+zahlen|\bbrutto\b"),
+    ),
+}
+
+
+def labeled_amounts(text: str) -> dict[str, list[tuple[int, Decimal]]]:
+    """Beträge hinter Summen-Bezeichnern, je Kategorie mit Rang (1 = eindeutig).
+
+    Datumsangaben und Zeilen mit Zahlungsbedingungen zählen nie als Betrag.  Je
+    Zeile gewinnt die Kategorie mit dem besten Rang; bei Gleichstand netto vor
+    Steuer vor brutto („Rechnungssumme ohne USt.“ ist netto, nicht Steuer).
+    """
+    found: dict[str, list[tuple[int, Decimal]]] = {"net": [], "tax": [], "gross": []}
+    for raw in text.splitlines():
+        if _PAYMENT_TERMS.search(raw):
+            continue
+        line = _DATE_TOKEN.sub(" ", raw)
+        amounts = [value for value in (_to_decimal(m) for m in _AMOUNT.findall(line)) if value is not None]
+        if not amounts:
+            continue
+        low = line.casefold()
+        excluding_tax = bool(_EXCLUDING_TAX.search(low))
+        best: tuple[int, str] | None = None
+        for key, (strong, weak) in _AMOUNT_LABELS.items():
+            if key == "tax" and (excluding_tax or _TAX_ID_WORD.search(low)):
+                continue
+            rank = 1 if strong.search(low) else 2 if weak.search(low) else None
+            if key == "net" and rank is None and excluding_tax:
+                rank = 1
+            if rank is not None and (best is None or rank < best[0]):
+                best = (rank, key)
+        if best is not None:
+            found[best[1]].append((best[0], amounts[-1]))
+    return found
+
+
+def _pick(candidates: list[tuple[int, Decimal]], *, last: bool = False) -> Decimal | None:
+    if not candidates:
+        return None
+    rank = min(r for r, _ in candidates)
+    values = [value for r, value in candidates if r == rank]
+    return values[-1] if last else values[0]
+
+
 def analyze_text(text: str) -> TextFacts:
-    net = tax = rate = gross = None
+    rate = None
     for line in text.splitlines():
         low = line.casefold()
-        amounts = [value for value in (_to_decimal(m) for m in _AMOUNT.findall(line)) if value is not None]
-        percents = [value for value in (_to_decimal(m) for m in _PERCENT.findall(line)) if value is not None]
-        is_tax_line = re.search(r"\b(ust|mwst|umsatzsteuer|mehrwertsteuer)\b", low) and not re.search(
-            r"id|nr\.|nummer|identifikation", low
-        )
-        if "netto" in low and amounts and net is None:
-            net = amounts[-1]
-        elif is_tax_line:
-            if percents and rate is None:
+        if rate is None and _TAX_WORD.search(low) and not _TAX_ID_WORD.search(low):
+            percents = [value for value in (_to_decimal(m) for m in _PERCENT.findall(line)) if value is not None]
+            if percents:
                 rate = percents[0]
-            if amounts and tax is None:
-                tax = amounts[-1]
-        elif re.search(r"brutto|gesamtbetrag|rechnungsbetrag|endbetrag|zu zahlen", low) and amounts:
-            gross = amounts[-1]
+    labeled = labeled_amounts(text)
+    net = _pick(labeled["net"])
+    tax = _pick(labeled["tax"])
+    gross = _pick(labeled["gross"], last=True)
     return TextFacts(
         vat_id=bool(_VAT_ID.search(text)),
         tax_number=bool(_TAX_NUMBER.search(text)),
@@ -329,6 +400,7 @@ def _formal_tile(
             required=not small, na_detail=na_small,
         ),
     ]
+    _service_time_detail(checks, einvoice, structured=structured)
     required = [check for check in checks if check.status is not CheckStatus.NOT_APPLICABLE]
     fulfilled = sum(check.status is CheckStatus.PASS for check in required)
 
@@ -337,6 +409,9 @@ def _formal_tile(
     primacy = _xml_primacy_check(einvoice)
     if primacy is not None:
         extra.append(primacy)
+    version = _xrechnung_version_check(einvoice)
+    if version is not None:
+        extra.append(version)
     leitweg = _leitweg_check(extraction, einvoice, text)
     if leitweg is not None:
         extra.append(leitweg)
@@ -391,7 +466,7 @@ def _en16931_check(einvoice: EInvoiceData | None, *, marker: bool, public: bool)
             status = CheckStatus.WARN if einvoice.rule_violations else CheckStatus.PASS
             detail = (
                 f"Profil {einvoice.profile}, Syntax {einvoice.syntax} ({container}). Geprüft: Profilkennung BT-24, "
-                "Pflichtfelder und Summenregeln (BR-CO-10/13/14/15, BR-DE-15). Keine Validierung gegen XSD "
+                "Pflichtfelder und Summenregeln (BR-CO-10/13/14/15, BR-DE-2, BR-DE-15). Keine vollständige Validierung gegen XSD "
                 "und Schematron (z. B. KoSIT-Validator)."
             )
             if einvoice.rule_violations:
@@ -443,6 +518,48 @@ def _en16931_check(einvoice: EInvoiceData | None, *, marker: bool, public: bool)
     )
 
 
+def _service_time_detail(checks: list[ScoreCheck], einvoice: EInvoiceData | None, *, structured: bool) -> None:
+    """Nennt bei E-Rechnungen, woher der Leistungszeitpunkt stammt (BT-72, BG-14, BG-26)."""
+    if einvoice is None or einvoice.error or not structured:
+        return
+    from app.extractors.einvoice import _format_date, service_time
+
+    check = next((c for c in checks if c.id == "ustg_6_service_date"), None)
+    if check is None or check.status is not CheckStatus.PASS:
+        return
+    start, end, source, uncovered = service_time(einvoice)
+    parts: list[str] = []
+    if einvoice.delivery_date:
+        parts.append(f"Lieferdatum {_format_date(einvoice.delivery_date)} (BT-72)")
+    if source == "BG-14":
+        parts.append(f"Rechnungszeitraum {_format_date(start)} – {_format_date(end)} (BG-14)")
+    elif source == "BG-26":
+        parts.append(f"Positionszeitraum {_format_date(start)} – {_format_date(end)} (BG-26)")
+    if not parts:
+        return
+    check.detail = "Aus dem XML-Datensatz: " + ", ".join(parts) + "."
+    if source == "BG-26" and uncovered and not einvoice.delivery_date:
+        check.detail += (
+            f" {uncovered} von {len(einvoice.lines)} Positionen ohne eigenen Zeitraum – die KoSIT-Regel "
+            "BR-DE-TMP-32 empfiehlt ihn in jeder Position oder auf Belegebene. Kein Punktabzug."
+        )
+
+
+def _xrechnung_version_check(einvoice: EInvoiceData | None) -> ScoreCheck | None:
+    """Hinweis ohne Punktabzug, wenn die XRechnung-Version nicht mehr in Kraft ist."""
+    if einvoice is None or einvoice.error:
+        return None
+    from app.extractors.einvoice import xrechnung_version_notice
+
+    notice = xrechnung_version_notice(einvoice)
+    if notice is None:
+        return None
+    return ScoreCheck(
+        id="xrechnung_version", label="XRechnung-Version", legal_reference="KoSIT, Versionen und Bundles",
+        status=CheckStatus.WARN, detail=f"{notice} Kein Punktabzug.", evidence_source="xml_rule",
+    )
+
+
 def _xml_primacy_check(einvoice: EInvoiceData | None) -> ScoreCheck | None:
     """Abgleich XML-Datensatz <-> visueller PDF-Teil (nur hybride Rechnungen)."""
     if einvoice is None or einvoice.error or einvoice.source != "embedded" or not einvoice.visual_check:
@@ -467,7 +584,10 @@ def _xml_primacy_check(einvoice: EInvoiceData | None) -> ScoreCheck | None:
         names = ", ".join(f"{c.bt} {c.label}" for c in missing)
         return ScoreCheck(
             id="xml_primacy", label=label, legal_reference=ref, status=CheckStatus.WARN,
-            detail=f"Im Bildteil nicht wiedergefunden: {names}. Maßgeblich ist der XML-Datensatz. Kein Punktabzug.",
+            detail=(
+                f"Im Bildteil nicht eindeutig wiedergefunden: {names}. Maßgeblich ist der XML-Datensatz. "
+                "Kein Punktabzug."
+            ),
             evidence_source="xml_rule",
         )
     return ScoreCheck(
@@ -821,6 +941,43 @@ BAND_LABELS = {
     ScoreBand.AMBER: "Nachbesserung erforderlich",
     ScoreBand.RED: "Revisionssperre / schwerer Rechtsverstoß",
 }
+RESERVATION_PREFIX = "Freigabe unter Vorbehalt"
+
+
+def verdict_band(score: int, *, blocked: bool, recommendation: str) -> tuple[ScoreBand, str]:
+    """Ampel und Etikett folgen der Freigabeentscheidung, nicht nur dem Score.
+
+    Grün („Vollständig verkehrsfähig & konform“) gibt es nur ohne Mängel und ohne
+    Vorbehalt; eine gesperrte Freigabe oder ein Vorbehalt färbt mindestens gelb.
+    """
+    band = band_for(score)
+    if band is ScoreBand.RED:
+        return band, BAND_LABELS[band]
+    if blocked:
+        label = "Nachforderung nötig" if "Nachforderung" in recommendation else "Freigabe gesperrt"
+        return ScoreBand.AMBER, label
+    if recommendation.startswith(RESERVATION_PREFIX):
+        return ScoreBand.AMBER, RESERVATION_PREFIX
+    return band, BAND_LABELS[band]
+
+
+def presented_band(scorecard: dict[str, Any] | None) -> tuple[str | None, str | None]:
+    """Ampel und Etikett eines gespeicherten Ergebnisses, auch aus älteren Versionen.
+
+    Ältere Scorecards trugen ein reines Score-Band („grün“ neben „Freigabe
+    gesperrt“).  Gespeichert bleibt der Stand unverändert; nur die Anzeige folgt
+    der Freigabeentscheidung.
+    """
+    if not scorecard or scorecard.get("score") is None:
+        return (scorecard or {}).get("band"), (scorecard or {}).get("band_label")
+    band, label = verdict_band(
+        int(scorecard["score"]),
+        blocked=bool(scorecard.get("release_blocked")),
+        recommendation=str(scorecard.get("release_recommendation") or ""),
+    )
+    if band.value == scorecard.get("band"):
+        return band.value, scorecard.get("band_label") or label
+    return band.value, label
 
 
 def compute_scorecard(
@@ -872,6 +1029,7 @@ def compute_scorecard(
         recommendation, blocked = "Zur Auszahlung freigegeben", False
     else:
         recommendation, blocked = "Freigabe empfohlen — Prüfung ohne Befund", False
+    band, band_label = verdict_band(score, blocked=blocked, recommendation=recommendation)
 
     retention = None
     if is_invoice and extraction.document_date is not None:
@@ -893,7 +1051,7 @@ def compute_scorecard(
     return Scorecard(
         score=score,
         band=band,
-        band_label=BAND_LABELS[band],
+        band_label=band_label,
         cap_applied=applied,
         tiles=tiles,
         release_recommendation=recommendation,

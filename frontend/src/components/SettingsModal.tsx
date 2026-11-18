@@ -214,6 +214,11 @@ function ModelSelect({ provider, value, current, onChange, catalog, label, allow
   );
 }
 
+/** Verstecktes Benutzerfeld: Chrome erwartet es in Formularen mit Passwortfeld (Barrierefreiheit). */
+function HiddenUsername() {
+  return <input type="text" name="username" autoComplete="username" value="" readOnly hidden tabIndex={-1} aria-hidden="true" />;
+}
+
 function KeyInput({ value, onChange, placeholder, name, label, disabled = false }: {
   value: string;
   onChange: (value: string) => void;
@@ -227,6 +232,7 @@ function KeyInput({ value, onChange, placeholder, name, label, disabled = false 
   // Eigenes <form> ohne Autovervollständigung: Browser behandeln den Key nicht als zu speicherndes Passwort.
   return (
     <form className="relative" autoComplete="off" onSubmit={(event) => event.preventDefault()}>
+      <HiddenUsername />
       <input
         className="input h-9 pr-10 font-mono placeholder:font-sans disabled:cursor-not-allowed disabled:opacity-50"
         type={show ? "text" : "password"}
@@ -1179,6 +1185,7 @@ function ConnectionSection({ open, health, onAccessChanged, notify }: {
             hint={tr("Vom Administrator des Servers (API_KEY). Wird nur in diesem Browser gespeichert und als X-API-Key mitgesendet.", "From the server administrator (API_KEY). Stored only in this browser and sent as X-API-Key.", "Del administrador del servidor (API_KEY). Solo se guarda en este navegador y se envía como X-API-Key.")}
           >
             <form autoComplete="off" onSubmit={(event) => event.preventDefault()}>
+              <HiddenUsername />
               <input
                 className="input font-mono placeholder:font-sans"
                 type="password"
@@ -1271,7 +1278,7 @@ function AboutSection({ version, release, checking, notify }: {
     },
     {
       title: tr("Bewerten", "Score", "Puntuar"),
-      text: tr("Der Score startet bei 100, jeder Mangel kostet einen festen Abzug. Gleiche Eingabe, gleicher Score – die KI vergibt keine Punkte. Ab 85 grün, ab 60 gelb, darunter rot.", "The score starts at 100 and every defect costs a fixed deduction. Same input, same score – the AI awards no points. Green from 85, amber from 60, red below.", "La puntuación parte de 100 y cada defecto resta una cantidad fija. Misma entrada, misma puntuación: la IA no otorga puntos. Verde desde 85, ámbar desde 60, rojo por debajo."),
+      text: tr("Der Score startet bei 100, jeder Mangel kostet einen festen Abzug. Gleiche Eingabe, gleicher Score – die KI vergibt keine Punkte. Ab 85 grün, ab 60 gelb, darunter rot; mit Mangel oder Vorbehalt höchstens gelb.", "The score starts at 100 and every defect costs a fixed deduction. Same input, same score – the AI awards no points. Green from 85, amber from 60, red below; with a defect or reservation at most amber.", "La puntuación parte de 100 y cada defecto resta una cantidad fija. Misma entrada, misma puntuación: la IA no otorga puntos. Verde desde 85, ámbar desde 60, rojo por debajo; con un defecto o reserva, como máximo ámbar."),
     },
     {
       title: tr("Belegen", "Record", "Registrar"),
@@ -1318,6 +1325,17 @@ function AboutSection({ version, release, checking, notify }: {
             </li>
           ))}
         </ol>
+      </section>
+
+      <section className="border-t border-line pt-4">
+        <p className="label-caps">{tr("Prüfumfang", "Scope", "Alcance")}</p>
+        <p className="mt-2 max-w-[70ch] text-xs leading-relaxed text-muted">
+          {tr(
+            "Prüft Pflichtangaben nach § 14 UStG und Rechenwerte, bei E-Rechnungen zusätzlich Profil, XRechnung-Version und ausgewählte Geschäftsregeln (BR-CO, BR-DE). Eine vollständige Schematron-Validierung nach EN 16931 bzw. XRechnung ersetzt das nicht – dafür z. B. den KoSIT-Validator nutzen.",
+            "Checks mandatory details under Sec. 14 UStG and arithmetic; for e-invoices also the profile, XRechnung version and selected business rules (BR-CO, BR-DE). This does not replace full Schematron validation under EN 16931 or XRechnung – use e.g. the KoSIT validator for that.",
+            "Comprueba los datos obligatorios del § 14 UStG y los cálculos; en facturas electrónicas también el perfil, la versión XRechnung y reglas de negocio seleccionadas (BR-CO, BR-DE). No sustituye una validación Schematron completa según EN 16931 o XRechnung; para ello, use p. ej. el validador KoSIT.",
+          )}
+        </p>
       </section>
 
       <div className="border-t border-line pt-4">

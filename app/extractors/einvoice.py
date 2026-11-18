@@ -333,6 +333,12 @@ def _parse_cii(root: Element) -> dict[str, Any]:
             vat_rate=_decimal(
                 _text(item, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent", ns)
             ),
+            period_start=_date(_text(
+                item, "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/ram:StartDateTime/udt:DateTimeString", ns
+            )),
+            period_end=_date(_text(
+                item, "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/ram:EndDateTime/udt:DateTimeString", ns
+            )),
         )
         for item in (transaction.findall("ram:IncludedSupplyChainTradeLineItem", ns) if transaction is not None else [])
     ]
@@ -358,6 +364,8 @@ def _parse_cii(root: Element) -> dict[str, Any]:
         "order_reference": _text(agreement, "ram:BuyerOrderReferencedDocument/ram:IssuerAssignedID", ns),
         "seller": _cii_party(agreement.find("ram:SellerTradeParty", ns) if agreement is not None else None),
         "buyer": _cii_party(agreement.find("ram:BuyerTradeParty", ns) if agreement is not None else None),
+        "seller_contact": agreement is not None
+        and agreement.find("ram:SellerTradeParty/ram:DefinedTradeContact", ns) is not None,
         "delivery_date": _date(
             _text(delivery, "ram:ActualDeliverySupplyChainEvent/ram:OccurrenceDateTime/udt:DateTimeString", ns)
         ),
@@ -436,6 +444,8 @@ def _parse_ubl(root: Element, credit_note: bool) -> dict[str, Any]:
             unit=_attr(line, quantity_tag, "unitCode", ns),
             net_amount=_decimal(_text(line, "cbc:LineExtensionAmount", ns)),
             vat_rate=_decimal(_text(line, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent", ns)),
+            period_start=_date(_text(line, "cac:InvoicePeriod/cbc:StartDate", ns)),
+            period_end=_date(_text(line, "cac:InvoicePeriod/cbc:EndDate", ns)),
         )
         for line in root.findall(line_tag, ns)
     ]
@@ -451,6 +461,7 @@ def _parse_ubl(root: Element, credit_note: bool) -> dict[str, Any]:
         "order_reference": _text(root, "cac:OrderReference/cbc:ID", ns),
         "seller": _ubl_party(root.find("cac:AccountingSupplierParty/cac:Party", ns)),
         "buyer": _ubl_party(root.find("cac:AccountingCustomerParty/cac:Party", ns)),
+        "seller_contact": root.find("cac:AccountingSupplierParty/cac:Party/cac:Contact", ns) is not None,
         "delivery_date": _date(_text(root, "cac:Delivery/cbc:ActualDeliveryDate", ns)),
         "period_start": _date(_text(root, "cac:InvoicePeriod/cbc:StartDate", ns)),
         "period_end": _date(_text(root, "cac:InvoicePeriod/cbc:EndDate", ns)),
@@ -522,7 +533,72 @@ def _business_rules(invoice: EInvoiceData) -> list[str]:
             )
     if invoice.profile_key == "xrechnung" and not invoice.buyer_reference:
         violations.append("BR-DE-15: Käuferreferenz (BT-10) fehlt – in der XRechnung Pflicht.")
+    if invoice.profile_key == "xrechnung" and invoice.seller_contact is False:
+        violations.append("BR-DE-2: Kontaktangaben des Verkäufers (BG-6) fehlen – in der XRechnung Pflicht.")
     return violations
+
+
+# ---------------------------------------------------------------------------
+# Leistungszeitpunkt (§ 14 Abs. 4 Satz 1 Nr. 6 UStG) aus BT-72, BG-14 oder BG-26
+# ---------------------------------------------------------------------------
+
+
+def service_time(invoice: EInvoiceData) -> tuple[date | None, date | None, str | None, int]:
+    """Liefert (Beginn, Ende, Quelle, Positionen ohne Zeitraum) des Leistungszeitraums.
+
+    Reihenfolge wie in der KoSIT-Regel BR-DE-TMP-32: Rechnungszeitraum BG-14 auf
+    Belegebene, sonst die Positionszeiträume BG-26 (frühester Beginn bis spätestes
+    Ende).  Das Lieferdatum BT-72 liest der Aufrufer getrennt.
+    """
+    if invoice.period_start or invoice.period_end:
+        return invoice.period_start, invoice.period_end, "BG-14", 0
+    with_period = [line for line in invoice.lines if line.period_start or line.period_end]
+    if not with_period:
+        return None, None, None, len(invoice.lines)
+    starts = [line.period_start for line in with_period if line.period_start]
+    ends = [line.period_end for line in with_period if line.period_end]
+    return (
+        min(starts) if starts else None,
+        max(ends) if ends else None,
+        "BG-26",
+        len(invoice.lines) - len(with_period),
+    )
+
+
+# ---------------------------------------------------------------------------
+# XRechnung-Versionen (Quelle: KoSIT, xeinkauf.de/xrechnung/versionen-und-bundles,
+# abgerufen am 18.11.2026).  Die Spezifikationskennung BT-24 nennt nur
+# Haupt- und Nebenversion; maßgeblich ist das Ende der letzten Fassung.
+# ---------------------------------------------------------------------------
+
+XRECHNUNG_CURRENT = ("3.0", "01.02.2024")
+XRECHNUNG_EXPIRED: dict[str, str] = {
+    "1.0": "30.11.2017",
+    "1.1": "30.06.2019",
+    "1.2": "31.12.2020",
+    "2.0": "31.01.2022",
+    "2.1": "31.07.2022",
+    "2.2": "31.07.2023",
+    "2.3": "31.01.2024",
+}
+
+
+def xrechnung_version_notice(invoice: EInvoiceData) -> str | None:
+    """Hinweis bei einer XRechnung-Version, die nicht mehr in Kraft ist."""
+    if invoice.profile_key != "xrechnung":
+        return None
+    match = re.search(r"xrechnung_(\d+)\.(\d+)", (invoice.specification_id or "").casefold())
+    if not match:
+        return None
+    version = f"{match.group(1)}.{match.group(2)}"
+    until = XRECHNUNG_EXPIRED.get(version)
+    if until is None:
+        return None
+    current, since = XRECHNUNG_CURRENT
+    return (
+        f"XRechnung {version} galt laut KoSIT nur bis {until}; in Kraft ist XRechnung {current} (seit {since}). "
+        "Eingangsplattformen prüfen gegen die aktuelle Version und weisen ältere Datensätze in der Regel zurück."
+    )
 
 
 def parse_einvoice_xml(
@@ -616,10 +692,12 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
     Wert (z. B. „Gesamtbetrag 1.190,00“ gegenueber 1.290,00 im XML).
     ``not_found``: Der Wert kommt im Bildteil nicht vor.
     """
-    from app.scoring import analyze_text  # spaeter Import: scoring importiert keine Extraktoren
+    # spaeter Import: scoring importiert keine Extraktoren
+    from app.scoring import _DATE_TOKEN, analyze_text, labeled_amounts
 
     facts = analyze_text(text)
-    amounts = {value for value in (_token_amount(t) for t in _AMOUNT_TOKEN.findall(text)) if value is not None}
+    undated = _DATE_TOKEN.sub(" ", text)
+    amounts = {value for value in (_token_amount(t) for t in _AMOUNT_TOKEN.findall(undated)) if value is not None}
     compact = re.sub(r"\s+", "", text)
     currency = invoice.currency
     checks: list[VisualCheck] = []
@@ -656,19 +734,35 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
         checks.append(VisualCheck(bt="BT-84", label="IBAN", xml_value=_mask(wanted),
                                   status=status, visual_value=visual))  # type: ignore[arg-type]
 
-    for bt, label, xml_amount, anchored in (
-        ("BT-109", "Summe netto", invoice.net_total, facts.net_amount),
-        ("BT-110", "Umsatzsteuer gesamt", invoice.tax_total, facts.tax_amount),
-        ("BT-112", "Rechnungsgesamtbetrag", invoice.grand_total, facts.gross_amount),
+    # Beträge nur hinter Summen-Bezeichnern; eine Abweichung mit Punktabzug nur,
+    # wenn eine eindeutige Summe (Rang 1) einen anderen Wert zeigt und der
+    # XML-Wert im Bildteil nirgends vorkommt.  Im Zweifel „nicht wiedergefunden“.
+    labeled = labeled_amounts(text)
+    vat_amounts = [entry.tax_amount for entry in invoice.vat_breakdown if entry.tax_amount is not None]
+    for bt, label, xml_amount, key in (
+        ("BT-109", "Summe netto", invoice.net_total, "net"),
+        ("BT-110", "Umsatzsteuer gesamt", invoice.tax_total, "tax"),
+        ("BT-112", "Rechnungsgesamtbetrag", invoice.grand_total, "gross"),
     ):
         if xml_amount is None:
             continue
-        if anchored is not None:
-            status = "match" if abs(anchored - xml_amount) <= _TOLERANCE else "mismatch"
-            visual = None if status == "match" else format_money(anchored, currency)
+        candidates = labeled[key]
+        strong = [value for rank, value in candidates if rank == 1]
+        if key == "tax" and not strong and len(vat_amounts) <= 1:
+            # Ein Steuersatz: die Steuerzeile („zzgl. 19 % USt: …“) ist die Gesamtsteuer.
+            strong = [value for _, value in candidates]
+        shown = any(abs(value - xml_amount) <= _TOLERANCE for value in amounts)
+        visual = None
+        if any(abs(value - xml_amount) <= _TOLERANCE for _, value in candidates):
+            status = "match"
+        elif key == "tax" and len(vat_amounts) > 1 and all(value in amounts for value in vat_amounts):
+            status = "match"  # Steuer je Satz ausgewiesen, ohne eigene Gesamtsumme
+        elif strong and not shown:
+            status, visual = "mismatch", format_money(strong[0], currency)
+        elif shown and not strong:
+            status = "match"
         else:
-            status = "match" if xml_amount in amounts else "not_found"
-            visual = None
+            status = "not_found"
         checks.append(VisualCheck(bt=bt, label=label, xml_value=format_money(xml_amount, currency),
                                   status=status, visual_value=visual))  # type: ignore[arg-type]
 
@@ -735,9 +829,14 @@ def render_reading_text(invoice: EInvoiceData) -> str:
         lines.append("Positionen:")
         for line in invoice.lines:
             quantity = f"{line.quantity.normalize():f}".replace(".", ",") if line.quantity is not None else "–"
+            period = (
+                f" (Zeitraum {_format_date(line.period_start)} – {_format_date(line.period_end)}, BG-26)"
+                if line.period_start or line.period_end
+                else ""
+            )
             lines.append(
                 f"Pos. {line.line_id or '–'}: {quantity} {line.unit or ''} {line.name or '–'} – "
-                f"{format_money(line.net_amount, currency)}".replace("  ", " ")
+                f"{format_money(line.net_amount, currency)}{period}".replace("  ", " ")
             )
     lines.append("")
     lines.append(f"Summe netto (BT-109): {format_money(invoice.net_total, currency)}")
@@ -763,8 +862,9 @@ def to_extraction(invoice: EInvoiceData) -> ExtractionResult:
     """Uebernimmt den XML-Datensatz deterministisch in das Extraktionsmodell."""
     rates = {entry.rate for entry in invoice.vat_breakdown if entry.rate is not None}
     period = None
-    if invoice.period_start or invoice.period_end:
-        period = f"{_format_date(invoice.period_start)} - {_format_date(invoice.period_end)}"
+    start, end, _source, _open = service_time(invoice)
+    if start or end:
+        period = f"{_format_date(start)} - {_format_date(end)}"
     items = "; ".join(
         f"{line.quantity.normalize():f} {line.unit or ''} {line.name}".replace("  ", " ")
         if line.quantity is not None

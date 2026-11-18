@@ -1079,6 +1079,8 @@ class EInvoiceLine(ApiModel):
     unit: str | None = None
     net_amount: Decimal | None = None
     vat_rate: Decimal | None = None
+    period_start: date | None = Field(default=None, description="BT-134 Beginn des Positionszeitraums (BG-26).")
+    period_end: date | None = Field(default=None, description="BT-135 Ende des Positionszeitraums (BG-26).")
 
 
 class LeitwegCheck(ApiModel):
@@ -1140,6 +1142,9 @@ class EInvoiceData(ApiModel):
     order_reference: str | None = None
     seller: EInvoiceParty = Field(default_factory=EInvoiceParty)
     buyer: EInvoiceParty = Field(default_factory=EInvoiceParty)
+    seller_contact: bool | None = Field(
+        default=None, description="Verkäufer-Kontakt (BG-6) vorhanden; None bei älteren Datensätzen."
+    )
     delivery_date: date | None = None
     period_start: date | None = None
     period_end: date | None = None
@@ -1465,6 +1470,6 @@ class RedactResponse(ApiModel):
 class ReleaseApplyRequest(ApiModel):
     """Bestätigung eines Release-Wechsels durch die Administration."""
 
-    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.7.0'.")
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.7.1'.")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(default="System", min_length=2, max_length=120, description="Wer das Update auslöst.")

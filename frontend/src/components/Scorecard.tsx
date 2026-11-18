@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { Scorecard as ScorecardType, ScoreTile } from "../types/api";
-import { cx, formatDate, TONE_CLASSES, TONE_TEXT, toneForBand, toneForStatus } from "../lib/format";
+import { cx, formatDate, presentedBand, TONE_CLASSES, TONE_TEXT, toneForBand, toneForStatus, verdictTone } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { Clock, Lock, Scale } from "./icons";
 import { StatusIcon, Tooltip } from "./ui";
@@ -46,7 +46,8 @@ interface Props {
 
 export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
   const { tr, td } = useI18n();
-  const tone = toneForBand(scorecard.band);
+  const verdict = presentedBand(scorecard);
+  const tone = toneForBand(verdict.band);
   const ringTone = tone === "pii" || tone === "accent" ? "neutral" : tone;
   const tileLabels: Record<ScoreTile["key"], string> = {
     formal: "§ 14 UStG",
@@ -64,12 +65,12 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
           ariaLabel={tr(`Compliance-Score ${scorecard.score} von 100`, `Compliance score ${scorecard.score} of 100`, `Puntuación de cumplimiento ${scorecard.score} de 100`)}
         />
         <div className="min-w-0 flex-1">
-          <h2 className={cx("text-lg font-semibold leading-snug text-balance", scorecard.release_blocked ? "text-bad" : "text-ok")}>
+          <h2 className={cx("text-lg font-semibold leading-snug text-balance", TONE_TEXT[verdictTone(scorecard)])}>
             {td(scorecard.release_recommendation)}
           </h2>
           {scorecard.cap_applied && <p className="mt-1 text-sm text-warn">{td(scorecard.cap_applied)}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className={cx("chip", TONE_CLASSES[tone])}>{td(scorecard.band_label)}</span>
+            <span className={cx("chip", TONE_CLASSES[tone])}>{td(verdict.label)}</span>
             {sealed && (
               <span className="chip border-ok-line bg-ok-soft text-ok">
                 <Lock size={11} aria-hidden="true" /> {tr("Versiegelt", "Sealed", "Sellado")}

@@ -56,7 +56,7 @@ from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import PrivacyVault
 from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
 from app.runtime_settings import RuntimeSettingsStore
-from app.scoring import RULESET_VERSION, compute_scorecard
+from app.scoring import RULESET_VERSION, compute_scorecard, presented_band
 from app.schemas import (
     SPECIAL_CATEGORIES,
     AIActAssessment,
@@ -1627,7 +1627,7 @@ def to_summary(record: DocumentRecord) -> DocumentSummary:
             compliance.gdpr.contains_special_categories if compliance else None
         ),
         compliance_score=(record.scorecard or {}).get("score"),
-        score_band=(record.scorecard or {}).get("band"),
+        score_band=presented_band(record.scorecard)[0],
         pii_findings=len(compliance.gdpr.findings) if compliance else None,
         sealed=bool(record.sign_off),
         pinned=record.pinned,

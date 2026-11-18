@@ -21,6 +21,7 @@ from app.db import DocumentRecord, utcnow
 from app.print_layout import BASE_CSS, page_rules
 from app.redaction import mask_value
 from app.schemas import ANNEX_III_LABELS, AnnexIIICategory
+from app.scoring import presented_band
 from app.services import (
     STRUCTURED_PROVIDER,
     parse_compliance,
@@ -146,6 +147,12 @@ _EVENT_LABELS_I18N: dict[str, dict[str, str]] = {
     },
 }
 
+
+
+def _presented_score(score: dict[str, Any]) -> dict[str, Any]:
+    """Ampel und Etikett folgen der Freigabeentscheidung (auch bei älteren Ergebnissen)."""
+    score["band"], score["band_label"] = presented_band(score)
+    return score
 
 def _fmt_date(value: Any) -> str:
     """ISO-Datum -> 31.12.2034."""
@@ -551,7 +558,7 @@ def build_report(
             if einvoice
             else None
         ),
-        "score": scorecard.model_dump(mode="json") if scorecard else None,
+        "score": _presented_score(scorecard.model_dump(mode="json")) if scorecard else None,
         "release_recommendation": scorecard.release_recommendation if scorecard else t["not_analyzed"],
         "release_blocked": scorecard.release_blocked if scorecard else True,
         "ustg_matrix": checks("formal"),

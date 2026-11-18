@@ -1,4 +1,4 @@
-import type { AIActRiskLevel, CheckStatus, InferenceMode, Money, ScoreBand } from "../types/api";
+import type { AIActRiskLevel, CheckStatus, InferenceMode, Money, ScoreBand, Scorecard } from "../types/api";
 import { getActiveLocale, LOCALE_TAG, tr } from "./i18n";
 
 export function toNumber(value: Money | undefined): number | null {
@@ -165,6 +165,29 @@ export function toneForBand(band: ScoreBand | null | undefined): Tone {
   if (band === "amber") return "warn";
   if (band === "red") return "bad";
   return "neutral";
+}
+
+/**
+ * Ampel und Etikett folgen der Freigabeentscheidung, nicht nur dem Score (wie
+ * ``presented_band`` in app/scoring.py) – auch bei älteren gespeicherten
+ * Ergebnissen, die noch „grün“ neben „Freigabe gesperrt“ trugen.
+ */
+export function presentedBand(card: Pick<Scorecard, "band" | "band_label" | "release_blocked" | "release_recommendation">): {
+  band: ScoreBand;
+  label: string;
+} {
+  if (card.band !== "green") return { band: card.band, label: card.band_label };
+  if (card.release_blocked) {
+    return { band: "amber", label: card.release_recommendation.includes("Nachforderung") ? "Nachforderung nötig" : "Freigabe gesperrt" };
+  }
+  if (card.release_recommendation.startsWith("Freigabe unter Vorbehalt")) return { band: "amber", label: "Freigabe unter Vorbehalt" };
+  return { band: card.band, label: card.band_label };
+}
+
+/** Farbe der Freigabeempfehlung: gesperrt rot, Vorbehalt gelb, frei grün. */
+export function verdictTone(card: Pick<Scorecard, "band" | "band_label" | "release_blocked" | "release_recommendation">): Tone {
+  if (card.release_blocked) return "bad";
+  return presentedBand(card).band === "green" ? "ok" : "warn";
 }
 
 /** Band zu einem Score - dieselben Schwellen wie ``band_for`` in app/scoring.py (85 / 60). */
