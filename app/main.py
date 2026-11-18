@@ -1,6 +1,6 @@
 """FastAPI-Anwendung des Enterprise Compliance Agent.
 
-Die Endpunkte bleiben bewusst duenn: Validierung, Autorisierung und
+Die Endpunkte bleiben bewusst dünn: Validierung, Autorisierung und
 Fehlerabbildung liegen hier, die gesamte Fachlogik in ``app.services``.
 Jeder Fehler verlässt die Anwendung im einheitlichen Format
 ``{"error": {"code", "message", "hint"}}`` - maschinenlesbar und mit
@@ -42,6 +42,7 @@ from app.db import DocumentRecord, build_repository, utcnow
 from app.docx_export import render_docx
 from app.gobd_export import build_gobd_package
 from app.jobs import Job, JobContext, JobManager
+from app.pdf_export import render_procedural_pdf, render_report_pdf
 from app.procedural_doc import build_procedural_doc, procedural_ui
 from app.procedural_doc import render_html as render_procedural_html
 from app.procedural_doc import render_markdown as render_procedural_markdown
@@ -1010,14 +1011,14 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/api/documents/{document_id}/export/procedural-doc",
         tags=["Human Oversight"],
-        summary="GoBD-Verfahrensdokumentation (Entwurf) mit Prüfpfad des Belegs (html | markdown | docx)",
+        summary="GoBD-Verfahrensdokumentation (Entwurf) mit Prüfpfad des Belegs (pdf | docx | html | markdown)",
         dependencies=[Depends(require_api_key)],
         responses=error_responses,
     )
     async def export_procedural_doc(
         request: Request,
         document_id: str = Path(...),
-        doc_format: Literal["html", "markdown", "docx"] = Query("html", alias="format"),
+        doc_format: Literal["html", "markdown", "docx", "pdf"] = Query("html", alias="format"),
         lang: Literal["de", "en", "es"] = Query("de"),
         service: DocumentService = Depends(get_service),
     ) -> Response:
@@ -1026,7 +1027,7 @@ def _register_routes(application: FastAPI) -> None:
         Organisatorische Angaben, die das System nicht kennt, sind als
         ``[vom Unternehmen zu ergänzen]`` markiert. Aufbewahrung: 10 Jahre
         (§ 147 Abs. 1 Nr. 1 AO). ``format=docx`` liefert eine Word-Datei zum Ergänzen
-        der Platzhalter und Fortschreiben.
+        der Platzhalter; ``format=pdf`` ein fertiges A4-PDF.
         """
         record = await service.require_document(document_id)
         doc = await _procedural_doc(request, record, lang=lang)
@@ -1043,6 +1044,16 @@ def _register_routes(application: FastAPI) -> None:
                 data,
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 headers={"Content-Disposition": _attachment_header(_export_name(prefix, record.original_filename, "docx"))},
+            )
+        if doc_format == "pdf":
+            data = await anyio.to_thread.run_sync(partial(render_procedural_pdf, doc, lang=lang))
+            return Response(
+                data,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": _attachment_header(_export_name(prefix, record.original_filename, "pdf")),
+                    "X-Content-SHA256": hashlib.sha256(data).hexdigest(),
+                },
             )
         return HTMLResponse(
             render_procedural_html(doc, lang=lang),
@@ -1107,14 +1118,14 @@ def _register_routes(application: FastAPI) -> None:
     @application.get(
         "/documents/{document_id}/report",
         tags=["Human Oversight"],
-        summary="Revisionssicheres Audit-Zertifikat (html | markdown | json)",
+        summary="Revisionssicheres Audit-Zertifikat (pdf | html | markdown | json)",
         dependencies=[Depends(require_api_key)],
         responses={**error_responses, 409: {"model": ErrorResponse, "description": "Noch nicht analysiert"}},
     )
     async def document_report(
         request: Request,
         document_id: str = Path(...),
-        report_format: Literal["html", "markdown", "json"] = Query("html", alias="format"),
+        report_format: Literal["html", "markdown", "json", "pdf"] = Query("html", alias="format"),
         lang: Literal["de", "en", "es"] = Query("de"),
         service: DocumentService = Depends(get_service),
     ) -> Response:
@@ -1126,6 +1137,16 @@ def _register_routes(application: FastAPI) -> None:
             record, await ledger.list(document_id=document_id, limit=50), await ledger.verify_chain(), lang=lang
         )
         title = report_title(report, lang)
+        if report_format == "pdf":
+            pdf_bytes = await anyio.to_thread.run_sync(partial(render_report_pdf, report, lang=lang))
+            return Response(
+                pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": _attachment_header(f"{title}.pdf"),
+                    "X-Content-SHA256": hashlib.sha256(pdf_bytes).hexdigest(),
+                },
+            )
         if report_format == "json":
             return JSONResponse(
                 report,
@@ -1175,10 +1196,12 @@ def _register_routes(application: FastAPI) -> None:
         entries = await ledger.list(document_id=document_id, limit=1000)
         verification = await ledger.verify_chain()
         original = await service.read_original(record)
-        certificate = render_html(build_report(record, entries[:50], verification, lang=lang), lang=lang)
-        procedural = render_procedural_html(
-            await _procedural_doc(request, record, entries=entries, verification=verification, lang=lang), lang=lang
-        )
+        report_data = build_report(record, entries[:50], verification, lang=lang)
+        proc_data = await _procedural_doc(request, record, entries=entries, verification=verification, lang=lang)
+        certificate = render_html(report_data, lang=lang)
+        procedural = render_procedural_html(proc_data, lang=lang)
+        certificate_pdf = await anyio.to_thread.run_sync(partial(render_report_pdf, report_data, lang=lang))
+        procedural_pdf = await anyio.to_thread.run_sync(partial(render_procedural_pdf, proc_data, lang=lang))
         data, _ = await anyio.to_thread.run_sync(
             partial(
                 build_gobd_package,
@@ -1190,6 +1213,8 @@ def _register_routes(application: FastAPI) -> None:
                 certificate_html=certificate,
                 signer=request.app.state.signer,
                 procedural_doc_html=procedural,
+                certificate_pdf=certificate_pdf,
+                procedural_doc_pdf=procedural_pdf,
             )
         )
         pkg_prefix = {"de": "Pruefdatenpaket", "en": "AuditDataPackage", "es": "PaqueteAuditoria"}[lang]

@@ -3,6 +3,12 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.7.3 – 18.11.2026
+
+- **Direkter A4-PDF-Export (`reportlab`):** Prüfzertifikat (`GET /documents/{id}/report?format=pdf`) und GoBD-Verfahrensdokumentation (`GET /api/documents/{id}/export/procedural-doc?format=pdf`) werden serverseitig als fertig gesetztes A4-PDF mit laufender Kopf-/Fußzeile (`Seite X von Y`), geschützten Seitenumbrüchen und sauberem Tabellensatz erzeugt – ohne Umweg über den Browser-Druckdialog. Das GoBD-Prüfdatenpaket (ZIP) enthält nun `audit_certificate.pdf` und `verfahrensdokumentation.pdf` neben den HTML-Fassungen.
+- **Export-Center & Prüfvermerk:** Das Prüfzertifikat lädt direkt als A4-PDF herunter; bei der GoBD-Verfahrensdokumentation stehen im Export-Center jetzt **PDF** und **Word (.docx)** bereit (statt HTML und Word). Bei bereits versiegelten Belegen zeigt der Aktionsbutton im Prüfvermerk einheitlich „Siegel erneuern“.
+- **HTML-Druck-CSS (`Ctrl + P`) korrigiert:** Globales `word-break: break-all` von `.mono` entfernt (Normcodes wie `BR-DE-15` und BT-Kürzel brechen nicht mehr mitten im Wort um; `.hash` trägt das harte Umbrechen gezielt für 64-stellige SHA-256-Hashes), `.keep-next` für die E-Rechnungs-Einleitung vor den Tabellen ergänzt sowie leeren Gedankenstrich vor Check-Notizen ohne Detailtext entfernt.
+
 ## v2.7.2 – 18.11.2026
 
 - **Neuprüfung mit aktuellem Parser:** „Neu prüfen“ liest das gespeicherte Original neu ein – XML-Datensatz, Lesefassung und Abgleich mit dem PDF-Bildteil. Belege, die unter einer älteren Version hochgeladen wurden, erhalten so dieselben Befunde wie ein frischer Upload. Das Prüfprotokoll vermerkt die Parser-Version (`einvoice_parser`) und, ob neu eingelesen wurde (`einvoice_reread`); Regelwerk 2026.3.

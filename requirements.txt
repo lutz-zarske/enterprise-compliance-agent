@@ -12,3 +12,5 @@ defusedxml>=0.7,<0.8
 SQLAlchemy>=2.0,<2.1
 python-multipart>=0.0.12
 cryptography>=43,<47
+# Druckfertige A4-PDF-Erzeugung (Compliance-Prüfzertifikat & Verfahrensdokumentation; BSD-Lizenz).
+reportlab>=4.2,<5.2

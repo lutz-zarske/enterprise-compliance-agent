@@ -253,6 +253,7 @@ export const api = {
   reportJson: (id: string) => requestBlob(`/documents/${id}/report?format=json&lang=${getActiveLocale()}`),
   reportMarkdown: (id: string) => requestText(`/documents/${id}/report?format=markdown&lang=${getActiveLocale()}`),
   reportHtml: (id: string) => requestText(`/documents/${id}/report?format=html&lang=${getActiveLocale()}`),
+  reportPdf: (id: string) => requestBlob(`/documents/${id}/report?format=pdf&lang=${getActiveLocale()}`),
   copilot: (
     id: string,
     question: string,
@@ -277,7 +278,7 @@ export const api = {
   stopLocalAi: () => request<LocalAiResult>("/api/v1/ai/stop-local", { method: "POST" }),
   redact: (text: string) => request<RedactResult>("/api/v1/redact", json({ text })),
   gobdPackage: (id: string) => requestBlob(`/api/documents/${id}/export/gobd?lang=${getActiveLocale()}`),
-  proceduralDoc: (id: string, format: "html" | "docx") =>
+  proceduralDoc: (id: string, format: "html" | "docx" | "pdf") =>
     requestBlob(`/api/documents/${id}/export/procedural-doc?format=${format}&lang=${getActiveLocale()}`),
   override: (id: string, body: OverrideRequest) =>
     request<DocumentDetail>(`/api/documents/${id}/override`, json(body)),

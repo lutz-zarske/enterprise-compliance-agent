@@ -769,7 +769,7 @@ def _plural(template: str, count: int) -> str:
 
 _LAYOUT_TEXT: dict[str, dict[str, str]] = {
     "de": {
-        "print_hint": "A4-Druckansicht · Strg + P druckt den Bericht oder speichert ihn als PDF.",
+        "print_hint": "A4-Druckansicht · Beim Drucken (Strg + P) Ränder auf „Standard“ lassen; alternativ fertige PDF im Export-Center herunterladen.",
         "page": "Seite", "of": "von", "of_100": "von 100",
         "passed_of": "{passed} von {total} erfüllt", "not_applicable": "nicht anwendbar",
         "passed_notes": "{passed} erfüllt · {notes} Hinweis|{passed} erfüllt · {notes} Hinweise",
@@ -778,7 +778,7 @@ _LAYOUT_TEXT: dict[str, dict[str, str]] = {
         "pii_count": "{n} Fundstelle, maskiert|{n} Fundstellen, maskiert", "pii_none": "keine Fundstellen",
     },
     "en": {
-        "print_hint": "A4 print view · Ctrl + P prints the report or saves it as PDF.",
+        "print_hint": "A4 print view · Keep margins on “Default” when printing (Ctrl + P); or download the ready PDF in the Export Center.",
         "page": "Page", "of": "of", "of_100": "of 100",
         "passed_of": "{passed} of {total} passed", "not_applicable": "not applicable",
         "passed_notes": "{passed} passed · {notes} note|{passed} passed · {notes} notes",
@@ -787,7 +787,7 @@ _LAYOUT_TEXT: dict[str, dict[str, str]] = {
         "pii_count": "{n} finding, masked|{n} findings, masked", "pii_none": "no findings",
     },
     "es": {
-        "print_hint": "Vista de impresión A4 · Ctrl + P imprime el informe o lo guarda como PDF.",
+        "print_hint": "Vista de impresión A4 · Al imprimir (Ctrl + P), deje los márgenes en «Predeterminado» o descargue el PDF desde Exportación.",
         "page": "Página", "of": "de", "of_100": "de 100",
         "passed_of": "{passed} de {total} cumplidos", "not_applicable": "no aplicable",
         "passed_notes": "{passed} cumplidos · {notes} aviso|{passed} cumplidos · {notes} avisos",
@@ -799,26 +799,28 @@ _LAYOUT_TEXT: dict[str, dict[str, str]] = {
 
 
 def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
-    lang = lang or str(report.get("lang") or "de")
-    t = _rt(lang)
-    status_labels = _STATUS_LABELS_I18N.get(lang, _STATUS_LABELS)
-    source_labels = _SOURCE_LABELS_I18N.get(lang, _SOURCE_LABELS)
-    visual_labels = _VISUAL_LABELS_I18N.get(lang, _VISUAL_LABELS)
-    ref_note = REFERENCE_NOTE_I18N.get(lang, REFERENCE_NOTE)
-    struct_note = STRUCTURED_NOTE_I18N.get(lang, STRUCTURED_NOTE)
+    data = report_layout_data(report, lang)
+    lang = data["lang"]
+    t = data["text"]
+    lt = data["layout"]
+    status_labels = data["status_labels"]
+    source_labels = data["source_labels"]
+    visual_labels = data["visual_labels"]
+    ref_note = data["reference_note"]
+    struct_note = data["structured_note"]
+    tiles = data["tiles"]
     score = report["score"] or {}
     band = score.get("band", "red")
     doc = report["document"]
     sign = report["sign_off"]
     approved = bool(sign and sign["status"] == "SEALED_APPROVED")
     ai = report["ai_act"]
-    lt = _LAYOUT_TEXT.get(lang, _LAYOUT_TEXT["de"])
 
     def rows(checks: list[dict[str, Any]]) -> str:
         return "".join(
-            f"<tr><td>{_e(c['label'])}</td><td class='mono'>{_e(c.get('legal_reference'))}</td>"
+            f"<tr><td>{_e(c['label'])}</td><td class='small'>{_e(c.get('legal_reference'))}</td>"
             f"<td><span class='st st-{_e(c['status'])}'>{_e(status_labels.get(c['status'], c['status']))}</span></td>"
-            f"<td>{_e(c.get('detail') or '')}"
+            f"<td>{(_e(c['detail']) if c.get('detail') else ('' if (c.get('risk_note') or c.get('note')) else _e('')))}"
             f"{('<div class=risk>' + _e(c['risk_note']) + '</div>') if c.get('risk_note') else ''}"
             f"{('<div class=small>' + _e(c['note']) + '</div>') if c.get('note') else ''}</td></tr>"
             for c in checks
@@ -831,14 +833,15 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
     ) or f"<tr><td colspan='4'>{_e(t['no_pii'])}</td></tr>"
 
     einvoice = report.get("einvoice")
-    einvoice_block = ""
+    einvoice_head = ""
+    einvoice_tables = ""
     if einvoice and not einvoice.get("error"):
         terms = "".join(
-            f"<tr><td class='mono'>{_e(f['bt'])}</td><td>{_e(f['label'])}</td><td class='mono'>{_e(f['value'])}</td></tr>"
+            f"<tr><td class='mono nowrap'>{_e(f['bt'])}</td><td>{_e(f['label'])}</td><td class='mono'>{_e(f['value'])}</td></tr>"
             for f in einvoice["business_terms"]
         )
         visual = "".join(
-            f"<tr><td class='mono'>{_e(c['bt'])}</td><td>{_e(c['label'])}</td>"
+            f"<tr><td class='mono nowrap'>{_e(c['bt'])}</td><td>{_e(c['label'])}</td>"
             f"<td><span class='st st-{'pass' if c['status'] == 'match' else 'warn' if c['status'] == 'not_found' else 'fail'}'>"
             f"{_e(visual_labels[c['status']])}</span></td>"
             f"<td class='mono'>{_e(c['xml_value'])}{(' / PDF ' + _e(c['visual_value'])) if c.get('visual_value') else ''}</td></tr>"
@@ -847,10 +850,10 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
         container = (
             f"{_e(t['embedded_as'])} {_e(einvoice['attachment_name'])}" if einvoice["source"] == "embedded" else _e(t["pure_xml"])
         )
-        einvoice_block = f"""<p><strong>{_e(einvoice['profile'])}</strong> · Syntax {_e(einvoice['syntax'])} · {container}</p>
-<div class="grid small"><div>{_e(t['sha_xml'])}</div><div class="mono">{_e(einvoice['xml_sha256'])}</div>
-<div>{_e(t['spec_bt24'])}</div><div class="mono">{_e(einvoice['specification_id'])}</div></div>
-<table><thead><tr><th style="width:12%">BT</th><th style="width:38%">Business Term</th><th>{_e(t['bt_val'])}</th></tr></thead><tbody>{terms}</tbody></table>
+        einvoice_head = f"""<p><strong>{_e(einvoice['profile'])}</strong> · Syntax {_e(einvoice['syntax'])} · {container}</p>
+<div class="grid small"><div>{_e(t['sha_xml'])}</div><div class="hash">{_e(einvoice['xml_sha256'])}</div>
+<div>{_e(t['spec_bt24'])}</div><div class="hash">{_e(einvoice['specification_id'])}</div></div>"""
+        einvoice_tables = f"""<table><thead><tr><th style="width:12%">BT</th><th style="width:38%">Business Term</th><th>{_e(t['bt_val'])}</th></tr></thead><tbody>{terms}</tbody></table>
 {f'<table><thead><tr><th style="width:12%">BT</th><th style="width:30%">{_e(t["visual_h"])}</th><th style="width:20%">{_e(t["visual_col_res"])}</th><th>{_e(t["bt_val"])}</th></tr></thead><tbody>{visual}</tbody></table>' if visual else ''}"""
 
     override = report.get("human_override")
@@ -863,7 +866,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
 <div>Score</div><div class="num">{_e(override['previous_score'])} → <strong>{_e(override['new_score'])}</strong></div>
 <div>{_e(t['legal_basis'])}</div><div>{_e(override['legal_basis'])}</div>
 <div>{_e(t['reason'])}</div><div>{_e(override['reason'])}</div>
-<div>{_e(t['ledger_entry'])}</div><div class="mono">{_e(override['ledger_entry_hash'])} · {_e(t['ed25519_signed'])}</div>
+<div>{_e(t['ledger_entry'])}</div><div class="hash">{_e(override['ledger_entry_hash'])} · {_e(t['ed25519_signed'])}</div>
 </div></div>"""
 
     history = "".join(
@@ -894,41 +897,18 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
         else f'<div class="draft keep">{_e(t["draft_banner"])}</div>'
     )
 
-    def tally(items: list[dict[str, Any]]) -> tuple[str, str]:
-        relevant = [c for c in items if c.get("status") != "not_applicable"]
-        if not relevant:
-            return "neutral", lt["not_applicable"]
-        passed = sum(1 for c in relevant if c.get("status") == "pass")
-        # Mangel = Verstoß oder Hinweis mit Punktabzug; ein Hinweis ohne Abzug ist nur ein Vermerk.
-        defects = [c for c in relevant if c.get("status") == "fail" or (c.get("deduction") or 0) > 0]
-        notes = sum(1 for c in relevant if c.get("status") == "warn" and not (c.get("deduction") or 0))
-        if defects:
-            tone = "fail" if any(c.get("status") == "fail" for c in defects) else "warn"
-            return tone, _plural(lt["failed_of"], len(defects)).format(failed=len(defects), total=len(relevant))
-        if notes:
-            return "pass", _plural(lt["passed_notes"], notes).format(passed=passed, notes=notes)
-        return "pass", lt["passed_of"].format(passed=passed, total=len(relevant))
-
-    ai_tone = {"unacceptable": "fail", "high": "warn", "limited": "warn"}.get(ai.get("risk_level") or "", "pass")
-    pii_count = len(report["gdpr"]["findings"])
-    pii_tone = "warn" if report["gdpr"].get("contains_special_categories") else "pass"
-    tiles = [
-        ("§ 14 UStG", *tally(report["ustg_matrix"])),
-        (lt["math_short"], *tally(report["math_checks"])),
-        ("EU AI Act", ai_tone, ai["risk_label"]),
-        (lt["gdpr_short"], pii_tone, _plural(lt["pii_count"], pii_count).format(n=pii_count) if pii_count else lt["pii_none"]),
-    ]
     glance = "".join(
         f'<div class="tile t-{tone}"><span>{_e(label)}</span><b>{_e(value)}</b></div>' for label, tone, value in tiles
     )
 
-    sections: list[tuple[str, str]] = []
+    sections: list[tuple[str, str, str]] = []
     sections.append((
         t["ustg_h"],
-        f"""<table><thead><tr><th style="width:30%">{_e(t['col_item'])}</th><th style="width:24%">{_e(t['col_norm'])}</th><th style="width:12%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['ustg_matrix'])}</tbody></table>""",
+        "",
+        f"""<table><thead><tr><th style="width:28%">{_e(t['col_item'])}</th><th style="width:25%">{_e(t['col_norm'])}</th><th style="width:11%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['ustg_matrix'])}</tbody></table>""",
     ))
-    if einvoice_block:
-        sections.append((t["einvoice_h"], einvoice_block))
+    if einvoice_tables:
+        sections.append((t["einvoice_h"], einvoice_head, einvoice_tables))
     ai_body = (
         f"<p><strong>{_e(ai['risk_label'])}</strong>{(' · ' + _e(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}</p>"
         f"<p class='small'>{_e(ai['reasoning'])}</p>"
@@ -936,23 +916,27 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
         + "".join(f"<p class='small'>{_e(c['note'])}</p>" for c in ai["checks"] if c.get("note"))
         + "".join(f"<p class='risk'>{_e(c['risk_note'])}</p>" for c in ai["checks"] if c.get("risk_note"))
     )
-    sections.append((t["ai_h"], ai_body))
+    sections.append((t["ai_h"], "", f"<div class='keep'>{ai_body}</div>"))
     sections.append((
         t["math_h"],
-        f"""<table><thead><tr><th style="width:30%">{_e(t['col_check'])}</th><th style="width:24%">{_e(t['col_norm'])}</th><th style="width:12%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['math_checks'])}</tbody></table>""",
+        "",
+        f"""<table><thead><tr><th style="width:28%">{_e(t['col_check'])}</th><th style="width:25%">{_e(t['col_norm'])}</th><th style="width:11%">{_e(t['col_status'])}</th><th>{_e(t['col_note'])}</th></tr></thead><tbody>{rows(report['math_checks'])}</tbody></table>""",
     ))
     sections.append((
         t["gdpr_html"],
+        "",
         f"""<table><thead><tr><th>{_e(t['col_cat'])}</th><th>{_e(t['col_val'])}</th><th>{_e(t['col_src'])}</th><th class="num">{_e(t['col_conf'])}</th></tr></thead><tbody>{findings}</tbody></table>""",
     ))
     if override_block:
-        sections.append((t["override_h"], override_block))
+        sections.append((t["override_h"], "", override_block))
     sections.append((
         t["ledger_h"],
+        "",
         f"""<table><thead><tr><th class="num" style="width:6%">{_e(t['col_seq'])}</th><th style="width:25%">{_e(t['col_event'])}</th><th style="width:19%">{_e(t['col_time'])}</th><th>{_e(t['col_person'])}</th><th class="num" style="width:8%">Score</th><th style="width:19%">{_e(t['col_ehash'])}</th><th style="width:9%">{_e(t['col_sig'])}</th></tr></thead><tbody>{history}</tbody></table>""",
     ))
     details = "".join(
-        f'<h2><span class="no">{index}</span>{_e(title)}</h2>\n{body}\n' for index, (title, body) in enumerate(sections, start=1)
+        f'<div class="keep-next"><h2><span class="no">{index}</span>{_e(title)}</h2>\n{lead}</div>\n{body}\n'
+        for index, (title, lead, body) in enumerate(sections, start=1)
     )
 
     audited = report["inference"].get("audited_at") or report["ledger"].get("timestamp_utc")
@@ -1030,10 +1014,10 @@ tr.ms td {{ background: #f5f7ff; }}
 
 <h2>{_e(t['chain_section'])}</h2>
 <dl class="facts">
-<dt>{_e(t['sha_doc'])}</dt><dd class="mono">{_e(doc['sha256'])}</dd>
-<dt>{_e(t['ledger_entry'])}</dt><dd class="mono">{_e(report['ledger']['entry_hash'])}</dd>
-<dt>{_e(t['prev_hash'])}</dt><dd class="mono">{_e(report['ledger']['previous_hash'])}</dd>
-<dt>{_e(t['prompt_hash'])}</dt><dd class="mono">{_e(report['ledger']['prompt_hash'])}</dd>
+<dt>{_e(t['sha_doc'])}</dt><dd class="hash">{_e(doc['sha256'])}</dd>
+<dt>{_e(t['ledger_entry'])}</dt><dd class="hash">{_e(report['ledger']['entry_hash'])}</dd>
+<dt>{_e(t['prev_hash'])}</dt><dd class="hash">{_e(report['ledger']['previous_hash'])}</dd>
+<dt>{_e(t['prompt_hash'])}</dt><dd class="hash">{_e(report['ledger']['prompt_hash'])}</dd>
 <dt>{_e(t['hash_chain_lbl'])}</dt><dd>{_e(t['intact'] if report['ledger']['chain_valid'] else t['broken'])} ({_e(report['ledger']['chain_entries'])} {_e(t['entries'])})</dd>
 <dt>{_e(t['model_provider'])}</dt><dd>{_e(report['inference']['model'])} / {_e(report['inference']['provider'])}</dd>
 <dt>{_e(t['ruleset'])}</dt><dd>{_e(score.get('ruleset_version'))}</dd>
@@ -1047,6 +1031,49 @@ tr.ms td {{ background: #f5f7ff; }}
 <footer class="legal">{_e(report['disclaimer'])}<br>{_e(t['generated'])} {_e(_fmt_ts(report['generated_at']))} · {_e(report['generator'])}</footer>
 </section>
 </body></html>"""
+
+
+def report_layout_data(report: dict[str, Any], lang: str | None = None) -> dict[str, Any]:
+    """Gemeinsame Übersetzungstexte und Bereichs-Kacheln für HTML- und PDF-Prüfzertifikat."""
+    lang = lang or str(report.get("lang") or "de")
+    lt = _LAYOUT_TEXT.get(lang, _LAYOUT_TEXT["de"])
+    ai = report["ai_act"]
+
+    def tally(items: list[dict[str, Any]]) -> tuple[str, str]:
+        relevant = [c for c in items if c.get("status") != "not_applicable"]
+        if not relevant:
+            return "neutral", lt["not_applicable"]
+        passed = sum(1 for c in relevant if c.get("status") == "pass")
+        defects = [c for c in relevant if c.get("status") == "fail" or (c.get("deduction") or 0) > 0]
+        notes = sum(1 for c in relevant if c.get("status") == "warn" and not (c.get("deduction") or 0))
+        if defects:
+            tone = "fail" if any(c.get("status") == "fail" for c in defects) else "warn"
+            return tone, _plural(lt["failed_of"], len(defects)).format(failed=len(defects), total=len(relevant))
+        if notes:
+            return "pass", _plural(lt["passed_notes"], notes).format(passed=passed, notes=notes)
+        return "pass", lt["passed_of"].format(passed=passed, total=len(relevant))
+
+    ai_tone = {"unacceptable": "fail", "high": "warn", "limited": "warn"}.get(ai.get("risk_level") or "", "pass")
+    pii_count = len(report["gdpr"]["findings"])
+    pii_tone = "warn" if report["gdpr"].get("contains_special_categories") else "pass"
+    return {
+        "lang": lang,
+        "text": _rt(lang),
+        "layout": lt,
+        "status_labels": _STATUS_LABELS_I18N.get(lang, _STATUS_LABELS),
+        "source_labels": _SOURCE_LABELS_I18N.get(lang, _SOURCE_LABELS),
+        "visual_labels": _VISUAL_LABELS_I18N.get(lang, _VISUAL_LABELS),
+        "reference_note": REFERENCE_NOTE_I18N.get(lang, REFERENCE_NOTE),
+        "structured_note": STRUCTURED_NOTE_I18N.get(lang, STRUCTURED_NOTE),
+        "fmt_date": _fmt_date,
+        "fmt_ts": _fmt_ts,
+        "tiles": [
+            ("§ 14 UStG", *tally(report["ustg_matrix"])),
+            (lt["math_short"], *tally(report["math_checks"])),
+            ("EU AI Act", ai_tone, ai["risk_label"]),
+            (lt["gdpr_short"], pii_tone, _plural(lt["pii_count"], pii_count).format(n=pii_count) if pii_count else lt["pii_none"]),
+        ],
+    }
 
 
 def export_stem(filename: str) -> str:

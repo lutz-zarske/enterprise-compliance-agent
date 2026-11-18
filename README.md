@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 355 pytest](https://img.shields.io/badge/pytest-355_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 359 pytest](https://img.shields.io/badge/pytest-359_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
 > Checks mandatory invoice details and arithmetic; it does not replace full
 > EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
-> FastAPI · Next.js 15 · 355 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 359 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -235,8 +235,8 @@ Einordnung: [`docs/RECHTLICHE_ANALYSE_2026.md`](docs/RECHTLICHE_ANALYSE_2026.md)
 | **Lokale KI** | Ollama und LM Studio erkennen; Ollama per Klick starten (Flash Attention, 8-Bit-KV-Cache) und stoppen – nur direkt am Server |
 | **Compliance Copilot** | Dokumentbezogene Fragen mit Zeilen- und Normverweisen, Live-Arbeitsschritten und Denkstufe; Regelwerk-Antwort, wenn keine KI erreichbar ist; Korrekturanforderung an den Lieferanten |
 | **Prüfprotokoll** | Append-only mit SHA-256-Hash-Kette für alle Einträge (auch `analysis` und `provider_failover`), DB-Trigger gegen UPDATE/DELETE, zusätzlich Ed25519-Signaturen für Prüfer- und Steuerungsereignisse (`sign_off`, `human_override`, `model_change`, `archive`/`unarchive`, `release_update`), Kettenprüfung per API |
-| **Prüfzertifikat & Prüfdatenpaket** | A4-Druckvorlage (Ergebnis und Siegel auf Seite 1, Seitenzahlen) bzw. PDF über den Druckdialog, Markdown-Memo, JSON; ZIP mit Original, XML, Ledger-Auszug, Zertifikat, Verfahrensdokumentation und signiertem Manifest; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
-| **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 aus dem echten Systemzustand plus Anhang je Beleg; als Word-Datei (.docx) mit gelb markierten Platzhaltern zum Ergänzen oder als A4-HTML |
+| **Prüfzertifikat & Prüfdatenpaket** | Direktes A4-PDF (Ergebnis, Kennzahlen und Siegel auf Seite 1, laufende Seitenzahlen), A4-HTML-Druckansicht, Markdown-Memo, JSON; ZIP mit Original, XML, Ledger-Auszug, Zertifikat (PDF + HTML), Verfahrensdokumentation (PDF + HTML) und signiertem Manifest; Offline-Prüfung mit `scripts/verify_pruefpaket.py` |
+| **Verfahrensdokumentation** | Entwurf nach GoBD Rz. 153 aus dem echten Systemzustand plus Anhang je Beleg; als Word-Datei (.docx) mit gelb markierten Platzhaltern zum Ergänzen oder direkt als A4-PDF |
 | **DLP-Gateway** | `POST /api/v1/redact`: endgültige Schwärzung für andere Anwendungen vor jedem Cloud-LLM-Aufruf |
 | **Release-Assistent** | Neue Version per `git fetch --tags` prüfen und per Klick installieren – mit automatischer Datenbanksicherung, Erhalt aller lokalen Daten und Ledger-Eintrag |
 | **Musterdaten** | Vier Referenzbelege (gültig, Steuerfalle, KI-Recruiting nach Anhang III, ZUGFeRD an eine Kommune), sofort nutzbar ohne Modell. Alle Firmen, Personen, Adressen, Steuernummern und IBANs darin sind frei erfunden. |
@@ -435,12 +435,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 355 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 359 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-355 Tests (Stand v2.7.2) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+359 Tests (Stand v2.7.3) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.

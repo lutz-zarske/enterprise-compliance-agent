@@ -188,7 +188,9 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
       <div className="mt-3 flex justify-end">
         <button type="button" className="btn btn-primary" disabled={!ready} onClick={() => void seal()}>
           {busy ? <Spinner size={13} /> : <Stamp size={14} aria-hidden="true" />}
-          {tr("Digital versiegeln", "Seal digitally", "Sellar digitalmente")}
+          {existing
+            ? tr("Siegel erneuern", "Renew Seal", "Renovar sello")
+            : tr("Digital versiegeln", "Seal digitally", "Sellar digitalmente")}
           <Kbd>{mod} ↵</Kbd>
         </button>
       </div>

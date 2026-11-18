@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import type { DocumentDetail } from "../types/api";
-import { BookOpen, Copy, Download, Package, Printer, Stamp } from "./icons";
+import { BookOpen, Copy, Download, Package, Stamp } from "./icons";
 import { SignOffPanel } from "./SignOffPanel";
 import { Modal, Spinner } from "./ui";
 
@@ -16,34 +16,6 @@ interface Props {
   notify: (tone: "ok" | "bad" | "info", title: string, message?: string) => void;
 }
 
-/**
- * Druckt HTML über ein unsichtbares iframe - funktioniert auch mit X-API-Key. Der Titel des
- * Berichts (Pruefzertifikat_Beleg_Datum) wird kurz zum Seitentitel: Chrome schlägt ihn beim
- * „Als PDF speichern“ als Dateinamen vor.
- */
-function printHtml(html: string) {
-  const frame = window.document.createElement("iframe");
-  frame.style.position = "fixed";
-  frame.style.width = "0";
-  frame.style.height = "0";
-  frame.style.border = "0";
-  frame.setAttribute("aria-hidden", "true");
-  frame.srcdoc = html;
-  frame.onload = () => {
-    const previous = window.document.title;
-    const restore = () => {
-      window.document.title = previous;
-    };
-    window.document.title = frame.contentDocument?.title || previous;
-    frame.contentWindow?.addEventListener("afterprint", restore, { once: true });
-    frame.contentWindow?.focus();
-    frame.contentWindow?.print();
-    window.setTimeout(restore, 1_000);
-    window.setTimeout(() => frame.remove(), 60_000);
-  };
-  window.document.body.appendChild(frame);
-}
-
 function Option({ icon, title, text, action, busy, onClick, disabled, secondary }: {
   icon: React.ReactNode;
   title: string;
@@ -52,7 +24,7 @@ function Option({ icon, title, text, action, busy, onClick, disabled, secondary 
   busy: boolean;
   disabled?: boolean;
   onClick: () => void;
-  /** Zweites Format (z. B. HTML neben Word). */
+  /** Zweites Format (z. B. PDF neben Word). */
   secondary?: { action: string; busy: boolean; onClick: () => void };
 }) {
   return (
@@ -86,7 +58,7 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
   const analyzed = Boolean(document.scorecard);
   const stem = document.filename.replace(/\.(pdf|xml)$/i, "");
 
-  async function downloadProcedural(format: "html" | "docx") {
+  async function downloadProcedural(format: "html" | "docx" | "pdf") {
     if (!document) return;
     const { blob, filename } = await api.proceduralDoc(document.id, format);
     const prefix = tr("Verfahrensdokumentation", "ProceduralDocumentation", "DocumentacionProcedimientos");
@@ -96,7 +68,7 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
       tr("Verfahrensdokumentation erstellt", "Procedural documentation created", "Documentación creada"),
       format === "docx"
         ? tr("Gelb markierte Stellen in Word ergänzen, dann freigeben.", "Fill in the yellow placeholders in Word, then sign off.", "Complete en Word los campos marcados en amarillo y apruébela.")
-        : tr("Zum Ergänzen der markierten Stellen den Word-Export verwenden.", "Use the Word export to fill in the marked placeholders.", "Para completar los campos marcados, use la exportación a Word."),
+        : tr("A4-PDF gespeichert. Zum Ergänzen der Platzhalter Word nutzen.", "A4 PDF saved. Use Word to fill in the marked placeholders.", "PDF A4 guardado. Use Word para completar los campos marcados."),
     );
   }
 
@@ -133,9 +105,9 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
           icon={<Package size={16} />}
           title={tr("GoBD-Prüfdatenpaket exportieren (ZIP)", "Export GoBD Audit Data Package (ZIP)", "Exportar paquete de auditoría GoBD (ZIP)")}
           text={tr(
-            `Originalbeleg${document.einvoice && !document.einvoice.error ? ", XML-Datensatz" : ""}, Ledger-Auszug, A4-Zertifikat und Manifest mit SHA-256 und Ed25519-Systemsignatur.`,
-            `Original document${document.einvoice && !document.einvoice.error ? ", XML dataset" : ""}, ledger excerpt, A4 certificate and manifest with SHA-256 and Ed25519 system signature.`,
-            `Documento original${document.einvoice && !document.einvoice.error ? ", conjunto XML" : ""}, extracto del registro, certificado A4 y manifiesto con SHA-256 y firma Ed25519.`,
+            `Originalbeleg${document.einvoice && !document.einvoice.error ? ", XML-Datensatz" : ""}, Ledger-Auszug, A4-Zertifikat (PDF/HTML) und Manifest mit SHA-256 und Ed25519-Systemsignatur.`,
+            `Original document${document.einvoice && !document.einvoice.error ? ", XML dataset" : ""}, ledger excerpt, A4 certificate (PDF/HTML) and manifest with SHA-256 and Ed25519 system signature.`,
+            `Documento original${document.einvoice && !document.einvoice.error ? ", conjunto XML" : ""}, extracto del registro, certificado A4 (PDF/HTML) y manifiesto con SHA-256 y firma Ed25519.`,
           )}
           action="ZIP"
           busy={busy === "zip"}
@@ -165,17 +137,25 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
           }
         />
         <Option
-          icon={<Printer size={16} />}
-          title={tr("Prüfzertifikat drucken oder als PDF speichern", "Print certificate or save as PDF", "Imprimir certificado o guardar como PDF")}
+          icon={<Download size={16} />}
+          title={tr("Prüfzertifikat als PDF herunterladen", "Download Audit Certificate (PDF)", "Descargar certificado de auditoría (PDF)")}
           text={tr(
-            "Seite 1 mit Ergebnis und Siegel, danach alle Prüfpunkte und der Prüfpfad – im Druckdialog „Als PDF speichern“ wählen.",
-            "Page 1 shows the result and seal, followed by every check and the audit trail – choose “Save as PDF” in the print dialog.",
-            "La página 1 muestra el resultado y el sello; después, todas las comprobaciones y la pista de auditoría. Elija «Guardar como PDF».",
+            "Seite 1 mit Ergebnis und Siegel, danach alle Prüfpunkte und der Prüfpfad – fertig formatiertes A4-PDF.",
+            "Page 1 with score summary and seal, followed by every check and the audit trail as a ready-to-archive A4 PDF.",
+            "Página 1 con resultado y sello; después, todas las comprobaciones y la pista de auditoría en PDF A4.",
           )}
-          action={tr("Drucken", "Print", "Imprimir")}
-          busy={busy === "print"}
+          action="PDF"
+          busy={busy === "pdf"}
           disabled={!analyzed}
-          onClick={() => run("print", async () => printHtml(await api.reportHtml(document.id)))}
+          onClick={() =>
+            run("pdf", async () => {
+              const { blob, filename } = await api.reportPdf(document.id);
+              const fallback = tr(`Pruefzertifikat_${stem}.pdf`, `AuditCertificate_${stem}.pdf`, `CertificadoAuditoria_${stem}.pdf`);
+              const targetName = filename ?? fallback;
+              downloadBlob(blob, targetName, "application/pdf");
+              notify("ok", tr("Prüfzertifikat erstellt", "Audit certificate created", "Certificado generado"), targetName);
+            })
+          }
         />
         <Option
           icon={<Download size={16} />}
@@ -203,14 +183,14 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
           icon={<BookOpen size={16} />}
           title={tr("GoBD-Verfahrensdokumentation", "GoBD Procedural Documentation", "Documentación de procedimientos GoBD")}
           text={tr(
-            "Vier Säulen nach GoBD Rz. 153 mit Prüfpfad dieses Belegs. In Word die gelb markierten Stellen ergänzen; aufzubewahren 10 Jahre (§ 147 Abs. 1 Nr. 1 AO).",
-            "Four pillars per GoBD Rz. 153 with this document’s audit trail. Fill in the yellow placeholders in Word; retain 10 years (§ 147(1) No. 1 AO).",
-            "Cuatro pilares según GoBD Rz. 153 con la pista de este documento. Complete en Word los campos amarillos; conservar 10 años (§ 147(1) n.º 1 AO).",
+            "Vier Säulen nach GoBD Rz. 153 mit Prüfpfad dieses Belegs. Word zum Ergänzen der gelb markierten Stellen oder PDF zur Ablage (10 Jahre, § 147 Abs. 1 Nr. 1 AO).",
+            "Four pillars per GoBD Rz. 153 with this document’s audit trail. Use Word to fill in the yellow placeholders or PDF for archiving (10 years, § 147(1) No. 1 AO).",
+            "Cuatro pilares según GoBD Rz. 153 con la pista de este documento. Use Word para completar los campos amarillos o PDF para archivo (10 años, § 147(1) n.º 1 AO).",
           )}
           action="Word"
           busy={busy === "vd"}
           onClick={() => run("vd", () => downloadProcedural("docx"))}
-          secondary={{ action: "HTML", busy: busy === "vd-html", onClick: () => void run("vd-html", () => downloadProcedural("html")) }}
+          secondary={{ action: "PDF", busy: busy === "vd-pdf", onClick: () => void run("vd-pdf", () => downloadProcedural("pdf")) }}
         />
         <Option
           icon={<Copy size={16} />}

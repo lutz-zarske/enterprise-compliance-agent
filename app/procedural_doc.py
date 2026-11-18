@@ -461,7 +461,7 @@ def _sections_de(
                         "Zertifikat, Prüfdatenpaket, Verfahrensdokumentation, Ledger",
                         "Inferenz: Ollama (lokal) oder Gemini / Claude / OpenAI über HTTPS, Cloud-Aufrufe nur nach "
                         "Pseudonymisierung im Privacy Gateway",
-                        "Ausgaben: Zertifikat (HTML/Markdown/JSON), Prüfdatenpaket (ZIP mit signiertem Manifest)",
+                        "Ausgaben: Zertifikat (PDF/HTML/Markdown/JSON), Prüfdatenpaket (ZIP mit signiertem Manifest)",
                         "Anbindung an ERP und Archiv: " + ZU_ERGAENZEN,
                     ],
                 },
@@ -978,10 +978,15 @@ def _todo(text: str, todo_token: str = ZU_ERGAENZEN) -> str:
 
 
 _PD_LAYOUT: dict[str, dict[str, str]] = {
-    "de": {"print_hint": "A4-Druckansicht · Strg + P druckt die Dokumentation oder speichert sie als PDF. Zum Ergänzen der markierten Stellen den Word-Export verwenden.", "page": "Seite", "of": "von"},
-    "en": {"print_hint": "A4 print view · Ctrl + P prints the documentation or saves it as PDF. Use the Word export to fill in the marked fields.", "page": "Page", "of": "of"},
-    "es": {"print_hint": "Vista de impresión A4 · Ctrl + P imprime la documentación o la guarda como PDF. Para completar los campos marcados, use la exportación a Word.", "page": "Página", "of": "de"},
+    "de": {"print_hint": "A4-Druckansicht · Beim Drucken (Strg + P) Ränder auf „Standard“ lassen. Für PDF direkt oder Word den Export in der App verwenden.", "page": "Seite", "of": "von"},
+    "en": {"print_hint": "A4 print view · Keep margins on “Default” when printing (Ctrl + P). Download PDF or Word directly from the app.", "page": "Page", "of": "of"},
+    "es": {"print_hint": "Vista de impresión A4 · Al imprimir (Ctrl + P), deje los márgenes en «Predeterminado». Descargue PDF o Word desde la app.", "page": "Página", "of": "de"},
 }
+
+
+def procedural_layout_text(lang: str) -> dict[str, str]:
+    """Laufende Kopf-/Fußzeilen-Etiketten der Verfahrensdokumentation (HTML & PDF)."""
+    return _PD_LAYOUT.get(lang, _PD_LAYOUT["de"])
 
 
 def render_html(doc: dict[str, Any], *, lang: str = "de") -> str:
@@ -1013,7 +1018,7 @@ def render_html(doc: dict[str, Any], *, lang: str = "de") -> str:
     if annex:
         document_name = str(annex["rows"][0][1]) if annex.get("rows") else ""
         facts = "".join(
-            f"<dt>{_e(key)}</dt><dd{' class=mono' if key == 'SHA-256' else ''}>{_e(value)}</dd>"
+            f"<dt>{_e(key)}</dt><dd{' class=hash' if key == 'SHA-256' else ''}>{_e(value)}</dd>"
             for key, value in annex["rows"]
         )
         ledger = "".join(

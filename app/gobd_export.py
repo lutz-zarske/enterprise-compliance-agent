@@ -5,9 +5,11 @@ Inhalt
 1. ``original/<Dateiname>``   Originalbeleg, bitgenau wie empfangen (PDF oder XML)
 2. ``<anhang>.xml``           eingebetteter E-Rechnungs-Datensatz (nur hybride PDFs)
 3. ``ledger_audit_trail.json`` alle Ledger-Einträge des Dokuments + Kettenprüfung
-4. ``audit_certificate.html``  druckfertiges A4-Prüfzertifikat
-5. ``verfahrensdokumentation.html`` GoBD-Verfahrensdokumentation (Entwurf) mit Belegbezug
-6. ``manifest.json``           SHA-256 je Datei, Prüfzeitstempel, System-Signatur
+4. ``audit_certificate.pdf``   fertig gesetztes A4-Prüfzertifikat (PDF)
+5. ``audit_certificate.html``  A4-Druckansicht des Prüfzertifikats (HTML)
+6. ``verfahrensdokumentation.pdf`` GoBD-Verfahrensdokumentation (Entwurf, PDF)
+7. ``verfahrensdokumentation.html`` GoBD-Verfahrensdokumentation (Entwurf, HTML)
+8. ``manifest.json``           SHA-256 je Datei, Prüfzeitstempel, System-Signatur
 
 Einordnung
 ----------
@@ -41,7 +43,9 @@ PACKAGE_FORMAT = "eca-pruefdatenpaket/1.0"
 
 LEDGER_FILE = "ledger_audit_trail.json"
 CERTIFICATE_FILE = "audit_certificate.html"
+CERTIFICATE_PDF_FILE = "audit_certificate.pdf"
 PROCEDURAL_DOC_FILE = "verfahrensdokumentation.html"
+PROCEDURAL_DOC_PDF_FILE = "verfahrensdokumentation.pdf"
 MANIFEST_FILE = "manifest.json"
 
 
@@ -82,6 +86,8 @@ def build_gobd_package(
     signer: SystemSigner,
     created_at: datetime | None = None,
     procedural_doc_html: str | None = None,
+    certificate_pdf: bytes | None = None,
+    procedural_doc_pdf: bytes | None = None,
 ) -> tuple[bytes, dict[str, Any]]:
     """Erzeugt das ZIP und liefert (ZIP-Bytes, Manifest)."""
     created = created_at or utcnow()
@@ -94,13 +100,23 @@ def build_gobd_package(
         files.append((name, data, "Eingebetteter E-Rechnungs-Datensatz (maßgeblich bei hybriden Rechnungen)"))
     ledger = build_ledger_document(record, entries, verification)
     files.append((LEDGER_FILE, _json_bytes(ledger), "Prüfprotokoll des Dokuments mit SHA-256-Hash-Kette"))
-    files.append((CERTIFICATE_FILE, certificate_html.encode("utf-8"), "Druckfertiges A4-Prüfzertifikat"))
+    if certificate_pdf is not None:
+        files.append((CERTIFICATE_PDF_FILE, certificate_pdf, "Druckfertiges A4-Prüfzertifikat (PDF)"))
+    files.append((CERTIFICATE_FILE, certificate_html.encode("utf-8"), "A4-Prüfzertifikat (HTML)"))
+    if procedural_doc_pdf is not None:
+        files.append(
+            (
+                PROCEDURAL_DOC_PDF_FILE,
+                procedural_doc_pdf,
+                "GoBD-Verfahrensdokumentation (Entwurf, PDF) mit Prüfpfad dieses Belegs; aufzubewahren 10 Jahre",
+            )
+        )
     if procedural_doc_html is not None:
         files.append(
             (
                 PROCEDURAL_DOC_FILE,
                 procedural_doc_html.encode("utf-8"),
-                "GoBD-Verfahrensdokumentation (Entwurf) mit Prüfpfad dieses Belegs; aufzubewahren 10 Jahre",
+                "GoBD-Verfahrensdokumentation (Entwurf, HTML) mit Prüfpfad dieses Belegs; aufzubewahren 10 Jahre",
             )
         )
 
