@@ -135,3 +135,22 @@ def test_textansicht_markiert_leitweg_id_nicht() -> None:
     view = build_text_view("Leitweg-ID: 04011000-1234512345-06\nTelefon: 0561 1234567", "standard")
     assert "04011000-1234512345-06" in view["text"]
     assert "0561 1234567" not in view["text"]
+
+
+def test_textansicht_kein_offset_drift_nach_esszett_und_korrekter_umlaut() -> None:
+    # Viele 'ß' verschieben durch casefold() die Zeichenlänge; Spans dürfen nicht driften.
+    prefix = "Gemäß Vertragsabschluss und Maßnahmen gemäß Außenwirtschaftsverordnung (ß-Test). " * 12
+    sample = (
+        prefix
+        + "Ansprechpartner: Max Beispiel. "
+        + "Auswertung genetische Screening-Ergebnisse und Gewerkschaftszugehörigkeit; Hotel-Rezeption."
+    )
+    view = build_text_view(sample, "standard")
+    text = str(view["text"])
+    assert "genetische" not in text
+    assert "Gewerkschaftszugehörigkeit" not in text
+    assert " [ART. 9] Screening-Ergebnisse und [ART. 9]; Hotel-Rezeption." in text
+    assert "genetisch[ART. 9]" not in text and "Gewerkschaf[ART. 9]" not in text
+    labels = {span["label"] for span in view["spans"]}
+    assert "Name einer natürlichen Person" in labels
+    assert "Name einer natuerlichen Person" not in labels

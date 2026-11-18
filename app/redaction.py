@@ -190,11 +190,20 @@ _KEYWORD_OVERRIDES = {"rezept": r"rezept(?!ion)"}  # "Rezeption" ist kein Gesund
 def _keyword_pattern(keyword: str) -> re.Pattern[str]:
     body = _KEYWORD_OVERRIDES.get(keyword, re.escape(keyword))
     prefix = r"(?<![a-zäöüß])" if len(keyword) <= _SHORT_KEYWORD else ""
-    return re.compile(prefix + body)
+    return re.compile(prefix + body, re.IGNORECASE)
+
+
+def _keyword_span_pattern(keyword: str) -> re.Pattern[str]:
+    body = _KEYWORD_OVERRIDES.get(keyword, re.escape(keyword))
+    prefix = r"(?<![a-zäöüß])" if len(keyword) <= _SHORT_KEYWORD else r"\b"
+    return re.compile(rf"{prefix}(?:{body})\w*", re.IGNORECASE)
 
 
 _KEYWORD_PATTERNS: dict[str, re.Pattern[str]] = {
     keyword: _keyword_pattern(keyword) for keywords in KEYWORD_RULES.values() for keyword in keywords
+}
+_KEYWORD_SPAN_PATTERNS: dict[str, re.Pattern[str]] = {
+    keyword: _keyword_span_pattern(keyword) for keywords in KEYWORD_RULES.values() for keyword in keywords
 }
 
 #: Muster für schlüsselwortverankerte Identifikatoren.
@@ -245,7 +254,6 @@ def scan_text(text: str) -> list[PIIFinding]:
     """Deterministische PII-Erkennung ohne LLM-Beteiligung."""
     findings: list[PIIFinding] = []
     counts: dict[PIICategory, int] = {}
-    lowered = text.casefold()
 
     def add(category: PIICategory, value: str, start: int, end: int, confidence: float) -> None:
         if counts.get(category, 0) >= MAX_FINDINGS_PER_CATEGORY:
@@ -289,7 +297,7 @@ def scan_text(text: str) -> list[PIIFinding]:
     # --- Besondere Kategorien nach Art. 9/10 DSGVO -------------------------
     for category, keywords in KEYWORD_RULES.items():
         for keyword in keywords:
-            match = _KEYWORD_PATTERNS[keyword].search(lowered)
+            match = _KEYWORD_PATTERNS[keyword].search(text)
             if match is None:
                 continue
             add(
@@ -380,7 +388,7 @@ _VIEW_CATEGORIES: dict[str, tuple[str, str | None]] = {
     "ID_NUMBER": ("Ausweis-/Kennnummer", None),
     "DATE_OF_BIRTH": ("Geburtsdatum", None),
     "ART9": ("Besondere Kategorie (Art. 9/10 DSGVO)", "[ART. 9]"),
-    "PERSON": ("Name einer natuerlichen Person", "[NAME]"),
+    "PERSON": ("Name einer natürlichen Person", "[NAME]"),
     "ORG": ("Firma / Organisation", "[FIRMA]"),
     "ADDRESS": ("Anschrift", "[ADRESSE]"),
     "AMOUNT": ("Betrag", "[BETRAG]"),
@@ -423,11 +431,10 @@ def _collect_view_spans(text: str) -> list[tuple[int, int, str, str]]:
         }[category]
         for match in pattern.finditer(text):
             raw.append((*match.span(1), name, match.group(1)))
-    lowered = text.casefold()
     for keywords in KEYWORD_RULES.values():
         for keyword in keywords:
-            for match in re.finditer(rf"\b{re.escape(keyword)}\w*", lowered):
-                raw.append((match.start(), match.end(), "ART9", text[match.start() : match.end()]))
+            for match in _KEYWORD_SPAN_PATTERNS[keyword].finditer(text):
+                raw.append((match.start(), match.end(), "ART9", match.group(0)))
     for span in PrivacyVault().find_spans(text):
         raw.append((span.start, span.end, span.category, span.value))
     for match in _DATE_PATTERN.finditer(text):

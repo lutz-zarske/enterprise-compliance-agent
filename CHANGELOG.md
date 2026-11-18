@@ -3,6 +3,14 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.7.5 – 18.11.2026
+
+Feinschliff aus einem Live-Chrome-End-to-End-Stresstest (`1440×900`, `1024×768` und `390×844` inkl. Mehrseiten-PDF-Verträgen, i18n-Wechsel und Upload-Negativtests):
+
+- **Belegtext-Spans bei Dokumenten mit `ß`:** Die Stichwortsuche in `app/redaction.py` arbeitet direkt über `re.IGNORECASE` auf dem Originaltext statt auf `str.casefold()` (`ß` → `ss`), sodass Zeichen-Offsets auch über zwölfseitige Dokumente mit vielen `ß`-Vorkommen exakt bündig bleiben (`[ART. 9]`).
+- **Umlaut & i18n-Zuordnung im Inspektor:** Der Kategorie-Titel `"Name einer natürlichen Person"` verwendet im Redaction-Modul wieder echtes `ü`, sodass die Klartextanzeige im deutschen Belegtext und die automatische EN/ES-Übersetzung beim Sprachwechsel korrekt greifen.
+- **Modale auf kleineren Viewports scrollbar:** `Modal` in `frontend/src/components/ui.tsx` nutzt nun eine viewport-begrenzte Flex-Spalte mit internem `.scroll-area`, sodass auch lange Dialoge wie `Export-Center & Prüfvermerk` bei `1024×768` und `390×844` vollständig im sichtbaren Fenster bleiben und bis zum `Digital versiegeln`-Button gescrollt werden können.
+
 ## v2.7.4 – 18.11.2026
 
 Verbesserungen aus einem End-to-End-Stresstest mit Mischsatz-, Kleinbetrags-, Reverse-Charge-, Groß- und Sonderzeichendokumenten:
