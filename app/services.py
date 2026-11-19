@@ -56,7 +56,7 @@ from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import PrivacyVault
 from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
 from app.runtime_settings import RuntimeSettingsStore
-from app.scoring import RULESET_VERSION, compute_scorecard, presented_band, reconcile_net_amount
+from app.scoring import RULESET_VERSION, complete_amounts, compute_scorecard, presented_band
 from app.schemas import (
     SPECIAL_CATEGORIES,
     AIActAssessment,
@@ -965,7 +965,7 @@ class DocumentService:
         # schlüssel und werden als ein Treffer (source="both") erkannt.
         text = record.raw_text or ""
         if provider != STRUCTURED_PROVIDER:
-            extraction = reconcile_net_amount(extraction, text)
+            extraction = complete_amounts(extraction, text)
         llm_findings = enforce_masking(
             audit_payload.gdpr.findings, enabled=self._settings.mask_pii_in_storage
         )

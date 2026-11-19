@@ -3,6 +3,15 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.8.3 – 19.11.2026
+
+Gegenproben mit unbekannten Rechnungen und Prüfmatrix typischer deutscher Rechnungen – 428 Offline-Tests:
+
+- **Mischsteuersätze (z. B. Hotel 7 % + 19 %):** Alle USt-Zeilen je Steuersatz werden erfasst (Satz, Bemessungsgrundlage, Betrag); die USt-Summe ist die Summe der Zeilen, jede Zeile wird geprüft (Basis × Satz), Netto + USt = Brutto unter Berücksichtigung steuerfreier Posten. Bisher zählte nur die erste USt-Zeile, und die Steuer wurde mit einem Satz auf das gesamte Netto gerechnet (−15 und −10 mit Sperre). Die Kerndaten zeigen die Umsatzsteuer je Steuersatz.
+- **Beträge auch ohne KI:** Im Cloud-Betrieb ersetzt das Privacy Gateway Beträge mit Währungsangabe durch Platzhalter; Modelle liefern dafür oft keinen Wert. Fehlende Beträge füllt das Regelwerk jetzt aus dem Belegtext (eindeutige Summen-Bezeichner) und gleicht widersprüchliche ab – „Summe netto“ statt Bemessungsgrundlage, Summe aller Steuerzeilen statt nur der ersten, Gesamtbetrag statt Restforderung. Jede Übernahme steht als Hinweis beim Beleg; README und Einstellungen › Über beschreiben das.
+- **Steuerbefreite Belege:** Bei Kleinunternehmern (§ 19 UStG), Reverse Charge und innergemeinschaftlicher Lieferung gilt ohne ausgewiesene Steuer USt = 0 und Netto = Gesamtbetrag.
+- **Prüfmatrix:** 13 typische Rechnungsfälle als Text-PDF (je mit gefüllten und leeren KI-Beträgen, teils mit typischer Fehlextraktion) und 5 als E-Rechnung; Erwartungen in `docs/PRUEFMATRIX.md`. Regelwerk 2026.6.
+
 ## v2.8.2 – 19.11.2026
 
 Praxisprüfung mit einer Rechnung, die steuerfreie Posten enthält (reines PDF, KI-Extraktion) – 393 Offline-Tests:

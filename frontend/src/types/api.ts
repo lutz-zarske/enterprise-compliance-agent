@@ -101,6 +101,8 @@ export interface ExtractionResult {
   tax_rate: Money;
   tax_amount: Money;
   tax_exemption_note: string | null;
+  /** USt je Steuersatz aus dem Belegtext (Regelwerk). */
+  tax_lines?: { rate: Money; base: Money; amount: Money }[];
   summary: string;
   issues: string[];
 }

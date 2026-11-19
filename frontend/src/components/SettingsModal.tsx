@@ -1289,7 +1289,7 @@ function AboutSection({ version, release, checking, notify }: {
     },
     {
       title: tr("Schützen", "Protect", "Proteger"),
-      text: tr("Personenbezogene Daten werden erkannt und vor jedem Cloud-Aufruf pseudonymisiert.", "Personal data is detected and pseudonymized before every cloud call.", "Los datos personales se detectan y se seudonimizan antes de cada llamada a la nube."),
+      text: tr("Personenbezogene Daten und Beträge werden erkannt und vor jedem Cloud-Aufruf pseudonymisiert; Beträge, Steuern und Summen ermittelt das Regelwerk aus dem Belegtext.", "Personal data and amounts are detected and pseudonymized before every cloud call; amounts, taxes and totals are determined by the rule engine from the document text.", "Los datos personales y los importes se detectan y se seudonimizan antes de cada llamada a la nube; importes, impuestos y totales los determina el motor de reglas a partir del texto."),
     },
     {
       title: tr("Prüfen", "Check", "Comprobar"),

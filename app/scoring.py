@@ -52,10 +52,11 @@ from app.schemas import (
     ScoreCheck,
     Scorecard,
     ScoreTile,
+    TaxLineItem,
     iban_checksum_valid,
 )
 
-RULESET_VERSION = "2026.5"
+RULESET_VERSION = "2026.6"
 
 #: Grenze der Kleinbetragsrechnung nach Paragraf 33 UStDV (seit 01.01.2017).
 SMALL_AMOUNT_LIMIT = Decimal("250")
@@ -157,6 +158,45 @@ class TextFacts:
     net_labeled: Decimal | None = None
     #: Beträge steuerfreier Einzelposten (z. B. Porto als durchlaufender Posten).
     tax_free_amounts: tuple[Decimal, ...] = ()
+    #: Umsatzsteuerzeilen je Steuersatz (Satz, Bemessungsgrundlage oder None, Betrag).
+    tax_lines: tuple[tuple[Decimal, Decimal | None, Decimal], ...] = ()
+
+
+#: Bezeichner von Brutto- und Endsummen: eine solche Zeile ist keine USt-Zeile („Gesamtbetrag inkl. 19 % USt“).
+_GROSS_LINE = re.compile(
+    r"gesamtbetrag|rechnungsbetrag|bruttosumme|bruttobetrag|brutto|endbetrag|zu\s+zahlen|zahlbetrag|rechnungssumme",
+    re.IGNORECASE,
+)
+
+
+def tax_breakdown(text: str) -> list[tuple[Decimal, Decimal | None, Decimal]]:
+    """Umsatzsteuerzeilen je Steuersatz: „zzgl. 7 % USt auf 80,00 EUR: 5,60 EUR“ -> (7, 80.00, 5.60).
+
+    Erfasst nur Zeilen mit Steuerwort und ausdrücklichem Prozentsatz; Brutto-,
+    Zahlungs- und Kennnummernzeilen zählen nicht.  Doppelte Zeilen (etwa eine
+    wiederholte Aufschlüsselung) werden einmal gezählt.
+    """
+    lines: list[tuple[Decimal, Decimal | None, Decimal]] = []
+    for raw in (text or "").splitlines():
+        low = raw.casefold()
+        if not _TAX_WORD.search(low) or _TAX_ID_WORD.search(low) or _EXCLUDING_TAX.search(low):
+            continue
+        if _PAYMENT_TERMS.search(raw) or _GROSS_LINE.search(raw):
+            continue
+        undated = _DATE_TOKEN.sub(" ", raw)
+        percents = [value for value in (_to_decimal(m) for m in _PERCENT.findall(undated)) if value is not None]
+        if not percents or not Decimal(0) <= percents[0] <= Decimal(30):
+            continue
+        amounts = [
+            value for value in (_to_decimal(m) for m in _AMOUNT.findall(_PERCENT.sub(" ", undated)))
+            if value is not None
+        ]
+        if not amounts:
+            continue
+        entry = (percents[0].normalize(), amounts[-2] if len(amounts) >= 2 else None, amounts[-1])
+        if entry not in lines:
+            lines.append(entry)
+    return lines
 
 
 #: Einzelposten ohne Umsatzsteuer: steuerfrei, durchlaufender Posten, 0 % oder nicht steuerbar.
@@ -297,6 +337,11 @@ def analyze_text(text: str) -> TextFacts:
     net = _pick(labeled["net"])
     tax = _pick(labeled["tax"])
     gross = _pick(labeled["gross"], last=True)
+    breakdown = tax_breakdown(text)
+    tax_total_labeled = next((value for rank, value in labeled["tax"] if rank == 1), None)
+    if tax_total_labeled is None and len({line[0] for line in breakdown}) > 1:
+        # Mischsteuersätze ohne eigene Steuersumme: USt-Summe = Summe der Zeilen je Steuersatz.
+        tax = sum((line[2] for line in breakdown), Decimal(0))
     return TextFacts(
         vat_id=bool(_VAT_ID.search(text)),
         tax_number=bool(_TAX_NUMBER.search(text)),
@@ -313,6 +358,7 @@ def analyze_text(text: str) -> TextFacts:
         full_exemption=full_exemption_claim(text),
         net_labeled=next((value for rank, value in labeled["net"] if rank == 1), None),
         tax_free_amounts=tuple(tax_free_positions(text)),
+        tax_lines=tuple(breakdown),
     )
 
 
@@ -780,25 +826,108 @@ def reconcile_net_amount(extraction: ExtractionResult, text: str) -> ExtractionR
     („19 % USt auf 100,00“).  Stimmt Netto + USt = Brutto nur mit dem Wert hinter
     einem eindeutigen Summen-Bezeichner, gilt dieser – mit Hinweis.
     """
-    if extraction.doc_type is not DocType.INVOICE or extraction.net_amount is None:
-        return extraction
-    facts = analyze_text(text or "")
-    labeled = facts.net_labeled
-    tax = extraction.tax_amount if extraction.tax_amount is not None else facts.tax_amount
-    gross = extraction.total_amount if extraction.total_amount is not None else facts.gross_amount
-    net = extraction.net_amount
-    if labeled is None or tax is None or gross is None or abs(net - labeled) <= _MONEY_TOLERANCE:
-        return extraction
-    if abs(net + tax - gross) <= _MONEY_TOLERANCE or abs(labeled + tax - gross) > _MONEY_TOLERANCE:
+    return complete_amounts(extraction, text)
+
+
+def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResult:
+    """Sichert Netto, Umsatzsteuer und Brutto deterministisch über den Belegtext ab.
+
+    1. **Auffüllen:** Fehlen Beträge in der KI-Antwort (etwa weil das Privacy
+       Gateway sie im Cloud-Betrieb durch Platzhalter ersetzt), übernimmt das
+       Regelwerk die Werte hinter eindeutigen Summen-Bezeichnern.
+    2. **Abgleich:** Geht Netto + USt = Brutto nur mit einem Wert aus dem Beleg auf
+       (z. B. „Summe netto“ statt der Bemessungsgrundlage, Summe aller USt-Zeilen
+       statt nur der ersten, Gesamtbetrag statt Restforderung), gilt dieser.
+    3. **USt je Steuersatz:** Die Zeilen der Aufschlüsselung stehen in ``tax_lines``.
+
+    Jede Änderung steht als Hinweis in ``issues``.
+    """
+    if extraction.doc_type is not DocType.INVOICE:
         return extraction
     from app.extractors.einvoice import format_money
 
+    facts = analyze_text(text or "")
     currency = extraction.currency or "EUR"
-    note = (
-        f"Netto aus „Summe netto“ des Belegs übernommen ({format_money(labeled, currency)}); der extrahierte Wert "
-        f"{format_money(net, currency)} ergab mit der Umsatzsteuer nicht den Gesamtbetrag."
-    )
-    return extraction.model_copy(update={"net_amount": labeled, "issues": [*extraction.issues, note]})
+    text_net = facts.net_labeled if facts.net_labeled is not None else facts.net_amount
+    text_tax, text_gross = facts.tax_amount, facts.gross_amount
+    net, tax, gross = extraction.net_amount, extraction.tax_amount, extraction.total_amount
+    notes: list[str] = []
+
+    filled = [
+        label
+        for label, value, text_value in (
+            ("Netto", net, text_net), ("Umsatzsteuer", tax, text_tax), ("Brutto", gross, text_gross)
+        )
+        if value is None and text_value is not None
+    ]
+    if filled:
+        notes.append(
+            f"{', '.join(filled)} aus dem Belegtext übernommen (Summen-Bezeichner); die KI-Antwort enthielt "
+            "dazu keinen Wert."
+        )
+    net = net if net is not None else text_net
+    tax = tax if tax is not None else text_tax
+    gross = gross if gross is not None else text_gross
+    exempt_whole = facts.full_exemption or full_exemption_claim(extraction.tax_exemption_note)
+    if exempt_whole and gross is not None and (tax is None or abs(tax) <= _MONEY_TOLERANCE):
+        # Befreiung des ganzen Belegs (§ 19, § 13b, ig. Lieferung): keine USt, Entgelt = Gesamtbetrag.
+        if net is None:
+            net = gross
+            notes.append("Netto = Gesamtbetrag (Steuerbefreiung für den ganzen Beleg, keine Umsatzsteuer).")
+        tax = Decimal(0) if tax is None else tax
+
+    def balanced(n: Decimal | None, t: Decimal | None, g: Decimal | None) -> bool:
+        return n is not None and t is not None and g is not None and abs(n + t - g) <= _MONEY_TOLERANCE
+
+    if net is not None and tax is not None and gross is not None and not balanced(net, tax, gross):
+        for label, n, t, g in (
+            ("Netto", text_net, tax, gross),
+            ("Umsatzsteuer", net, text_tax, gross),
+            ("Gesamtbetrag", net, tax, text_gross),
+            ("Netto und Umsatzsteuer", text_net, text_tax, gross),
+        ):
+            if not balanced(n, t, g) or (n, t, g) == (net, tax, gross):
+                continue
+            before, after = {
+                "Netto": (net, n),
+                "Umsatzsteuer": (tax, t),
+                "Gesamtbetrag": (gross, g),
+                "Netto und Umsatzsteuer": (net, n),
+            }[label]
+            if label == "Netto":
+                notes.append(
+                    f"Netto aus „Summe netto“ des Belegs übernommen ({format_money(after, currency)}); der extrahierte "
+                    f"Wert {format_money(before, currency)} ergab mit der Umsatzsteuer nicht den Gesamtbetrag."
+                )
+            elif label == "Umsatzsteuer":
+                notes.append(
+                    f"Umsatzsteuer aus dem Belegtext übernommen ({format_money(after, currency)}, alle Steuerzeilen); "
+                    f"der extrahierte Wert {format_money(before, currency)} ergab mit dem Netto nicht den Gesamtbetrag."
+                )
+            elif label == "Gesamtbetrag":
+                notes.append(
+                    f"Gesamtbetrag aus dem Belegtext übernommen ({format_money(after, currency)}); der extrahierte "
+                    f"Wert {format_money(before, currency)} entsprach nicht Netto + Umsatzsteuer."
+                )
+            else:
+                notes.append(
+                    f"Netto und Umsatzsteuer aus dem Belegtext übernommen ({format_money(n, currency)} und "
+                    f"{format_money(t, currency)}); die extrahierten Werte ergaben nicht den Gesamtbetrag."
+                )
+            net, tax, gross = n, t, g
+            break
+
+    updates: dict[str, object] = {"net_amount": net, "tax_amount": tax, "total_amount": gross}
+    if facts.tax_lines:
+        updates["tax_lines"] = [
+            TaxLineItem(rate=rate, base=base, amount=amount) for rate, base, amount in facts.tax_lines
+        ]
+    rates = {line[0] for line in facts.tax_lines}
+    if extraction.tax_rate is None and len(rates) == 1:
+        updates["tax_rate"] = next(iter(rates))
+    if notes:
+        updates["issues"] = [*extraction.issues, *notes]
+    return extraction.model_copy(update=updates)
 
 
 def facts_has_positions(extraction: ExtractionResult) -> bool:
@@ -955,8 +1084,41 @@ def _math_tile(
         ):
             net = facts.net_labeled
         free_total = sum(facts.tax_free_amounts, Decimal(0))
+        line_rates = sorted({line[0] for line in facts.tax_lines})
+        mixed_lines = len(line_rates) > 1
+        if mixed_lines and tax is not None and gross is not None and net is not None:
+            # USt-Summe = Summe der Zeilen je Steuersatz, sofern die Rechnung damit aufgeht.
+            line_sum = sum((line[2] for line in facts.tax_lines), Decimal(0))
+            if abs(net + tax - gross) > _MONEY_TOLERANCE and abs(net + line_sum - gross) <= _MONEY_TOLERANCE:
+                tax = line_sum
+        exempt_whole = facts.full_exemption or full_exemption_claim(extraction.tax_exemption_note)
+        if tax is None and exempt_whole:
+            tax = Decimal(0)  # Befreiung für den ganzen Beleg: keine Umsatzsteuer
 
-        if rate is not None:
+        invalid_rates = [r for r in line_rates if r not in _allowed_rates(extraction.document_date)]
+        if mixed_lines:
+            ok = not invalid_rates
+            shown = ", ".join(f"{_fmt_pct(r)} %" for r in invalid_rates)
+            checks.append(
+                ScoreCheck(
+                    id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)",
+                    legal_reference="§ 12 UStG",
+                    status=(
+                        CheckStatus.PASS if ok
+                        else CheckStatus.WARN if foreign and all(r <= Decimal(30) for r in invalid_rates)
+                        else CheckStatus.FAIL
+                    ),
+                    deduction=0 if ok or foreign else 10,
+                    detail=(
+                        None if ok
+                        else f"Ausländischer Steuersatz {shown} erkannt – Zulässigkeit im Ausstellerland prüfen."
+                        if foreign
+                        else f"Steuersatz {shown} ist zum Rechnungsdatum nicht zulässig."
+                    ),
+                    evidence_source="rule_based",
+                )
+            )
+        elif rate is not None:
             ok = rate.normalize() in _allowed_rates(extraction.document_date)
             if not ok and foreign and Decimal(0) <= rate <= Decimal(30):
                 checks.append(
@@ -1011,7 +1173,34 @@ def _math_tile(
                         evidence_source="rule_based",
                     )
                 )
-        if net is not None and tax is not None and rate is not None:
+        if mixed_lines and all(line[1] is not None for line in facts.tax_lines):
+            # Mischsteuersätze mit ausgewiesener Bemessungsgrundlage: Prüfung je Zeile (Basis x Satz).
+            line_sum = sum((line[2] for line in facts.tax_lines), Decimal(0))
+            deviations = [
+                f"{_fmt_pct(r)} % auf {base}: erwartet {(base * r / Decimal(100)).quantize(Decimal('0.01'))}, "
+                f"ausgewiesen {amount}"
+                for r, base, amount in facts.tax_lines
+                if base is not None and abs((base * r / Decimal(100)).quantize(Decimal("0.01")) - amount) > _MONEY_TOLERANCE
+            ]
+            if tax is not None and abs(tax - line_sum) > _MONEY_TOLERANCE:
+                deviations.append(f"USt gesamt {tax} ≠ Summe der Steuerzeilen {line_sum}")
+            checks.append(
+                ScoreCheck(
+                    id="tax_calc", label="Umsatzsteuer = Netto x Steuersatz",
+                    legal_reference="§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
+                    status=CheckStatus.FAIL if deviations else CheckStatus.PASS,
+                    deduction=10 if deviations else 0,
+                    detail=(
+                        "; ".join(deviations) + "."
+                        if deviations
+                        else "Je Steuersatz geprüft: "
+                        + "; ".join(f"{_fmt_pct(r)} % auf {base} = {amount}" for r, base, amount in facts.tax_lines)
+                        + "."
+                    ),
+                    evidence_source="rule_based",
+                )
+            )
+        elif net is not None and tax is not None and rate is not None and not (exempt_whole and tax == 0):
             expected = (net * rate / Decimal(100)).quantize(Decimal("0.01"))
             ok = abs(expected - tax) <= _MONEY_TOLERANCE
             if not ok and free_total > 0 and Decimal(0) < free_total < net:

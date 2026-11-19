@@ -724,7 +724,12 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
         currency={ex.currency}
         rows={[
           { label: tr("Summe netto", "Net total", "Importe neto"), value: ex.net_amount },
-          { label: `${tr("Umsatzsteuer", "VAT", "IVA")}${ex.tax_rate != null ? ` ${ex.tax_rate} %` : ""}`, value: ex.tax_amount },
+          ...((ex.tax_lines?.length ?? 0) > 1
+            ? (ex.tax_lines ?? []).map((line) => ({
+                label: `${tr("Umsatzsteuer", "VAT", "IVA")} ${line.rate} %${line.base != null ? ` ${tr("auf", "on", "sobre")} ${formatMoney(line.base, ex.currency)}` : ""}`,
+                value: line.amount,
+              }))
+            : [{ label: `${tr("Umsatzsteuer", "VAT", "IVA")}${ex.tax_rate != null ? ` ${ex.tax_rate} %` : ""}`, value: ex.tax_amount }]),
         ]}
         total={{ label: tr("Rechnungsbetrag brutto", "Gross invoice total", "Importe bruto"), value: ex.total_amount }}
       />

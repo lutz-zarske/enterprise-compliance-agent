@@ -371,6 +371,14 @@ def _clean_confidence(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
+class TaxLineItem(LLMModel):
+    """Eine Umsatzsteuerzeile je Steuersatz aus dem Belegtext (deterministisch, nicht vom Modell)."""
+
+    rate: Decimal = Field(description="Steuersatz in Prozent.")
+    base: Decimal | None = Field(default=None, description="Bemessungsgrundlage, falls ausgewiesen.")
+    amount: Decimal = Field(description="Umsatzsteuerbetrag dieser Zeile.")
+
+
 class ExtractionResult(LLMModel):
     """Strukturierte Kerndaten einer Rechnung oder eines Vertrags."""
 
@@ -436,6 +444,10 @@ class ExtractionResult(LLMModel):
     tax_amount: Decimal | None = Field(default=None, description="Umsatzsteuerbetrag.")
     tax_exemption_note: str | None = Field(
         default=None, max_length=300, description="Hinweis auf Steuerbefreiung / Reverse Charge."
+    )
+    tax_lines: list[TaxLineItem] = Field(
+        default_factory=list,
+        description="Umsatzsteuer je Steuersatz aus dem Belegtext (Regelwerk, nicht Teil der KI-Antwort).",
     )
     issues: list[str] = Field(
         default_factory=list,
@@ -1508,6 +1520,6 @@ class RedactResponse(ApiModel):
 class ReleaseApplyRequest(ApiModel):
     """Bestätigung eines Release-Wechsels durch die Administration."""
 
-    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.8.2'.")
+    tag: str = Field(pattern=r"^v\d+\.\d+\.\d+$", description="Release-Tag, z. B. 'v2.8.3'.")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$", description="Bestätigter Commit-Hash des Tags (40 Zeichen).")
     admin_name: str = Field(default="System", min_length=2, max_length=120, description="Wer das Update auslöst.")

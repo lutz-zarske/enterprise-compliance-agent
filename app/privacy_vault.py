@@ -40,7 +40,8 @@ VAULT_SYSTEM_NOTE = (
     "Hinweis zum Datenschutz: Geschützte Werte wurden durch Platzhalter der Form "
     "{{TYP_n}} ersetzt (z. B. {{PERSON_1}}, {{ORG_1}}, {{IBAN_1}}, {{AMOUNT_1}}). "
     "Übernimm Platzhalter unverändert und vollständig mit doppelten geschweiften "
-    "Klammern als String in die passenden Felder. Versuche nicht, sie aufzulösen."
+    "Klammern als String in die passenden Felder – auch in Betragsfelder wie net_amount, tax_amount und "
+    "total_amount (dort den Platzhalter als String statt null). Versuche nicht, sie aufzulösen."
 )
 
 _PLACEHOLDER = re.compile(r"\{\{([A-Z_]+_\d+)\}\}")

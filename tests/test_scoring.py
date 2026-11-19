@@ -215,7 +215,7 @@ def test_jeder_abzug_traegt_eine_risikoerklaerung() -> None:
         assert not re.search(r"[a-zäöüß)]\.\s+[A-ZÄÖÜ]", check.risk_note), check.risk_note
     tax_id = next(c for c in deducted if c.id == "ustg_2_tax_id")
     assert "§ 15 UStG" in tax_id.risk_note
-    assert card.ruleset_version == "2026.5"
+    assert card.ruleset_version == "2026.6"
 
 
 def test_hochrisiko_hinweis_auf_art_6_abs_3_und_stichtag() -> None:
@@ -294,6 +294,7 @@ def test_mischsteuersatz_reine_pdf_rechnung_als_pruefhinweis() -> None:
     })
     card = compute_scorecard(extraction, _compliance(), text)
     calc = next(c for t in card.tiles for c in t.checks if c.id == "tax_calc")
-    assert calc.status.value == "warn" and calc.deduction == 0
-    assert "Mischsteuersätze" in (calc.detail or "")
+    # Seit v2.8.3 je Steuersatz exakt geprüft (Basis x Satz je Zeile) statt nur plausibilisiert.
+    assert calc.status.value == "pass" and calc.deduction == 0
+    assert "19 % auf 6000.00 = 1140.00" in (calc.detail or "") and "7 % auf 200.00 = 14.00" in (calc.detail or "")
     assert card.score == 100 and card.release_blocked is False

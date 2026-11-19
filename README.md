@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 393 pytest](https://img.shields.io/badge/pytest-393_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 428 pytest](https://img.shields.io/badge/pytest-428_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
 > Checks mandatory invoice details and arithmetic; it does not replace full
 > EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
-> FastAPI · Next.js 15 · 393 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 428 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -277,7 +277,7 @@ zuerst selbst (Standard nach 2 s und 5 s), dann übernimmt die nächste:
 ## Compliance-Scorecard (0–100)
 
 Der Score entsteht **nicht im Sprachmodell**, sondern in `app/scoring.py` aus
-festen, versionierten Regeln (Regelwerk 2026.5).
+festen, versionierten Regeln (Regelwerk 2026.6).
 
 | Kachel | Regel | Abzug |
 |---|---|---|
@@ -336,6 +336,13 @@ Musterdaten: gültige Rechnung 100, Steuerfalle 45, KI-Recruiting-Vertrag 59
   Steuernummer, 11-stellige Steuer-ID, Ausweis-/Passnummer, SV-Nr.,
   Geburtsdatum, E-Mail, Telefon, Adressen und Beträge. Das Mapping lebt nur im
   Speicher und nur für einen Auftrag.
+* **Beträge kommen aus dem Regelwerk.** Weil das Gateway im Cloud-Betrieb auch
+  Beträge mit Währungsangabe durch Platzhalter ersetzt, liefert ein Modell dafür
+  oft keinen Wert. Netto, Umsatzsteuer (je Steuersatz) und Gesamtbetrag ermittelt
+  das Regelwerk deshalb deterministisch aus dem Belegtext hinter eindeutigen
+  Summen-Bezeichnern, füllt fehlende Werte auf und gleicht widersprüchliche ab –
+  jede Übernahme steht als Hinweis beim Beleg. Rechenprüfung und Score hängen
+  nicht von der KI ab.
 * **Rechtlich nüchtern:** Pseudonymisierte Daten bleiben personenbezogen; für
   jeden Anbieter der Kaskade sind AV-Vertrag und Transfergrundlage nötig.
 * **API-Keys** Fernet-verschlüsselt, nach außen nur maskiert.
@@ -436,12 +443,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 393 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 428 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-393 Tests (Stand v2.8.2) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+428 Tests (Stand v2.8.3) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -449,6 +456,7 @@ mit Cloud-Keys) wird in Tests ignoriert.
 | Bereich | Schwerpunkte |
 |---|---|
 | API und Workflow | Kernendpunkte, Fehlerformat, Auth, Scorecard, Zertifikat (inkl. XSS-Escaping), Siegel, Batch, Musterdaten, KPIs |
+| Prüfmatrix | Typische Rechnungen als Text-PDF (mit gefüllten und leeren KI-Beträgen) und als E-Rechnung: Hotel und Bewirtung 7 % + 19 %, Mischsatz mit Porto, Kleinbetrag, Kleinunternehmer, Reverse Charge, ig. Lieferung, Skonto, Rechnungskorrektur, Abschlags- und Schlussrechnung, echter Summen- und Steuerfehler – Erwartungen in [`docs/PRUEFMATRIX.md`](docs/PRUEFMATRIX.md) |
 | KI-Kaskade und Jobs | Neuversuch je HTTP-Status, Ausweichmodell, mehrere Keys eines Anbieters durch den Vault, kein Wechsel bei 401, Regelwerk-Fallback mit Ledger-Kennzeichnung, Tagesbudget, `localhost`-Normalisierung, Fortschritt, Batch und Abbruch |
 | E-Rechnung | CII/UBL-Mapping, Profile, XXE/DTD-Abwehr, Geschäftsregeln, Leitweg-ID, Leistungszeitraum (BT-72, BG-14, BG-26), PDF-Anhang, Diskrepanzen, ZIP-Paket inkl. Manipulationsnachweis; offizielle Testbelege der KoSIT und des Mustangproject (Herkunft und Lizenz in [`tests/fixtures/NOTICE`](tests/fixtures/NOTICE)) |
 | Prüfprotokoll | Verkettung, Trigger, Manipulations- und Löschnachweis, Ed25519, Übersteuerung, Verfahrensdokumentation |
@@ -514,7 +522,7 @@ app/
   model_catalog.py     Live-Modell-Listen der Anbieter, Upgrade-Vorschlag
   ai_budget.py         Optionales Cloud-Tagesbudget
   local_ai.py          Ollama / LM Studio erkennen, Ollama starten und stoppen
-  scoring.py           Deterministische Scorecard (Regelwerk 2026.5)
+  scoring.py           Deterministische Scorecard (Regelwerk 2026.6)
   audit_ledger.py      Append-only-Ledger mit Hash-Kette und Signaturen
   extractors/          EN-16931-Parser (CII/UBL), PDF-Anhänge, Leitweg-ID
   gobd_export.py · procedural_doc.py · docx_export.py · pdf_export.py · reporting.py · print_layout.py · retention.py · signing.py
