@@ -158,8 +158,11 @@ Verbindliche Regeln:
    Pflichtangaben nach Paragraf 14 UStG (Steuernummer, Rechnungsnummer,
    Leistungsdatum), widersprüchliche Beträge oder ungewöhnliche
    Vertragsklauseln. Keine Auffälligkeit bedeutet eine leere Liste.
-10. "net_amount" ist das Nettoentgelt, "tax_rate" der Umsatzsteuersatz in Prozent
-   (z. B. 19), "tax_amount" der Umsatzsteuerbetrag.
+10. "net_amount" ist das Nettoentgelt der gesamten Rechnung (BT-109): die Summe aller
+   Positionen einschließlich steuerfreier Posten (z. B. Porto als durchlaufender
+   Posten) – also der Wert hinter "Summe netto" bzw. "Nettobetrag", nicht die
+   steuerpflichtige Bemessungsgrundlage aus "19 % USt auf …". "tax_rate" ist der
+   Umsatzsteuersatz in Prozent (z. B. 19), "tax_amount" der Umsatzsteuerbetrag.
 11. "sender_tax_number" ist die Steuernummer (z. B. 21/815/08150),
    "sender_vat_id" die Umsatzsteuer-Identifikationsnummer (z. B. DE123456789).
 12. "service_date" ist das Liefer- bzw. Leistungsdatum, "service_period" ein

@@ -3,9 +3,17 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.8.2 – 19.11.2026
+
+Praxisprüfung mit einer Rechnung, die steuerfreie Posten enthält (reines PDF, KI-Extraktion) – 393 Offline-Tests:
+
+- **Netto umfasst steuerfreie Posten:** Die Extraktionsanweisung stellt klar, dass das Nettoentgelt (BT-109) die Summe aller Positionen einschließlich steuerfreier Posten ist (z. B. Porto als durchlaufender Posten) – der Wert hinter „Summe netto“, nicht die Bemessungsgrundlage aus „19 % USt auf …“. Übernimmt das Modell dennoch die Bemessungsgrundlage, gleicht das Regelwerk mit der „Summe netto“ des Belegs ab und vermerkt das in den Hinweisen.
+- **Summenregel ohne Fehlalarm:** Ergibt Netto + USt nicht den Gesamtbetrag, entspricht die Differenz aber genau den erkannten steuerfreien Posten, ist das ein Prüfhinweis ohne Punktabzug statt eines Rechenfehlers (−15) mit Sperre. Die Umsatzsteuer wird bei steuerfreien Posten auf die steuerpflichtige Basis nachgerechnet. Regelwerk 2026.5.
+- **Übersetzungen:** Die neuen Prüfhinweise und der Hinweis „Steuerfreie Positionen erkannt …“ sind auf Englisch und Spanisch verfügbar.
+
 ## v2.8.1 – 19.11.2026
 
-Abschluss-Prüfung vor dem Einfrieren – drei Korrekturen, 386 Offline-Tests:
+Abschließende Gesamtprüfung – drei Korrekturen, 386 Offline-Tests:
 
 - **§ 14c UStG ohne Fehlalarm:** Ein steuerfreier Einzelposten (z. B. Porto als durchlaufender Posten) neben 19 % USt galt als Widerspruch und sperrte die Freigabe (−10). Jetzt zählen nur Hinweise, die den ganzen Beleg befreien (Reverse Charge, § 13b, § 19 UStG, innergemeinschaftliche Lieferung) – und verneinte Formulierungen wie „Kleinunternehmerregelung findet keine Anwendung“ gar nicht. Steuerfreie Einzelposten ergeben bei stimmender Summe einen Prüfhinweis ohne Abzug.
 - **Swagger und DNS-Rebinding:** Der Cross-Site-Schutz im lokalen Betrieb sperrte auch die eigene API-Dokumentation (`/docs`, „Try it out“). Anfragen vom selben Ursprung sind wieder erlaubt; zugleich weist das Backend Browser-Anfragen an fremde Hostnamen ab (Schutz gegen DNS-Rebinding: eine Webseite kann lokale Belege nicht mehr über einen umgebogenen Hostnamen lesen). Skripte ohne Browser-Kennung sind nicht betroffen.

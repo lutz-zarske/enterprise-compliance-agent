@@ -3,7 +3,7 @@
 Vier bewusst konstruierte Fälle decken Ampelfarben und E-Rechnung ab:
 
 1. ``Rechnung_Gueltig_14UStG.pdf`` - alle Pflichtangaben, korrekte Mathematik.
-   Erwartung: grün, Score 100 (keine Abzüge nach Regelwerk 2026.4).
+   Erwartung: grün, Score 100 (keine Abzüge nach Regelwerk 2026.5).
 2. ``Rechnung_Fehlerhaft_Steuerfalle.pdf`` - keine Steuernummer/USt-IdNr. (-20),
    unzulässiger Steuersatz 16 % (-10), kein Leistungsdatum (-10), IBAN mit
    falscher Prüfziffer (-15).  Erwartung: rot, Score 45.

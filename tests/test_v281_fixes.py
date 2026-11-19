@@ -41,7 +41,8 @@ def test_steuerfreier_durchlaufposten_ist_kein_14c_widerspruch(client: TestClien
         "Gesamtbetrag: 1.195,00 EUR",
     ])
     assert "ustg_14c_conflict" not in checks
-    assert checks["tax_calc"]["status"] == "warn" and checks["tax_calc"]["deduction"] == 0
+    # Seit v2.8.2 exakt: 19 % auf die steuerpflichtige Basis (Netto ohne Porto) = 190,00.
+    assert checks["tax_calc"]["status"] == "pass" and checks["tax_calc"]["deduction"] == 0
     assert card["release_blocked"] is False
 
 
