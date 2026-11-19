@@ -3,6 +3,18 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.8.4 – 19.11.2026
+
+Gegenproben ohne Sprachmodell und Praxistest mit 368 öffentlichen Testbelegen – 499 Offline-Tests:
+
+- **Positionen ohne „Pos.“:** Leistungszeilen werden auch an Menge × Preis („2 x 15,00“), Mengeneinheiten („2 Nächte“, „Std.“, „Stück“) oder Bezeichnung mit Betrag erkannt – mit Umlauten und in ASCII-Schreibweise. Hotel- und Bewirtungsbelege verlieren im Regelwerk-Pfad nicht mehr fälschlich die Leistungsbeschreibung.
+- **Bruttopreise und Steuerblöcke:** „Darin enthalten: Netto 7 % …, MwSt 7 % …; Netto 19 % …“ wird je Steuersatz zugeordnet; „Betrag 59,50 EUR inkl. 19 % USt“ gilt als Bruttobetrag, Netto und USt werden herausgerechnet. Übernommene Werte werden plausibilisiert (USt kleiner als Brutto, Netto + USt = Brutto) – im Zweifel bleibt ein Wert leer, mit Hinweis.
+- **Netto mit steuerfreien Posten:** Liest die KI die steuerpflichtige Bemessungsgrundlage als Netto, ergänzt das Regelwerk die steuerfreien Posten (Kerndaten z. B. 104,95 statt 100,00).
+- **Steuerzeilen aus der Praxis:** mehrere Zeilen mit gleichem Satz, Tabellenzeilen der ZUGFeRD-Visualisierung („Umsatzsteuer (S) 129,37 7 9,06“), Netto/Steuer/Brutto in einer Zeile, Steuertabellen ohne Steuerwort (selbstbestätigend: Basis × Satz = Betrag); Rabatt- und Zuschlagszeilen zählen nicht als Steuer. Englische Rechnungen („Subtotal“, „19% VAT“, „Total incl. VAT“) werden gelesen.
+- **Keine Fehlalarme mehr:** Kontokennungen ohne IBAN-Form werden nicht als IBAN geprüft (vorher −15); mehrere oder mit Nachbarspalten verschmolzene Bankverbindungen im Bildteil gelten nicht als Abweichung; Rundungsdifferenzen bis eine Währungseinheit (EN 16931 BR-CO-17) sind ein Hinweis statt eines Steuerfehlers.
+- **Regelwerk-Pfad:** Belege ohne das Wort „Rechnung“ (Quittung, Bewirtungs- oder Kleinbetragsbeleg) gelten als Rechnung; Empfänger ohne „An:“, „Rechnung # …“, „von 09.05.2017“, „Aufenthalt vom …“ und „Date of delivery“ werden erkannt. Bei Kleinbetragsrechnungen entfällt der Hinweis auf eine fehlende Rechnungsnummer; negative Gesamtbeträge gelten als Rechnungskorrektur.
+- **Praxistest:** `scripts/praxiskorpus.py` prüft die öffentlichen Testbelege von Mustangproject, KoSIT und EU-Kommission – 0 Fehlalarme im XML-↔-PDF-Abgleich, Beträge aus dem Bildteil in 224 von 234 Fällen wie im XML, keiner falsch. Prüfmatrix um vier Fälle sowie Regelwerk- und ASCII-Varianten erweitert. Regelwerk 2026.7.
+
 ## v2.8.3 – 19.11.2026
 
 Gegenproben mit unbekannten Rechnungen und Prüfmatrix typischer deutscher Rechnungen – 428 Offline-Tests:

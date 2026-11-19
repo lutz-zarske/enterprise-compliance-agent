@@ -24,6 +24,7 @@ import time
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +57,7 @@ from app.pdf_reader import PdfExtraction, extract_text_async
 from app.privacy_vault import PrivacyVault
 from app.redaction import build_text_view, enforce_masking, merge_findings, scan_text
 from app.runtime_settings import RuntimeSettingsStore
-from app.scoring import RULESET_VERSION, complete_amounts, compute_scorecard, presented_band
+from app.scoring import RULESET_VERSION, SMALL_AMOUNT_LIMIT, complete_amounts, compute_scorecard, presented_band
 from app.schemas import (
     SPECIAL_CATEGORIES,
     AIActAssessment,
@@ -273,6 +274,22 @@ def _truncate_for_prompt(text: str, limit: int) -> str:
 # ---------------------------------------------------------------------------
 
 
+MISSING_NUMBER_ISSUE = "Pflichtangabe fehlt: fortlaufende Rechnungsnummer (Paragraf 14 Abs. 4 Nr. 4 UStG)."
+MISSING_TOTAL_ISSUE = "Pflichtangabe fehlt: Rechnungsbetrag."
+
+
+def _drop_stale_issues(extraction: ExtractionResult) -> ExtractionResult:
+    """Entfernt Hinweise, die nach der Betragsabsicherung nicht mehr zutreffen."""
+    total = extraction.total_amount
+    stale = set()
+    if total is not None:
+        stale.add(MISSING_TOTAL_ISSUE)
+        if Decimal(0) < total <= SMALL_AMOUNT_LIMIT and (extraction.currency or "EUR") == "EUR":
+            stale.add(MISSING_NUMBER_ISSUE)  # Kleinbetragsrechnung: keine Rechnungsnummer nötig (§ 33 UStDV)
+    issues = [issue for issue in extraction.issues if issue not in stale]
+    return extraction if issues == extraction.issues else extraction.model_copy(update={"issues": issues})
+
+
 def augment_extraction_issues(extraction: ExtractionResult) -> ExtractionResult:
     """Ergänzt regelbasierte Befunde, die das Modell übersehen haben könnte."""
     issues = list(extraction.issues)
@@ -285,14 +302,18 @@ def augment_extraction_issues(extraction: ExtractionResult) -> ExtractionResult:
         add("Die angegebene IBAN besteht die MOD-97-Prüfsummenkontrolle nicht.")
 
     if extraction.doc_type is DocType.INVOICE:
-        if not extraction.document_number:
-            add("Pflichtangabe fehlt: fortlaufende Rechnungsnummer (Paragraf 14 Abs. 4 Nr. 4 UStG).")
+        total = extraction.total_amount
+        small = total is not None and Decimal(0) < total <= SMALL_AMOUNT_LIMIT and (extraction.currency or "EUR") == "EUR"
+        if not extraction.document_number and not small:
+            add(MISSING_NUMBER_ISSUE)
         if not extraction.document_date:
             add("Pflichtangabe fehlt: Ausstellungsdatum (Paragraf 14 Abs. 4 Nr. 3 UStG).")
-        if extraction.total_amount is None:
-            add("Pflichtangabe fehlt: Rechnungsbetrag.")
-        elif extraction.total_amount <= 0:
-            add("Der ausgewiesene Gesamtbetrag ist nicht positiv.")
+        if total is None:
+            add(MISSING_TOTAL_ISSUE)
+        elif total < 0:
+            add("Negativer Gesamtbetrag: Rechnungskorrektur bzw. Gutschrift – Bezug zur ursprünglichen Rechnung prüfen.")
+        elif total == 0:
+            add("Der ausgewiesene Gesamtbetrag ist null.")
         if extraction.total_amount is not None and not extraction.currency:
             add("Zum Gesamtbetrag ist keine Währung angegeben.")
 
@@ -965,7 +986,8 @@ class DocumentService:
         # schlüssel und werden als ein Treffer (source="both") erkannt.
         text = record.raw_text or ""
         if provider != STRUCTURED_PROVIDER:
-            extraction = complete_amounts(extraction, text)
+            extraction = complete_amounts(extraction, text, rule_based=provider == HEURISTIC_PROVIDER)
+            extraction = _drop_stale_issues(extraction)
         llm_findings = enforce_masking(
             audit_payload.gdpr.findings, enabled=self._settings.mask_pii_in_storage
         )

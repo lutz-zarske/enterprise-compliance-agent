@@ -46,6 +46,7 @@ from app.schemas import (
     ExtractionResult,
     LeitwegCheck,
     VisualCheck,
+    iban_checksum_valid,
 )
 
 #: Obergrenze für reine XML-Uploads und eingebettete Datensätze.
@@ -611,7 +612,7 @@ def xrechnung_version_notice(invoice: EInvoiceData) -> str | None:
 #: Version des Parsers und des XML-↔-PDF-Abgleichs.  Erhöhen, sobald sich die
 #: Auswertung eines unveränderten Datensatzes ändert; die Neuprüfung liest das
 #: Original dann ohnehin neu ein, das Protokoll vermerkt die Version.
-PARSER_VERSION = "2026.4"
+PARSER_VERSION = "2026.5"
 
 
 def parse_einvoice_xml(
@@ -709,7 +710,7 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
     ``not_found``: Der Wert kommt im Bildteil nicht vor.
     """
     # später Import: scoring importiert keine Extraktoren
-    from app.scoring import _DATE_TOKEN, analyze_text, labeled_amounts
+    from app.scoring import _DATE_TOKEN, analyze_text, labeled_amounts, tax_breakdown
 
     facts = analyze_text(text)
     undated = _DATE_TOKEN.sub(" ", text)
@@ -743,9 +744,12 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
         candidates = {token.replace(" ", "") for token in _IBAN_TOKEN.findall(text)}
         if wanted in candidates:
             status, visual = "match", None
-        elif candidates:
-            status, visual = "mismatch", _mask(sorted(candidates)[0])
+        elif len(candidates) == 1 and iban_checksum_valid(next(iter(candidates))):
+            # Nur eine gültige, abweichende IBAN ist eine Abweichung; eine abgeschnittene oder mit
+            # Nachbarspalten verschmolzene IBAN („…7221 888-9999“) ist nicht eindeutig.
+            status, visual = "mismatch", _mask(next(iter(candidates)))
         else:
+            # Keine oder mehrere Bankverbindungen im Bildteil (z. B. Fußzeile mit mehreren Konten): nicht eindeutig.
             status, visual = "not_found", None
         checks.append(VisualCheck(bt="BT-84", label="IBAN", xml_value=_mask(wanted),
                                   status=status, visual_value=visual))  # type: ignore[arg-type]
@@ -755,6 +759,8 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
     # XML-Wert im Bildteil nirgends vorkommt.  Im Zweifel „nicht wiedergefunden“.
     labeled = labeled_amounts(text)
     vat_amounts = [entry.tax_amount for entry in invoice.vat_breakdown if entry.tax_amount is not None]
+    breakdown = tax_breakdown(text)
+    line_tax = sum((line[2] for line in breakdown), Decimal(0)) if len(breakdown) > 1 else None
     for bt, label, xml_amount, key in (
         ("BT-109", "Summe netto", invoice.net_total, "net"),
         ("BT-110", "Umsatzsteuer gesamt", invoice.tax_total, "tax"),
@@ -773,6 +779,8 @@ def compare_with_visual(invoice: EInvoiceData, text: str) -> list[VisualCheck]:
             status = "match"
         elif key == "tax" and len(vat_amounts) > 1 and all(value in amounts for value in vat_amounts):
             status = "match"  # Steuer je Satz ausgewiesen, ohne eigene Gesamtsumme
+        elif key == "tax" and line_tax is not None and abs(line_tax - xml_amount) <= _TOLERANCE:
+            status = "match"  # mehrere Steuerzeilen im Bildteil, Summe = XML (auch bei gleichem Satz)
         elif strong and not shown:
             status, visual = "mismatch", format_money(strong[0], currency)
         elif shown and not strong:

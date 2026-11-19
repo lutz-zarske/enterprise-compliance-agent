@@ -56,7 +56,7 @@ from app.schemas import (
     iban_checksum_valid,
 )
 
-RULESET_VERSION = "2026.6"
+RULESET_VERSION = "2026.7"
 
 #: Grenze der Kleinbetragsrechnung nach Paragraf 33 UStDV (seit 01.01.2017).
 SMALL_AMOUNT_LIMIT = Decimal("250")
@@ -67,6 +67,8 @@ HIGH_RISK_CAP = 59
 UNACCEPTABLE_CAP = 20
 
 _MONEY_TOLERANCE = Decimal("0.02")
+#: EN 16931 BR-CO-17: Steuerbetrag je Kategorie darf um bis zu eine Währungseinheit vom Produkt abweichen.
+_BR_CO_17_TOLERANCE = Decimal("1.00")
 
 # --- Regex-Belege im Dokumenttext ------------------------------------------
 _VAT_ID = re.compile(
@@ -76,7 +78,9 @@ _VAT_ID = re.compile(
 )
 _TAX_NUMBER = re.compile(r"\b\d{2,3}/\d{3,4}/\d{4,5}\b")
 _SERVICE_DATE = re.compile(
-    r"(?:leistungs|liefer)(?:datum|zeitraum|zeitpunkt|tag)|leistung\s+erbracht|zeitraum\s*:",
+    r"(?:leistungs|liefer)(?:datum|zeitraum|zeitpunkt|tag)|leistung\s+erbracht|zeitraum\s*:|"
+    r"aufenthalt\s*(?::|vom)|anreise|abreise|date\s+of\s+(?:delivery|supply|service)|delivery\s+date|"
+    r"service\s+(?:date|period)",
     re.IGNORECASE,
 )
 _EXEMPTION = re.compile(
@@ -87,7 +91,7 @@ _EXEMPTION = re.compile(
 _STREET = re.compile(
     r"[A-ZÄÖÜ][a-zäöüß\-]+(?:straße|strasse|str\.|weg|allee|platz|gasse|ring|damm|ufer)\s+\d+",
 )
-_ZIP_CITY = re.compile(r"\b\d{5}\s+[A-ZÄÖÜ][a-zäöüß]+")
+_ZIP_CITY = re.compile(r"\b\d{5}\s*[A-ZÄÖÜ][a-zäöüß]+")
 _AMOUNT = re.compile(r"(?<!\w)-?(?:\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2}|\d+\.\d{2}(?!\d))")
 _PERCENT = re.compile(r"(\d{1,2}(?:[,.]\d{1,2})?)\s?%")
 _CONFORMITY = re.compile(
@@ -119,6 +123,44 @@ _POSITIONS = re.compile(
     r"\bpos(?:ition)?\.?\s*\d|\bmenge\b|\bstk\.?|\bst(?:ü|ue)ck\b|\banzahl\b|leistungsbeschreibung|\bartikel\b",
     re.IGNORECASE,
 )
+#: Mengenangaben ohne „Pos.“: „2 x 15,00“, „2 Nächte“/„2 Naechte“, „10 Std.“, „3 Notizblöcke“, „à 90,00“.
+_QUANTITY = re.compile(
+    r"\b\d+(?:[,.]\d+)?\s*(?:x|×)\s*\d"
+    r"|\b\d+(?:[,.]\d+)?\s*(?:n(?:ä|ae)chte?|nacht|tage?|std\.?|stunden?|kg|pakete?|stk\.?|st(?:ü|ue)ck|"
+    r"einheiten?|personen|pers\.|portionen?|liter)\b"
+    r"|(?:^|\s)(?:à|a|je)\s+\d+[,.]\d{2}"
+    r"|^\s*\d{1,4}(?:[,.]\d+)?\s+[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-]{2,}",
+    re.IGNORECASE,
+)
+#: Zeilen, die keine Leistungsposition sind (Summen, Steuer, Zahlung, Kopf- und Kennnummern).
+_NOT_POSITION = re.compile(
+    r"summe|gesamt|netto|brutto|zahlbetrag|zu\s+zahlen|rechnungsbetrag|endbetrag|\bbetrag\b|zzgl|\bust\b|mwst|"
+    r"umsatzsteuer|\bsteuer(?:betrag|satz|nummer|-?nr\.?)?\b|iban|bic|rechnung\s*nr|rechnungsnummer|datum|\bvom\b|"
+    r"zahlbar|skonto|f(?:ä|ae)llig|"
+    r"enthalten|abz(?:ü|ue)glich|anzahlung|abschlag|\btotal\b|subtotal|\bvat\b|\btax\b",
+    re.IGNORECASE,
+)
+_WORD = re.compile(r"[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-]{3,}")
+
+
+def position_lines(text: str) -> list[str]:
+    """Leistungspositionen auch ohne „Pos.“: Menge × Preis, Mengeneinheit oder Bezeichnung mit Betrag."""
+    found: list[str] = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or _PAGE_LINE.match(line):
+            continue
+        if _POSITIONS.search(line) or _QUANTITY.search(line):
+            found.append(line)
+            continue
+        if _NOT_POSITION.search(line) or not _WORD.match(line):
+            continue
+        if _AMOUNT.search(_DATE_TOKEN.sub(" ", line)):
+            found.append(line)  # „Speisen (7 %) 64,20 EUR“, „Kurtaxe (nicht steuerbar) 6,00 EUR“
+    return found
+
+
+_PAGE_LINE = re.compile(r"^-{2,}\s*(?:Seite|Page|Página)\s+\d+\s*-{2,}$", re.IGNORECASE)
 _EINVOICE_MARKERS = (b"factur-x.xml", b"zugferd-invoice.xml", b"xrechnung.xml", b"ZUGFeRD")
 
 _VALID_RATES = {Decimal("0"), Decimal("7"), Decimal("19")}
@@ -160,43 +202,186 @@ class TextFacts:
     tax_free_amounts: tuple[Decimal, ...] = ()
     #: Umsatzsteuerzeilen je Steuersatz (Satz, Bemessungsgrundlage oder None, Betrag).
     tax_lines: tuple[tuple[Decimal, Decimal | None, Decimal], ...] = ()
+    #: Beträge, die nur hinter einem schwachen Bezeichner stehen („net“, „tax“, „gross“).
+    weak_amounts: frozenset[str] = frozenset()
+    #: Steuer aus einem Bruttobetrag herausgerechnet („inkl. 19 % USt“).
+    gross_derived: bool = False
 
 
 #: Bezeichner von Brutto- und Endsummen: eine solche Zeile ist keine USt-Zeile („Gesamtbetrag inkl. 19 % USt“).
 _GROSS_LINE = re.compile(
-    r"gesamtbetrag|rechnungsbetrag|bruttosumme|bruttobetrag|brutto|endbetrag|zu\s+zahlen|zahlbetrag|rechnungssumme",
+    r"gesamtbetrag|rechnungsbetrag|bruttosumme|bruttobetrag|brutto|endbetrag|zu\s+zahlen|zahlbetrag|rechnungssumme|endsumme|gesamtsumme|grand total|total due|amount due",
     re.IGNORECASE,
 )
 
 
-def tax_breakdown(text: str) -> list[tuple[Decimal, Decimal | None, Decimal]]:
+_GROUP_AMOUNT = r"-?\d{1,3}(?:\.\d{3})+,\d{2}|-?\d+,\d{2}|-?\d+\.\d{2}(?!\d)"
+_GROUP_KIND = r"nettobetrag|netto|bruttobetrag|brutto|mwst\.?|ust\.?|umsatzsteuer|mehrwertsteuer"
+_GROUP_RATE = r"\d{1,2}(?:[,.]\d{1,2})?"
+#: „Netto 7 % 60,00 EUR“, „MwSt 7 %: 4,20“ oder „7 % MwSt 4,20“ – ein Wert je Art und Steuersatz.
+_TAX_GROUP = re.compile(
+    rf"(?:(?P<kind>{_GROUP_KIND})\s*(?P<rate>{_GROUP_RATE})\s?%|(?P<rate2>{_GROUP_RATE})\s?%\s*(?P<kind2>{_GROUP_KIND}))"
+    rf"\s*(?:EUR|€)?\s*:?\s*(?:EUR|€)?\s*(?P<amount>{_GROUP_AMOUNT})",
+    re.IGNORECASE,
+)
+#: „Betrag 59,50 EUR inkl. 19 % USt“: der Betrag ist brutto, die Steuer steckt darin.
+_INCLUSIVE = re.compile(r"\binkl\.?|\binklusive\b|einschlie(?:ß|ss)lich", re.IGNORECASE)
+
+
+def tax_groups(line: str) -> dict[Decimal, dict[str, Decimal]]:
+    """Aufschlüsselung je Steuersatz in einer Zeile, etwa „Darin enthalten: Netto 7 % 60,00, MwSt 7 % 4,20;
+    Netto 19 % 20,00, MwSt 19 % 3,80“ -> {7: {net, tax}, 19: {net, tax}}.
+
+    Nur Zeilen mit mehreren Angaben oder mit Netto/Brutto je Satz gelten als Block;
+    eine einzelne Steuerangabe („zzgl. 19 % USt: 190,00“) bleibt der Normalfall.
+    """
+    matches = list(_TAX_GROUP.finditer(_DATE_TOKEN.sub(" ", line)))
+    kinds = [((m.group("kind") or m.group("kind2") or "").casefold()) for m in matches]
+    if not matches or (len(matches) == 1 and not kinds[0].startswith(("netto", "brutto"))):
+        return {}
+    groups: dict[Decimal, dict[str, Decimal]] = {}
+    for match, kind in zip(matches, kinds, strict=True):
+        rate = _to_decimal(match.group("rate") or match.group("rate2") or "")
+        amount = _to_decimal(match.group("amount"))
+        if rate is None or amount is None or not Decimal(0) <= rate <= Decimal(30):
+            continue
+        key = "net" if kind.startswith("netto") else "gross" if kind.startswith("brutto") else "tax"
+        groups.setdefault(rate.normalize(), {}).setdefault(key, amount)
+    return groups
+
+
+def inclusive_gross(line: str) -> tuple[Decimal, Decimal] | None:
+    """(Satz, Brutto) bei „Betrag 59,50 EUR inkl. 19 % USt“; None, wenn die Zeile das nicht eindeutig sagt."""
+    low = line.casefold()
+    if not _INCLUSIVE.search(low) or not _TAX_WORD.search(low) or "enthalten" in low:
+        return None
+    undated = _DATE_TOKEN.sub(" ", line)
+    percents = [value for value in (_to_decimal(m) for m in _PERCENT.findall(undated)) if value is not None]
+    if len(percents) != 1 or not Decimal(0) < percents[0] <= Decimal(30):
+        return None
+    cleaned = _PERCENT.sub(" ", undated)
+    keyword = _INCLUSIVE.search(cleaned)
+    amounts = [(m.start(), _to_decimal(m.group(0))) for m in _AMOUNT.finditer(cleaned)]
+    amounts = [(pos, value) for pos, value in amounts if value is not None]
+    if keyword is None or not amounts:
+        return None
+    before = [value for pos, value in amounts if pos < keyword.start()]
+    after = [value for pos, value in amounts if pos >= keyword.start()]
+    if before and not after:
+        return percents[0].normalize(), before[-1]
+    if not before and len(after) == 1:
+        return percents[0].normalize(), after[0]  # „Summe inkl. 19 % MwSt. 59,50“
+    return None
+
+
+#: Zu- und Abschläge, Rabatte, Skonto: Zeilen mit Satz und Betrag, aber ohne Steuerbetrag.
+_ALLOWANCE_LINE = re.compile(r"abschlag|zuschlag|nachlass|rabatt|skonto|bonus|anzahlung", re.IGNORECASE)
+#: „129,37 7 9,06“: Bemessungsgrundlage, Satz ohne Prozentzeichen, Steuerbetrag.
+_RATE_BETWEEN = re.compile(
+    r"(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+[,.]\d{2})\s+(\d{1,2}(?:[,.]\d{1,2})?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+[,.]\d{2})\s*(?:EUR|€)?\s*$"
+)
+
+
+def _tax_matches(base: Decimal, rate: Decimal, amount: Decimal) -> bool:
+    """Basis x Satz = Betrag (gerundet, ±1 Cent) – bestätigt eine Steuerzeile aus sich selbst."""
+    if rate <= 0 or base == 0:
+        return False
+    expected = (base * rate / Decimal(100)).quantize(Decimal("0.01"))
+    return abs(expected - amount) <= Decimal("0.01")
+
+
+def _split_gross(rate: Decimal, gross: Decimal) -> tuple[Decimal, Decimal]:
+    tax = (gross * rate / (Decimal(100) + rate)).quantize(Decimal("0.01"))
+    return gross - tax, tax
+
+
+def _breakdown(text: str) -> tuple[list[tuple[Decimal, Decimal | None, Decimal]], bool]:
     """Umsatzsteuerzeilen je Steuersatz: „zzgl. 7 % USt auf 80,00 EUR: 5,60 EUR“ -> (7, 80.00, 5.60).
 
-    Erfasst nur Zeilen mit Steuerwort und ausdrücklichem Prozentsatz; Brutto-,
-    Zahlungs- und Kennnummernzeilen zählen nicht.  Doppelte Zeilen (etwa eine
-    wiederholte Aufschlüsselung) werden einmal gezählt.
+    Erfasst Zeilen mit Steuerwort und ausdrücklichem Prozentsatz, Aufschlüsselungs-
+    blöcke („Netto 7 % … MwSt 7 % …“) und Bruttoangaben („inkl. 19 % USt“, Steuer
+    herausgerechnet).  Brutto-, Zahlungs- und Kennnummernzeilen zählen sonst nicht;
+    doppelte Angaben werden einmal gezählt, ausdrückliche gehen herausgerechneten vor.
     """
     lines: list[tuple[Decimal, Decimal | None, Decimal]] = []
+    derived: list[tuple[Decimal, Decimal | None, Decimal]] = []
+
+    def add(target: list[tuple[Decimal, Decimal | None, Decimal]], entry: tuple[Decimal, Decimal | None, Decimal]) -> None:
+        for index, (rate, base, amount) in enumerate(target):
+            if rate == entry[0] and abs(amount - entry[2]) <= _MONEY_TOLERANCE:
+                if base is None and entry[1] is not None:
+                    target[index] = entry
+                return
+        target.append(entry)
+
     for raw in (text or "").splitlines():
+        groups = tax_groups(raw)
+        if groups:
+            for rate, parts in groups.items():
+                tax, net, gross = parts.get("tax"), parts.get("net"), parts.get("gross")
+                if tax is None and net is not None and gross is not None:
+                    tax = gross - net
+                if tax is None and gross is not None:
+                    add(derived, (rate, *_split_gross(rate, gross)))
+                    continue
+                if tax is not None:
+                    add(lines, (rate, net if net is not None else (gross - tax if gross is not None else None), tax))
+            continue
+        inclusive = inclusive_gross(raw)
+        if inclusive is not None:
+            rate, gross = inclusive
+            add(derived, (rate, *_split_gross(rate, gross)))
+            continue
         low = raw.casefold()
-        if not _TAX_WORD.search(low) or _TAX_ID_WORD.search(low) or _EXCLUDING_TAX.search(low):
-            continue
-        if _PAYMENT_TERMS.search(raw) or _GROSS_LINE.search(raw):
-            continue
+        if _ALLOWANCE_LINE.search(low) or _PAYMENT_TERMS.search(raw) or _TAX_ID_WORD.search(low):
+            continue  # Zu-/Abschläge, Rabatte und Zahlungsbedingungen sind keine Steuerzeilen
         undated = _DATE_TOKEN.sub(" ", raw)
         percents = [value for value in (_to_decimal(m) for m in _PERCENT.findall(undated)) if value is not None]
-        if not percents or not Decimal(0) <= percents[0] <= Decimal(30):
-            continue
         amounts = [
             value for value in (_to_decimal(m) for m in _AMOUNT.findall(_PERCENT.sub(" ", undated)))
             if value is not None
         ]
-        if not amounts:
+        has_tax_word = bool(_TAX_WORD.search(low)) and not _EXCLUDING_TAX.search(low)
+        rate = percents[0].normalize() if len(percents) == 1 and Decimal(0) < percents[0] <= Decimal(30) else None
+        if rate is None and has_tax_word and not percents:
+            # Tabellenzeile der ZUGFeRD-Visualisierung: „Umsatzsteuer (S) 129,37 7 9,06“ (Satz ohne %).
+            table = _RATE_BETWEEN.search(_PERCENT.sub(" ", undated))
+            if table:
+                base, plain_rate, amount = (_to_decimal(table.group(i)) for i in (1, 2, 3))
+                if base is not None and plain_rate is not None and amount is not None and _tax_matches(base, plain_rate, amount):
+                    add(lines, (plain_rate.normalize(), base, amount))
             continue
-        entry = (percents[0].normalize(), amounts[-2] if len(amounts) >= 2 else None, amounts[-1])
-        if entry not in lines:
-            lines.append(entry)
-    return lines
+        if rate is None:
+            continue
+        # Selbstbestätigend: Basis x Satz = Betrag („7% 160,00 € 11,20 €“, „19 % MwSt.: 376,37 71,51 447,88“).
+        pair = next(
+            ((amounts[i], amounts[j]) for i in range(len(amounts)) for j in range(i + 1, len(amounts))
+             if _tax_matches(amounts[i], rate, amounts[j])),
+            None,
+        )
+        if pair is not None:
+            add(lines, (rate, pair[0], pair[1]))
+            continue
+        if not has_tax_word or _GROSS_LINE.search(raw) or not amounts or not Decimal(0) <= percents[0] <= Decimal(30):
+            continue
+        if _TAX_CATEGORY_CODE.search(raw):
+            continue  # „Transportkosten 19%UST(S) 3,00“: Zuschlag mit Steuerkategorie, kein Steuerbetrag
+        if _AMOUNT_LABELS["net"][0].search(low) or re.search(r"\bnetto\b|\bnet\b", low):
+            continue  # „Nettobetrag (zzgl. 19 % MwSt.) 376,37“: Netto mit Satzangabe, kein Steuerbetrag
+        add(lines, (rate, amounts[-2] if len(amounts) >= 2 else None, amounts[-1]))
+    explicit_rates = {entry[0] for entry in lines}
+    used = [entry for entry in derived if entry[0] not in explicit_rates]
+    return [*lines, *used], bool(used)
+
+
+def tax_breakdown(text: str) -> list[tuple[Decimal, Decimal | None, Decimal]]:
+    """Umsatzsteuer je Steuersatz als (Satz, Bemessungsgrundlage oder None, Betrag)."""
+    return _breakdown(text)[0]
+
+
+def gross_derived(text: str) -> bool:
+    """Stammt mindestens eine Steuerzeile aus einem herausgerechneten Bruttobetrag („inkl. 19 % USt“)?"""
+    return _breakdown(text)[1]
 
 
 #: Einzelposten ohne Umsatzsteuer: steuerfrei, durchlaufender Posten, 0 % oder nicht steuerbar.
@@ -251,33 +436,42 @@ _DATE_TOKEN = re.compile(r"(?<![\d.,])\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})?(?!\d)|\
 _PAYMENT_TERMS = re.compile(
     r"zahlbar|skonto|zahlungsziel|zahlungsbedingung|f(?:ä|ae)llig|innerhalb\s+\d+\s+tag", re.IGNORECASE
 )
-_TAX_WORD = re.compile(r"\b(?:ust|mwst|umsatzsteuer|mehrwertsteuer)\b")
-_TAX_ID_WORD = re.compile(r"id|nr\.|nummer|identifikation")
-_EXCLUDING_TAX = re.compile(r"(?:ohne|exkl\.?|excl\.?|zzgl\.?\s+der)\s*(?:ust|mwst|umsatzsteuer|mehrwertsteuer)")
+_TAX_WORD = re.compile(r"\b(?:ust|mwst|umsatzsteuer|mehrwertsteuer|vat)\b")
+_TAX_ID_WORD = re.compile(r"id|nr\.|nummer|identifikation|registration")
+_EXCLUDING_TAX = re.compile(
+    r"(?:ohne|exkl\.?|excl\.?|excluding|zzgl\.?\s+der)\s*(?:ust|mwst|umsatzsteuer|mehrwertsteuer|vat)"
+)
+#: Steuerkategorie in Positions- und Zuschlagstabellen („19%UST(S)“) – Spalte, kein Steuerbetrag.
+_TAX_CATEGORY_CODE = re.compile(r"(?:ust|mwst|vat)\s*\([a-z]{1,2}\)", re.IGNORECASE)
 
 #: Summen-Bezeichner je Betrag, Rang 1 = eindeutige Summe, Rang 2 = schwächerer Hinweis.
 _AMOUNT_LABELS: dict[str, tuple[re.Pattern[str], re.Pattern[str]]] = {
     "net": (
         re.compile(
             r"summe\s*netto|netto\s*-?\s*summe|nettosumme|gesamt\s*netto|netto\s*gesamt|nettobetrag|"
-            r"nettogesamt|rechnungssumme\s+(?:ohne|exkl)|summe\s+(?:ohne|exkl)|entgelt\s+netto"
+            r"nettogesamt|rechnungssumme\s+(?:ohne|exkl)|summe\s+(?:ohne|exkl)|entgelt\s+netto|"
+            r"net\s+total|total\s+net|total\s+excl"
         ),
-        re.compile(r"positionssumme|zwischensumme|warenwert|\bnetto\b"),
+        re.compile(r"positionssumme|zwischensumme|warenwert|\bnetto\b|sub-?total"),
     ),
     "tax": (
         re.compile(
             r"(?:umsatzsteuer|mehrwertsteuer|ust\.?|mwst\.?)\s*gesamt|gesamt\s*(?:ust|mwst|umsatzsteuer)|"
             r"summe\s*(?:der\s*)?(?:ust|mwst|umsatzsteuer|mehrwertsteuer|steuer)|steuerbetrag|"
-            r"(?:ust|mwst)\.?-?\s*betrag|umsatzsteuerbetrag|mehrwertsteuerbetrag"
+            r"(?:ust|mwst)\.?-?\s*betrag|umsatzsteuerbetrag|mehrwertsteuerbetrag|"
+            r"vat\s+total|total\s+vat|vat\s+amount|tax\s+amount|total\s+tax"
         ),
         _TAX_WORD,
     ),
     "gross": (
         re.compile(
             r"gesamtbetrag(?!\s+der\b)|rechnungsbetrag|bruttosumme|bruttobetrag|summe\s*brutto|brutto\s*gesamt|"
-            r"gesamt\s*brutto|endbetrag|rechnungssumme(?!\s+(?:ohne|exkl|netto))|rechnungsgesamtbetrag"
+            r"gesamt\s*brutto|endbetrag|endsumme|gesamtsumme|summe\s+gesamt|"
+            r"rechnungssumme(?!\s+(?:ohne|exkl|netto))|rechnungsgesamtbetrag|"
+            r"grand\s+total|total\b[^0-9]{0,12}\bincl|total\s+amount|invoice\s+total|amount\s+due|total\s+due|"
+            r"total\s+payable"
         ),
-        re.compile(r"zahlbetrag|zu\s+zahlen|\bbrutto\b"),
+        re.compile(r"zahlbetrag|zu\s+zahlen|\bbrutto\b|due\s+payable|amount\s+payable|payable\s+amount"),
     ),
 }
 
@@ -291,7 +485,11 @@ def labeled_amounts(text: str) -> dict[str, list[tuple[int, Decimal]]]:
     """
     found: dict[str, list[tuple[int, Decimal]]] = {"net": [], "tax": [], "gross": []}
     for raw in text.splitlines():
-        if _PAYMENT_TERMS.search(raw):
+        if _PAYMENT_TERMS.search(raw) or tax_groups(raw):
+            continue  # Aufschlüsselungsblöcke je Steuersatz wertet tax_breakdown aus
+        inclusive = inclusive_gross(raw)
+        if inclusive is not None:
+            found["gross"].append((1, inclusive[1]))
             continue
         line = _DATE_TOKEN.sub(" ", raw)
         amounts = [value for value in (_to_decimal(m) for m in _AMOUNT.findall(line)) if value is not None]
@@ -337,11 +535,25 @@ def analyze_text(text: str) -> TextFacts:
     net = _pick(labeled["net"])
     tax = _pick(labeled["tax"])
     gross = _pick(labeled["gross"], last=True)
-    breakdown = tax_breakdown(text)
+    breakdown, derived = _breakdown(text)
     tax_total_labeled = next((value for rank, value in labeled["tax"] if rank == 1), None)
-    if tax_total_labeled is None and len({line[0] for line in breakdown}) > 1:
-        # Mischsteuersätze ohne eigene Steuersumme: USt-Summe = Summe der Zeilen je Steuersatz.
+    weak: set[str] = set()
+    if tax_total_labeled is None and breakdown:
+        # Steuer je Satz (auch Aufschlüsselungsblock oder herausgerechneter Bruttobetrag): Summe der Zeilen.
         tax = sum((line[2] for line in breakdown), Decimal(0))
+    elif tax is not None and tax_total_labeled is None and not breakdown:
+        weak.add("tax")  # Steuerwort ohne Satz und ohne eindeutigen Summen-Bezeichner
+    net_labeled = next((value for rank, value in labeled["net"] if rank == 1), None)
+    if net_labeled is None and breakdown and all(line[1] is not None for line in breakdown):
+        # Kein „Summe netto“: Netto = Summe der Bemessungsgrundlagen, sofern die Rechnung damit aufgeht.
+        candidate = sum((line[1] for line in breakdown if line[1] is not None), Decimal(0))
+        line_tax = sum((line[2] for line in breakdown), Decimal(0))
+        if gross is None or abs(candidate + line_tax - gross) <= _MONEY_TOLERANCE:
+            net = candidate
+    elif net is not None and net_labeled is None:
+        weak.add("net")
+    if gross is not None and not any(rank == 1 for rank, _ in labeled["gross"]):
+        weak.add("gross")
     return TextFacts(
         vat_id=bool(_VAT_ID.search(text)),
         tax_number=bool(_TAX_NUMBER.search(text)),
@@ -353,12 +565,14 @@ def analyze_text(text: str) -> TextFacts:
         tax_rate=rate,
         gross_amount=gross,
         conformity_evidence=_has_conformity_evidence(text),
-        positions=bool(_POSITIONS.search(text)),
+        positions=bool(position_lines(text)),
         tax_rates=tuple(seen_rates),
         full_exemption=full_exemption_claim(text),
-        net_labeled=next((value for rank, value in labeled["net"] if rank == 1), None),
+        net_labeled=net_labeled,
         tax_free_amounts=tuple(tax_free_positions(text)),
         tax_lines=tuple(breakdown),
+        weak_amounts=frozenset(weak),
+        gross_derived=derived,
     )
 
 
@@ -466,7 +680,7 @@ def _formal_tile(
         ((entry.category or "").strip().upper() in {"O", "AE", "E", "K", "G", "Z"} or bool(entry.exemption_reason))
         for entry in einvoice.vat_breakdown
     )
-    rate_known = extraction.tax_rate is not None or facts.tax_rate is not None or xml_rates
+    rate_known = extraction.tax_rate is not None or facts.tax_rate is not None or xml_rates or bool(facts.tax_lines)
     tax_known = extraction.tax_amount is not None or facts.tax_amount is not None
     exemption = bool(extraction.tax_exemption_note) or facts.exemption or xml_exemption
 
@@ -829,7 +1043,7 @@ def reconcile_net_amount(extraction: ExtractionResult, text: str) -> ExtractionR
     return complete_amounts(extraction, text)
 
 
-def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResult:
+def complete_amounts(extraction: ExtractionResult, text: str, *, rule_based: bool = False) -> ExtractionResult:
     """Sichert Netto, Umsatzsteuer und Brutto deterministisch über den Belegtext ab.
 
     1. **Auffüllen:** Fehlen Beträge in der KI-Antwort (etwa weil das Privacy
@@ -840,6 +1054,11 @@ def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResul
        statt nur der ersten, Gesamtbetrag statt Restforderung), gilt dieser.
     3. **USt je Steuersatz:** Die Zeilen der Aufschlüsselung stehen in ``tax_lines``.
 
+    4. **Plausibilität:** Übernommene Werte müssen zusammenpassen (USt kleiner als
+       Brutto, Netto + USt = Brutto); sonst bleibt ein unsicherer Wert lieber leer.
+
+    ``rule_based`` (Regelwerk-Pfad ohne Sprachmodell): alle Beträge stammen aus
+    dem Belegtext und durchlaufen dieselbe Plausibilitätsprüfung.
     Jede Änderung steht als Hinweis in ``issues``.
     """
     if extraction.doc_type is not DocType.INVOICE:
@@ -850,7 +1069,9 @@ def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResul
     currency = extraction.currency or "EUR"
     text_net = facts.net_labeled if facts.net_labeled is not None else facts.net_amount
     text_tax, text_gross = facts.tax_amount, facts.gross_amount
-    net, tax, gross = extraction.net_amount, extraction.tax_amount, extraction.total_amount
+    net, tax, gross = (
+        (None, None, None) if rule_based else (extraction.net_amount, extraction.tax_amount, extraction.total_amount)
+    )
     notes: list[str] = []
 
     filled = [
@@ -860,11 +1081,13 @@ def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResul
         )
         if value is None and text_value is not None
     ]
-    if filled:
+    if filled and not rule_based:
         notes.append(
             f"{', '.join(filled)} aus dem Belegtext übernommen (Summen-Bezeichner); die KI-Antwort enthielt "
             "dazu keinen Wert."
         )
+    if facts.gross_derived and {"Netto", "Umsatzsteuer"} & set(filled):
+        notes.append("Netto und Umsatzsteuer aus dem Bruttobetrag herausgerechnet (Angabe „inkl. USt“).")
     net = net if net is not None else text_net
     tax = tax if tax is not None else text_tax
     gross = gross if gross is not None else text_gross
@@ -882,6 +1105,7 @@ def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResul
     if net is not None and tax is not None and gross is not None and not balanced(net, tax, gross):
         for label, n, t, g in (
             ("Netto", text_net, tax, gross),
+            ("Netto inkl. steuerfreier Posten", net + sum(facts.tax_free_amounts, Decimal(0)), tax, gross),
             ("Umsatzsteuer", net, text_tax, gross),
             ("Gesamtbetrag", net, tax, text_gross),
             ("Netto und Umsatzsteuer", text_net, text_tax, gross),
@@ -890,11 +1114,17 @@ def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResul
                 continue
             before, after = {
                 "Netto": (net, n),
+                "Netto inkl. steuerfreier Posten": (net, n),
                 "Umsatzsteuer": (tax, t),
                 "Gesamtbetrag": (gross, g),
                 "Netto und Umsatzsteuer": (net, n),
             }[label]
-            if label == "Netto":
+            if label == "Netto inkl. steuerfreier Posten":
+                notes.append(
+                    f"Netto um steuerfreie Posten ergänzt ({format_money(after, currency)}); der extrahierte Wert "
+                    f"{format_money(before, currency)} enthielt nur die steuerpflichtige Bemessungsgrundlage."
+                )
+            elif label == "Netto":
                 notes.append(
                     f"Netto aus „Summe netto“ des Belegs übernommen ({format_money(after, currency)}); der extrahierte "
                     f"Wert {format_money(before, currency)} ergab mit der Umsatzsteuer nicht den Gesamtbetrag."
@@ -916,6 +1146,25 @@ def complete_amounts(extraction: ExtractionResult, text: str) -> ExtractionResul
                 )
             net, tax, gross = n, t, g
             break
+
+    # Plausibilität übernommener Werte: lieber leer mit Hinweis als falsch.
+    from_text = set(filled) | ({"Netto", "Umsatzsteuer", "Brutto"} if rule_based else set())
+    unclear: list[str] = []
+    if tax is not None and gross is not None and gross != 0 and abs(tax) >= abs(gross) and "Umsatzsteuer" in from_text:
+        tax = None
+        unclear.append("Umsatzsteuer")
+    if net is not None and tax is not None and gross is not None and not balanced(net, tax, gross):
+        for label, key in (("Netto", "net"), ("Umsatzsteuer", "tax"), ("Brutto", "gross")):
+            if label in from_text and key in facts.weak_amounts:
+                unclear.append(label)
+                if key == "net":
+                    net = None
+                elif key == "tax":
+                    tax = None
+                else:
+                    gross = None
+    if unclear:
+        notes.append(f"{', '.join(unclear)} im Belegtext nicht eindeutig erkannt – bitte prüfen.")
 
     updates: dict[str, object] = {"net_amount": net, "tax_amount": tax, "total_amount": gross}
     if facts.tax_lines:
@@ -1009,20 +1258,31 @@ def _structured_vat_checks(
             )
         )
     deviations = []
+    rounding = []
     for entry in einvoice.vat_breakdown:
         if entry.rate is None or entry.taxable_amount is None or entry.tax_amount is None:
             continue
         expected = (entry.taxable_amount * entry.rate / Decimal(100)).quantize(Decimal("0.01"))
-        if abs(expected - entry.tax_amount) > _MONEY_TOLERANCE:
+        difference = abs(expected - entry.tax_amount)
+        if difference > _BR_CO_17_TOLERANCE:
             deviations.append(f"{_fmt_pct(entry.rate)} %: erwartet {expected}, ausgewiesen {entry.tax_amount}")
+        elif difference > _MONEY_TOLERANCE:
+            rounding.append(f"{_fmt_pct(entry.rate)} %: erwartet {expected}, ausgewiesen {entry.tax_amount}")
     if any(entry.tax_amount is not None for entry in einvoice.vat_breakdown):
+        status = CheckStatus.FAIL if deviations else CheckStatus.WARN if rounding else CheckStatus.PASS
+        detail = (
+            "; ".join(deviations) + "."
+            if deviations
+            else "Rundungsdifferenz im Rahmen der EN-16931-Regel BR-CO-17 (±1 Währungseinheit): "
+            + "; ".join(rounding) + ". Kein Punktabzug."
+            if rounding
+            else None
+        )
         checks.append(
             ScoreCheck(
                 id="tax_calc", label="Umsatzsteuer = Bemessungsgrundlage x Steuersatz (je Satz)",
                 legal_reference="§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
-                status=CheckStatus.FAIL if deviations else CheckStatus.PASS, deduction=10 if deviations else 0,
-                detail="; ".join(deviations) + "." if deviations else None,
-                evidence_source="xml",
+                status=status, deduction=10 if deviations else 0, detail=detail, evidence_source="xml",
             )
         )
     br_co = [rule for rule in einvoice.rule_violations if rule.startswith("BR-CO-")]
@@ -1046,7 +1306,15 @@ def _math_tile(
 ) -> ScoreTile:
     checks: list[ScoreCheck] = []
 
-    if extraction.iban:
+    account = re.sub(r"[\s\-]", "", extraction.iban or "").upper()
+    if extraction.iban and not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", account):
+        # Nationale Kontonummer o. Ä. (UBL erlaubt beliebige Kontokennungen): keine IBAN, keine MOD-97-Prüfung.
+        checks.append(
+            ScoreCheck(id="iban_mod97", label="IBAN-Prüfziffer (ISO 13616, MOD-97-10)",
+                       status=CheckStatus.NOT_APPLICABLE,
+                       detail="Die Kontokennung ist keine IBAN – keine Prüfziffernprüfung.")
+        )
+    elif extraction.iban:
         valid = iban_checksum_valid(extraction.iban)
         checks.append(
             ScoreCheck(
@@ -1085,7 +1353,7 @@ def _math_tile(
             net = facts.net_labeled
         free_total = sum(facts.tax_free_amounts, Decimal(0))
         line_rates = sorted({line[0] for line in facts.tax_lines})
-        mixed_lines = len(line_rates) > 1
+        mixed_lines = len(facts.tax_lines) > 1  # mehrere Steuerzeilen, auch mit gleichem Satz
         if mixed_lines and tax is not None and gross is not None and net is not None:
             # USt-Summe = Summe der Zeilen je Steuersatz, sofern die Rechnung damit aufgeht.
             line_sum = sum((line[2] for line in facts.tax_lines), Decimal(0))

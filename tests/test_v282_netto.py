@@ -113,10 +113,13 @@ def test_differenz_gleich_steuerfreie_posten_ist_nur_hinweis(client: TestClient,
     response = client.post(
         "/documents/upload", files={"file": ("ohne_summe.pdf", build_pdf([lines]), "application/pdf")}
     )
-    card = client.post(f"/documents/{response.json()['id']}/extract?wait=true").json()["scorecard"]
+    body = client.post(f"/documents/{response.json()['id']}/extract?wait=true").json()
+    card, extraction = body["scorecard"], body["extraction"]
     checks = {c["id"]: c for t in card["tiles"] for c in t["checks"]}
-    assert checks["sum_check"]["status"] == "warn" and checks["sum_check"]["deduction"] == 0
-    assert "4,95" in checks["sum_check"]["detail"] or "4.95" in checks["sum_check"]["detail"]
+    # Seit v2.8.4: Netto wird um die steuerfreien Posten ergänzt (Kerndaten 104,95) – Summe stimmt.
+    assert checks["sum_check"]["status"] == "pass" and checks["sum_check"]["deduction"] == 0
+    assert Decimal(str(extraction["net_amount"])) == Decimal("104.95")
+    assert any("steuerfreie Posten" in issue for issue in extraction["issues"])
     assert card["release_blocked"] is False
 
 

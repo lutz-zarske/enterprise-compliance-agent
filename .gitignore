@@ -46,6 +46,9 @@ frontend/out/
 # Lokale Starter-Laufzeitdateien und Logs
 .run/
 
+# Praxistest mit öffentlichen Testbelegen (scripts/praxiskorpus.py)
+praxiskorpus/
+
 # Lokale Agent- und Design-Richtlinien (nicht öffentlich)
 DESIGN.md
 CLAUDE.md

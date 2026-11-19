@@ -199,7 +199,7 @@ def test_extraktion_ergaenzt_fehlende_pflichtangaben(
         "sender": "Bueromarkt Nord GmbH",
         "document_number": None,
         "document_date": None,
-        "total_amount": "119,00",
+        "total_amount": "1.190,00",  # über 250 EUR: Rechnungsnummer ist Pflicht (§ 33 UStDV gilt nicht)
         "currency": "EUR",
         "iban": "DE89370400440532013001",  # falsche Pruefsumme
         "summary": "Rechnung ueber Bueromaterial.",

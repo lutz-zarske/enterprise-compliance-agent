@@ -67,6 +67,9 @@ class Case:
     small: bool = False
     #: Zusätzliche Fehlextraktionen: Name -> abweichende Beträge der KI-Antwort.
     misreads: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: Erwartete Kerndaten (Netto, Umsatzsteuer) nach der Absicherung über den Belegtext.
+    net: str | None = None
+    tax: str | None = None
 
 
 def _amounts(net: str | None, tax: str | None, total: str | None, rate: Any = None) -> dict[str, Any]:
@@ -246,6 +249,67 @@ CASES: list[Case] = [
         misreads={"restforderung_als_brutto": _amounts("10000.00", "1900.00", "5950.00", 19)},
     ),
     Case(
+        "hotel_ohne_pos",
+        [
+            *_head("H-2026-121", service="Aufenthalt vom 07.11.2026 bis 09.11.2026"),
+            "Übernachtung 2 Nächte x 89,00 EUR = 178,00 EUR (7 %)",
+            "Frühstück 2 x 15,00 EUR = 30,00 EUR (19 %)",
+            "Kurtaxe (nicht steuerbar) 6,00 EUR",
+            "Summe netto: 214,00 EUR",
+            "zzgl. 7 % USt auf 178,00 EUR: 12,46 EUR",
+            "zzgl. 19 % USt auf 30,00 EUR: 5,70 EUR",
+            "Gesamtbetrag: 232,16 EUR",
+        ],
+        _amounts("214.00", "18.16", "232.16"),
+        100, RELEASED, {"sum_check": "pass", "tax_calc": "pass", "ustg_5_items": "pass"},
+        small=True, net="214.00", tax="18.16",
+        extra={"items_description": None, "service_date": None, "service_period": "07.11.2026 - 09.11.2026"},
+        misreads={"nur_erste_ust_zeile": _amounts("214.00", "12.46", "232.16", 7)},
+    ),
+    Case(
+        "bewirtung_bruttopreise",
+        [
+            *_head("B-2026-61"),
+            "Speisen (7 %) 64,20 EUR",
+            "Getränke (19 %) 23,80 EUR",
+            "Gesamtbetrag 88,00 EUR",
+            "Darin enthalten: Netto 7 % 60,00 EUR, MwSt 7 % 4,20 EUR; Netto 19 % 20,00 EUR, MwSt 19 % 3,80 EUR",
+        ],
+        _amounts("80.00", "8.00", "88.00"),
+        100, RELEASED, {"sum_check": "pass", "tax_calc": "pass", "ustg_5_items": "pass"},
+        small=True, net="80.00", tax="8.00", extra={"items_description": None},
+    ),
+    Case(
+        "kleinbetrag_inkl_ust",
+        [
+            f"Kiosk am Markt, {SELLER_ADDRESS}",
+            "Beleg vom 10.11.2026",
+            "3 Notizblöcke",
+            "Betrag 59,50 EUR inkl. 19 % USt",
+        ],
+        _amounts("50.00", "9.50", "59.50", 19),
+        100, RELEASED, {"sum_check": "pass", "ustg_5_items": "pass"}, small=True, net="50.00", tax="9.50",
+        extra={
+            "sender": "Kiosk am Markt", "recipient": None, "recipient_address": None, "document_number": None,
+            "service_date": None, "sender_vat_id": None, "items_description": None,
+        },
+    ),
+    Case(
+        "porto_durchlaufposten",
+        [
+            *_head("P-2026-311"),
+            "Pos. 1 Druckerpapier A4, 20 Pakete (19 %) 100,00 EUR",
+            "Pos. 2 Porto (steuerfreier durchlaufender Posten) 4,95 EUR",
+            "Summe netto: 104,95 EUR",
+            "zzgl. 19 % USt auf 100,00 EUR: 19,00 EUR",
+            "Gesamtbetrag: 123,95 EUR",
+            "Die Kleinunternehmerregelung findet keine Anwendung.",
+        ],
+        _amounts("104.95", "19.00", "123.95", 19),
+        100, RELEASED, {"sum_check": "pass"}, absent=("ustg_14c_conflict",), small=True, net="104.95", tax="19.00",
+        misreads={"ki_liest_bemessungsgrundlage": _amounts("100.00", "19.00", "123.95", 19)},
+    ),
+    Case(
         "echter_summenfehler",
         [
             *_head("F-2026-1"),
@@ -293,10 +357,19 @@ def _llm_answer(case: Case, amounts: dict[str, Any]) -> dict[str, Any]:
     return answer
 
 
-def _run(client: TestClient, fake_ollama: FakeOllama, case: Case, amounts: dict[str, Any]) -> tuple[dict, dict]:
-    fake_ollama.extraction_response = _llm_answer(case, amounts)
-    fake_ollama.compliance_response = NEUTRAL_AUDIT
-    pdf = build_pdf([case.lines])
+_ASCII = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"})
+
+
+def _run(
+    client: TestClient, fake_ollama: FakeOllama, case: Case, amounts: dict[str, Any] | None, *, ascii_text: bool = False
+) -> tuple[dict, dict]:
+    if amounts is None:
+        fake_ollama.offline = True  # Regelwerk-Pfad: kein Sprachmodell erreichbar
+    else:
+        fake_ollama.extraction_response = _llm_answer(case, amounts)
+        fake_ollama.compliance_response = NEUTRAL_AUDIT
+    lines = [line.translate(_ASCII) for line in case.lines] if ascii_text else case.lines
+    pdf = build_pdf([lines])
     response = client.post("/documents/upload", files={"file": (f"{case.key}.pdf", pdf, "application/pdf")})
     assert response.status_code == 201, response.text
     body = client.post(f"/documents/{response.json()['id']}/extract?wait=true").json()
@@ -306,16 +379,21 @@ def _run(client: TestClient, fake_ollama: FakeOllama, case: Case, amounts: dict[
 def _variants() -> list[Any]:
     params = []
     for case in CASES:
-        params.append(pytest.param(case, case.amounts, id=f"{case.key}-gefuellt"))
-        params.append(pytest.param(case, _amounts(None, None, None), id=f"{case.key}-leer"))
+        params.append(pytest.param(case, case.amounts, False, id=f"{case.key}-gefuellt"))
+        params.append(pytest.param(case, _amounts(None, None, None), False, id=f"{case.key}-leer"))
+        params.append(pytest.param(case, None, False, id=f"{case.key}-regelwerk"))
+        params.append(pytest.param(case, case.amounts, True, id=f"{case.key}-gefuellt-ascii"))
+        params.append(pytest.param(case, None, True, id=f"{case.key}-regelwerk-ascii"))
         for name, misread in case.misreads.items():
-            params.append(pytest.param(case, misread, id=f"{case.key}-{name}"))
+            params.append(pytest.param(case, misread, False, id=f"{case.key}-{name}"))
     return params
 
 
-@pytest.mark.parametrize(("case", "amounts"), _variants())
-def test_pruefmatrix_pdf(client: TestClient, fake_ollama: FakeOllama, case: Case, amounts: dict[str, Any]) -> None:
-    card, extraction = _run(client, fake_ollama, case, amounts)
+@pytest.mark.parametrize(("case", "amounts", "ascii_text"), _variants())
+def test_pruefmatrix_pdf(
+    client: TestClient, fake_ollama: FakeOllama, case: Case, amounts: dict[str, Any] | None, ascii_text: bool
+) -> None:
+    card, extraction = _run(client, fake_ollama, case, amounts, ascii_text=ascii_text)
     checks = {c["id"]: c for tile in card["tiles"] for c in tile["checks"]}
     failed = {key: (c["status"], c["deduction"], c.get("detail")) for key, c in checks.items() if c["deduction"]}
     assert card["score"] == case.score, failed
@@ -328,6 +406,10 @@ def test_pruefmatrix_pdf(client: TestClient, fake_ollama: FakeOllama, case: Case
     # Beträge in den Kerndaten: aus der KI-Antwort oder abgesichert aus dem Belegtext.
     expected_total = Decimal(case.amounts["total_amount"])
     assert Decimal(str(extraction["total_amount"])) == expected_total
+    if case.net is not None:
+        assert Decimal(str(extraction["net_amount"])) == Decimal(case.net), extraction["issues"]
+    if case.tax is not None:
+        assert Decimal(str(extraction["tax_amount"])) == Decimal(case.tax), extraction["issues"]
 
 
 def _ubl(

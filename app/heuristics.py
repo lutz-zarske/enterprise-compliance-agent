@@ -20,7 +20,7 @@ from typing import Any
 
 from app.llm import ComplianceAuditPayload
 from app.schemas import AnnexIIICategory, DocType, ExtractionResult
-from app.scoring import RULESET_VERSION, analyze_text
+from app.scoring import RULESET_VERSION, analyze_text, position_lines
 
 #: Kennung im Ledger, in der Datenbank und in der Oberfläche.
 HEURISTIC_PROVIDER = "heuristic"
@@ -28,15 +28,28 @@ HEURISTIC_MODEL = f"regelwerk-{RULESET_VERSION}"
 HEURISTIC_LABEL = "Regelbasiertes Referenz-Audit – KI nicht verfügbar"
 
 _DOC_NUMBER = re.compile(
-    r"(?:rechnungs?|beleg|vertrags?|angebots?|auftrags?)[\s-]*(?:nr\.?|nummer|no\.?)\s*[:#]?\s*"
+    r"(?:rechnungs?|beleg|vertrags?|angebots?|auftrags?|invoice)[\s-]*(?:nr\.?|nummer|no\.?|#)\s*[:#]?\s*"
     r"([A-Z0-9][A-Z0-9/\-_.]{1,40})",
     re.IGNORECASE,
 )
 _DATE = r"(\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})"
-_DOC_DATE = re.compile(rf"(?:rechnungsdatum|belegdatum|ausstellungsdatum|datum|vom)\s*:?\s*{_DATE}", re.IGNORECASE)
+_DOC_DATE = re.compile(
+    rf"(?:rechnungsdatum|belegdatum|ausstellungsdatum|datum|vom|von|invoice\s+date|issue\s+date|issued\s+at|"
+    rf"date)\s*:?\s*{_DATE}",
+    re.IGNORECASE,
+)
 _DUE_DATE = re.compile(rf"(?:f(?:ä|ae)llig(?:\s+am|keit)?|zahlbar bis|zahlungsziel)\s*:?\s*{_DATE}", re.IGNORECASE)
-_SERVICE_DATE = re.compile(rf"(?:leistungs|liefer)(?:datum|tag)\s*:?\s*{_DATE}", re.IGNORECASE)
-_SERVICE_PERIOD = re.compile(r"(?:leistungs|liefer)zeitraum\s*:?\s*(.{4,80})", re.IGNORECASE)
+_SERVICE_DATE = re.compile(
+    rf"(?:(?:leistungs|liefer)(?:datum|tag)|date\s+of\s+(?:delivery|supply|service)|delivery\s+date)\s*:?\s*{_DATE}",
+    re.IGNORECASE,
+)
+#: Adresszeilen: Straße mit Hausnummer bzw. Postleitzahl mit Ort (auch ohne Leerzeichen, „88802Spielkreis“).
+_STREET_LINE = re.compile(
+    r"[A-ZÄÖÜ][a-zäöüß\-]+(?:straße|strasse|str\.|weg|allee|platz|gasse|ring|damm|ufer|chaussee)\s+\d+"
+    r"|^\d{5}\s*[A-ZÄÖÜ][a-zäöüß]+"
+)
+_CONTACT_LINE = re.compile(r"fon|fax|tel|phone|mail|@|http|www\.|kunden|customer|\d{3,}", re.IGNORECASE)
+_SERVICE_PERIOD = re.compile(r"(?:(?:leistungs|liefer)zeitraum|aufenthalt)\s*:?\s*(.{4,80})", re.IGNORECASE)
 _IBAN = re.compile(r"\b([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){3,7}(?:\s?[A-Z0-9]{1,3})?)\b")
 _VAT_ID = re.compile(r"\b(DE\s?\d{9}|ATU\d{8})\b")
 _TAX_NUMBER = re.compile(r"\b(\d{2,3}/\d{3,4}/\d{4,5})\b")
@@ -48,6 +61,12 @@ _KIND = (
     (DocType.OFFER, re.compile(r"\bangebot\b", re.IGNORECASE)),
     (DocType.CONTRACT, re.compile(r"\bvertrag\b|vereinbarung|\blizenz", re.IGNORECASE)),
 )
+#: Belege ohne das Wort „Rechnung“: Quittung, Kassenbon, Bewirtungs- oder Kleinbetragsbeleg, Gutschrift.
+_RECEIPT = re.compile(
+    r"\bquittung\b|kassen(?:bon|beleg|zettel)|bewirtung|\bgutschrift\b|rechnungskorrektur|\bbeleg\b|\bbon\b",
+    re.IGNORECASE,
+)
+_TAX_HINT = re.compile(r"\b(?:ust|mwst|umsatzsteuer|mehrwertsteuer)\b", re.IGNORECASE)
 
 #: Hinweise auf ein KI-System im Sinne von Art. 3 Nr. 1 VO (EU) 2024/1689.
 _AI_SYSTEM = re.compile(
@@ -88,13 +107,38 @@ def _line_of(text: str, pattern: re.Pattern[str]) -> int | None:
 _PAGE_MARKER = re.compile(r"^-{2,}\s*Seite\s+\d+\s*-{2,}$", re.IGNORECASE)
 
 
+def _guess_recipient(lines: list[str], sender: str | None) -> str | None:
+    """Empfänger ohne „An:“: Name über dem ersten Adressblock, der nicht zum Absender gehört."""
+    sender_key = (sender or "").casefold()
+    for index, line in enumerate(lines[1:], start=1):
+        if not _STREET_LINE.search(line) or (sender_key and sender_key in line.casefold()) or "●" in line:
+            continue
+        for back in range(index - 1, max(index - 4, 0), -1):
+            candidate = lines[back]
+            if _CONTACT_LINE.search(candidate) or _STREET_LINE.search(candidate) or "●" in candidate:
+                continue
+            if sender_key and sender_key in candidate.casefold():
+                break
+            if re.search(r"[A-Za-zÄÖÜäöüß]{2,}", candidate):
+                return candidate[:300]
+            break
+    return None
+
+
 def heuristic_extraction(text: str) -> ExtractionResult:
     """Kerndaten per Mustererkennung; Zweifelsfälle bleiben leer statt geraten."""
     lines = [line.strip() for line in text.splitlines() if line.strip() and not _PAGE_MARKER.match(line.strip())]
     doc_type = next((kind for kind, pattern in _KIND if pattern.search(text)), DocType.OTHER)
     facts = analyze_text(text)
+    if doc_type is DocType.OTHER and _RECEIPT.search(text) and _TAX_HINT.search(text) and facts.gross_amount is not None:
+        doc_type = DocType.INVOICE  # Kleinbetrags- oder Bewirtungsbeleg mit Umsatzsteuer
+    positions = position_lines(text)
+    items = "; ".join(line[:80] for line in positions[:4]) or None
     recipient = next((m.group(1).strip() for line in lines if (m := _RECIPIENT.match(line))), None)
     sender = lines[0].split(",")[0].strip()[:300] if lines else None
+    if lines and re.fullmatch(r"[\d.\-/ ]+", sender or ""):
+        sender = lines[1].split(",")[0].strip()[:300] if len(lines) > 1 else None  # erste Zeile nur ein Datum
+    recipient = recipient or _guess_recipient(lines, sender)
     iban = _first(_IBAN, text)
     gross = facts.gross_amount
     currency = "EUR" if re.search(r"\bEUR\b|€", text) else None
@@ -113,6 +157,7 @@ def heuristic_extraction(text: str) -> ExtractionResult:
         "sender_tax_number": _first(_TAX_NUMBER, text),
         "service_date": _first(_SERVICE_DATE, text),
         "service_period": _first(_SERVICE_PERIOD, text),
+        "items_description": items[:600] if items else None,
         "net_amount": facts.net_amount,
         "tax_rate": facts.tax_rate,
         "tax_amount": facts.tax_amount,

@@ -110,6 +110,12 @@ const EXACT_EN: Record<string, string> = {
   "Keine PII erkannt.": "No PII detected.",
   "Pflichtangabe fehlt.": "Mandatory disclosure missing.",
   "Keine IBAN im Dokument.": "No IBAN in document.",
+  "Die Kontokennung ist keine IBAN – keine Prüfziffernprüfung.": "The account identifier is not an IBAN – no check-digit validation.",
+  "Negativer Gesamtbetrag: Rechnungskorrektur bzw. Gutschrift – Bezug zur ursprünglichen Rechnung prüfen.":
+    "Negative total: invoice correction or credit note – check the reference to the original invoice.",
+  "Der ausgewiesene Gesamtbetrag ist null.": "The stated total is zero.",
+  "Netto und Umsatzsteuer aus dem Bruttobetrag herausgerechnet (Angabe „inkl. USt“).":
+    "Net and VAT derived from the gross amount (stated “incl. VAT”).",
   "IBAN valide · MwSt. korrekt berechnet": "IBAN valid · VAT calculated correctly",
   "IBAN ungültig · MwSt.-Fehler": "IBAN invalid · VAT calculation error",
   "IBAN valide · MwSt.-Fehler": "IBAN valid · VAT calculation error",
@@ -491,6 +497,12 @@ const EXACT_ES: Record<string, string> = {
   "Keine PII erkannt.": "No se detectaron datos personales.",
   "Pflichtangabe fehlt.": "Falta dato obligatorio.",
   "Keine IBAN im Dokument.": "Sin IBAN en el documento.",
+  "Die Kontokennung ist keine IBAN – keine Prüfziffernprüfung.": "El identificador de cuenta no es un IBAN: sin verificación de dígitos de control.",
+  "Negativer Gesamtbetrag: Rechnungskorrektur bzw. Gutschrift – Bezug zur ursprünglichen Rechnung prüfen.":
+    "Importe total negativo: factura rectificativa o abono; comprobar la referencia a la factura original.",
+  "Der ausgewiesene Gesamtbetrag ist null.": "El importe total indicado es cero.",
+  "Netto und Umsatzsteuer aus dem Bruttobetrag herausgerechnet (Angabe „inkl. USt“).":
+    "Neto e IVA calculados a partir del importe bruto (indicado «IVA incluido»).",
   "IBAN valide · MwSt. korrekt berechnet": "IBAN válido · IVA calculado correctamente",
   "IBAN ungültig · MwSt.-Fehler": "IBAN inválido · Error de cálculo de IVA",
   "IBAN valide · MwSt.-Fehler": "IBAN válido · Error de cálculo de IVA",
@@ -937,6 +949,11 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
       .replace(/^Gesamtbetrag aus dem Belegtext übernommen \((.+?)\); der extrahierte Wert (.+?) entsprach nicht Netto \+ Umsatzsteuer\.$/, "Gross total taken from the document text ($1); the extracted value $2 did not equal net + VAT.")
       .replace(/^Netto und Umsatzsteuer aus dem Belegtext übernommen \((.+?) und (.+?)\); die extrahierten Werte ergaben nicht den Gesamtbetrag\.$/, "Net and VAT taken from the document text ($1 and $2); the extracted values did not match the gross total.")
       .replace(/^Netto = Gesamtbetrag \(Steuerbefreiung für den ganzen Beleg, keine Umsatzsteuer\)\.$/, "Net = gross total (exemption for the whole document, no VAT).")
+      .replace(/^(.+) im Belegtext nicht eindeutig erkannt – bitte prüfen\.$/, (_m, labels: string) =>
+        `${labels.replace("Netto", "Net").replace("Umsatzsteuer", "VAT").replace("Brutto", "Gross")} not clearly identified in the document text – please check.`)
+      .replace(/^Netto um steuerfreie Posten ergänzt \((.+?)\); der extrahierte Wert (.+?) enthielt nur die steuerpflichtige Bemessungsgrundlage\.$/, "Net supplemented by tax-exempt items ($1); the extracted value $2 contained only the taxable base.")
+      .replace(/^Rundungsdifferenz im Rahmen der EN-16931-Regel BR-CO-17 \(±1 Währungseinheit\): (.+)\. Kein Punktabzug\.$/, (_m, parts: string) =>
+        `Rounding difference within EN 16931 rule BR-CO-17 (±1 currency unit): ${parts.replace(/erwartet/g, "expected").replace(/ausgewiesen/g, "stated")}. No score deduction.`)
       .replace(/^Je Steuersatz geprüft: (.+)\.$/, (_m, parts: string) => `Checked per VAT rate: ${parts.replace(/ auf /g, " on ")}.`)
       .replace(/^(.+ % auf .+: erwartet .+|USt gesamt .+ ≠ Summe der Steuerzeilen .+)\.$/, (_m, parts: string) =>
         `${parts.replace(/ auf /g, " on ").replace(/erwartet/g, "expected").replace(/ausgewiesen/g, "stated").replace("USt gesamt", "Total VAT").replace("Summe der Steuerzeilen", "sum of VAT lines")}.`)
@@ -997,6 +1014,11 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
       .replace(/^Gesamtbetrag aus dem Belegtext übernommen \((.+?)\); der extrahierte Wert (.+?) entsprach nicht Netto \+ Umsatzsteuer\.$/, "Importe total tomado del texto del documento ($1); el valor extraído $2 no equivalía a neto + IVA.")
       .replace(/^Netto und Umsatzsteuer aus dem Belegtext übernommen \((.+?) und (.+?)\); die extrahierten Werte ergaben nicht den Gesamtbetrag\.$/, "Neto e IVA tomados del texto del documento ($1 y $2); los valores extraídos no coincidían con el importe total.")
       .replace(/^Netto = Gesamtbetrag \(Steuerbefreiung für den ganzen Beleg, keine Umsatzsteuer\)\.$/, "Neto = importe total (exención para todo el documento, sin IVA).")
+      .replace(/^(.+) im Belegtext nicht eindeutig erkannt – bitte prüfen\.$/, (_m, labels: string) =>
+        `${labels.replace("Netto", "Neto").replace("Umsatzsteuer", "IVA").replace("Brutto", "Bruto")}: no identificado con claridad en el texto del documento; compruébelo.`)
+      .replace(/^Netto um steuerfreie Posten ergänzt \((.+?)\); der extrahierte Wert (.+?) enthielt nur die steuerpflichtige Bemessungsgrundlage\.$/, "Neto completado con las partidas exentas ($1); el valor extraído $2 solo contenía la base imponible.")
+      .replace(/^Rundungsdifferenz im Rahmen der EN-16931-Regel BR-CO-17 \(±1 Währungseinheit\): (.+)\. Kein Punktabzug\.$/, (_m, parts: string) =>
+        `Diferencia de redondeo dentro de la regla EN 16931 BR-CO-17 (±1 unidad monetaria): ${parts.replace(/erwartet/g, "esperado").replace(/ausgewiesen/g, "consignado")}. Sin penalización.`)
       .replace(/^Je Steuersatz geprüft: (.+)\.$/, (_m, parts: string) => `Comprobado por tipo de IVA: ${parts.replace(/ auf /g, " sobre ")}.`)
       .replace(/^(.+ % auf .+: erwartet .+|USt gesamt .+ ≠ Summe der Steuerzeilen .+)\.$/, (_m, parts: string) =>
         `${parts.replace(/ auf /g, " sobre ").replace(/erwartet/g, "esperado").replace(/ausgewiesen/g, "consignado").replace("USt gesamt", "IVA total").replace("Summe der Steuerzeilen", "suma de las líneas de IVA")}.`)
