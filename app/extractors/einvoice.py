@@ -611,7 +611,7 @@ def xrechnung_version_notice(invoice: EInvoiceData) -> str | None:
 #: Version des Parsers und des XML-↔-PDF-Abgleichs.  Erhöhen, sobald sich die
 #: Auswertung eines unveränderten Datensatzes ändert; die Neuprüfung liest das
 #: Original dann ohnehin neu ein, das Protokoll vermerkt die Version.
-PARSER_VERSION = "2026.3"
+PARSER_VERSION = "2026.4"
 
 
 def parse_einvoice_xml(

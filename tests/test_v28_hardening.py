@@ -165,7 +165,7 @@ def test_default_cors_loopback_und_cross_site_origin_blockiert(
     # Browser auf http://localhost:3001 sendet bei Aufruf von http://127.0.0.1:8001
     # Origin: http://localhost:3001 UND Sec-Fetch-Site: cross-site -> muss erlaubt sein!
     allowed_localhost = client.post(
-        "/api/settings",
+        "http://127.0.0.1:8001/api/settings",  # Browser-Anfragen tragen den echten Loopback-Host
         json={"pii_strictness": "standard"},
         headers={"Origin": "http://localhost:3001", "Sec-Fetch-Site": "cross-site"},
     )

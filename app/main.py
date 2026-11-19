@@ -18,7 +18,7 @@ import time
 import uuid
 from pathlib import Path as FsPath
 from functools import partial
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import anyio.to_thread
 import httpx
@@ -402,6 +402,23 @@ def _register_middleware(application: FastAPI) -> None:
             if not settings_.auth_enabled and "*" not in allowed_origins and request.method != "OPTIONS":
                 origin = (request.headers.get("Origin") or "").strip().rstrip("/")
                 fetch_site = (request.headers.get("Sec-Fetch-Site") or "").strip().lower()
+                # DNS-Rebinding: Browser-Anfragen nur an Loopback oder an Hosts der erlaubten Origins.
+                trusted_hosts = {"127.0.0.1", "localhost", "::1"} | {
+                    (urlsplit(item).hostname or "").lower() for item in allowed_origins
+                }
+                if fetch_site and (request.url.hostname or "").lower() not in trusted_hosts:
+                    response = _error_response(
+                        status.HTTP_403_FORBIDDEN,
+                        "untrusted_host",
+                        "Anfrage an einen nicht vertrauenswürdigen Hostnamen abgelehnt.",
+                        "Anwendung über http://127.0.0.1:3001 aufrufen oder CORS_ORIGINS anpassen.",
+                    )
+                    status_code = response.status_code
+                    response.headers["X-Request-ID"] = request_id
+                    return response
+                # Eigene Oberfläche des Backends (Swagger unter /docs) ist kein fremder Ursprung.
+                if fetch_site == "same-origin" or origin == str(request.base_url).rstrip("/"):
+                    origin, fetch_site = "", "same-origin"
                 is_sensitive = request.method in {"POST", "PUT", "PATCH", "DELETE"} or request.url.path.startswith(
                     ("/api/system/release", "/api/v1/ai/")
                 )

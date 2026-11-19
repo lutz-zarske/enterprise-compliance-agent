@@ -55,7 +55,7 @@ from app.schemas import (
     iban_checksum_valid,
 )
 
-RULESET_VERSION = "2026.3"
+RULESET_VERSION = "2026.4"
 
 #: Grenze der Kleinbetragsrechnung nach Paragraf 33 UStDV (seit 01.01.2017).
 SMALL_AMOUNT_LIMIT = Decimal("250")
@@ -151,6 +151,33 @@ class TextFacts:
     conformity_evidence: bool
     positions: bool
     tax_rates: tuple[Decimal, ...] = ()
+    #: Befreiung für den ganzen Beleg (Reverse Charge, § 13b, § 19, ig. Lieferung) – nicht nur einzelne Posten.
+    full_exemption: bool = False
+
+
+#: Hinweise, die den ganzen Beleg von der Umsatzsteuer ausnehmen.  Ein bloßes
+#: „steuerfrei“ oder „§ 4 Nr.“ betrifft oft nur einzelne Posten (z. B. Porto als
+#: durchlaufender Posten) und begründet allein keinen Widerspruch nach § 14c UStG.
+_FULL_EXEMPTION = re.compile(
+    r"reverse[\s-]?charge|steuerschuldnerschaft des leistungsempf|§\s?13b|kleinunternehmer|§\s?19 ustg|"
+    r"innergemeinschaftliche lieferung",
+    re.IGNORECASE,
+)
+#: „Die Kleinunternehmerregelung findet keine Anwendung“ ist kein Befreiungshinweis.
+_EXEMPTION_NOT_APPLIED = re.compile(
+    r"keine\s+anwendung|nicht\s+(?:anwendbar|angewendet|anzuwenden|einschl(?:ä|ae)gig)|gilt\s+nicht|"
+    r"kein(?:e|en)?\s+(?:fall|reverse)",
+    re.IGNORECASE,
+)
+
+
+def full_exemption_claim(*texts: str | None) -> bool:
+    """Behauptet eine Zeile eine Befreiung des ganzen Belegs (ohne Verneinung)?"""
+    for text in texts:
+        for line in (text or "").splitlines():
+            if _FULL_EXEMPTION.search(line) and not _EXEMPTION_NOT_APPLIED.search(line):
+                return True
+    return False
 
 
 #: Datumsangaben (15.12.2024, 15.12.24, 15.12., 2024-12-15) sind nie Beträge.
@@ -258,6 +285,7 @@ def analyze_text(text: str) -> TextFacts:
         conformity_evidence=_has_conformity_evidence(text),
         positions=bool(_POSITIONS.search(text)),
         tax_rates=tuple(seen_rates),
+        full_exemption=full_exemption_claim(text),
     )
 
 
@@ -912,7 +940,31 @@ def _math_tile(
                 and abs(net + tax - gross) <= _MONEY_TOLERANCE
                 and (low_bound - _MONEY_TOLERANCE) <= tax <= (high_bound + _MONEY_TOLERANCE)
             )
-            if mixed_plausible:
+            # Steuerfreie Einzelposten (z. B. Porto als durchlaufender Posten): Die Steuer liegt
+            # dann unter Netto x Satz, die Summe stimmt aber - Prüfhinweis statt Mangel.
+            partly_exempt_plausible = (
+                not ok
+                and not mixed_plausible
+                and (facts.exemption or bool(extraction.tax_exemption_note))
+                and gross is not None
+                and abs(net + tax - gross) <= _MONEY_TOLERANCE
+                and Decimal(0) <= tax <= expected + _MONEY_TOLERANCE
+            )
+            if partly_exempt_plausible:
+                checks.append(
+                    ScoreCheck(
+                        id="tax_calc", label="Umsatzsteuer = Netto x Steuersatz",
+                        legal_reference="§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
+                        status=CheckStatus.WARN,
+                        deduction=0,
+                        detail=(
+                            "Steuerfreie Positionen erkannt – Netto + USt = Brutto stimmt; "
+                            "Bemessungsgrundlage je Steuersatz manuell prüfen."
+                        ),
+                        evidence_source="rule_based",
+                    )
+                )
+            elif mixed_plausible:
                 rates_str = " / ".join(f"{_fmt_pct(r)} %" for r in positive_rates)
                 checks.append(
                     ScoreCheck(
@@ -936,7 +988,7 @@ def _math_tile(
                     )
                 )
         # § 14c UStG: Widerspruch zwischen Steuerbefreiung/Reverse Charge und ausgewiesener USt.
-        exemption_claimed = bool(extraction.tax_exemption_note) or facts.exemption
+        exemption_claimed = facts.full_exemption or full_exemption_claim(extraction.tax_exemption_note)
         if exemption_claimed and tax is not None and abs(tax) > _MONEY_TOLERANCE:
             checks.append(
                 ScoreCheck(

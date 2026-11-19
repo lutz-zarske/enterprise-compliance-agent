@@ -215,7 +215,7 @@ def test_jeder_abzug_traegt_eine_risikoerklaerung() -> None:
         assert not re.search(r"[a-zäöüß)]\.\s+[A-ZÄÖÜ]", check.risk_note), check.risk_note
     tax_id = next(c for c in deducted if c.id == "ustg_2_tax_id")
     assert "§ 15 UStG" in tax_id.risk_note
-    assert card.ruleset_version == "2026.3"
+    assert card.ruleset_version == "2026.4"
 
 
 def test_hochrisiko_hinweis_auf_art_6_abs_3_und_stichtag() -> None:

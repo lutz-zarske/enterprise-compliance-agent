@@ -3,6 +3,15 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.8.1 – 19.11.2026
+
+Abschluss-Prüfung vor dem Einfrieren – drei Korrekturen, 386 Offline-Tests:
+
+- **§ 14c UStG ohne Fehlalarm:** Ein steuerfreier Einzelposten (z. B. Porto als durchlaufender Posten) neben 19 % USt galt als Widerspruch und sperrte die Freigabe (−10). Jetzt zählen nur Hinweise, die den ganzen Beleg befreien (Reverse Charge, § 13b, § 19 UStG, innergemeinschaftliche Lieferung) – und verneinte Formulierungen wie „Kleinunternehmerregelung findet keine Anwendung“ gar nicht. Steuerfreie Einzelposten ergeben bei stimmender Summe einen Prüfhinweis ohne Abzug.
+- **Swagger und DNS-Rebinding:** Der Cross-Site-Schutz im lokalen Betrieb sperrte auch die eigene API-Dokumentation (`/docs`, „Try it out“). Anfragen vom selben Ursprung sind wieder erlaubt; zugleich weist das Backend Browser-Anfragen an fremde Hostnamen ab (Schutz gegen DNS-Rebinding: eine Webseite kann lokale Belege nicht mehr über einen umgebogenen Hostnamen lesen). Skripte ohne Browser-Kennung sind nicht betroffen.
+- **Versionen im Prüfprotokoll:** Parser und Regelwerk tragen nach den Änderungen in v2.8.0 die Version 2026.4; das Protokoll weist damit für geänderte Regeln eine eigene Version aus.
+- Test- und Versionsangaben in README und Architektur vereinheitlicht.
+
 ## v2.8.0 – 19.11.2026
 
 Finales Abschluss-Release nach vollständigem Sicherheits-, Fachlogik-, Krypto-, Export-, Frontend- und DevOps-Audit (`380` Offline-Tests, `0` npm-Audit-Schwachstellen):
