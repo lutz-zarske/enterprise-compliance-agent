@@ -51,10 +51,14 @@ const EXACT_EN: Record<string, string> = {
   "Freigabe gesperrt — Nachforderung nötig": "Approval blocked — supplier correction required",
   "Freigabe gesperrt — Konformitätsbewertung nach Art. 43 EU AI Act nachweisen":
     "Approval blocked — conformity assessment under Art. 43 EU AI Act required",
+  "Freigabe gesperrt — verbotene KI-Praktik nach Art. 5 EU AI Act (Einsatz untersagt)":
+    "Approval blocked — prohibited AI practice under Art. 5 EU AI Act (deployment banned)",
   "Freigabe unter Vorbehalt — Abweichung zwischen XML und PDF klären (XML maßgeblich)":
     "Conditional approval — clarify discrepancy between XML and PDF (XML prevails)",
   "Freigabe unter Vorbehalt — Nachbesserung empfohlen": "Conditional approval — remediation recommended",
   "Freigabe unter Vorbehalt — XRechnung-Standard nicht eingehalten": "Conditional approval — XRechnung standard not met",
+  "Freigabe unter Vorbehalt — EN-16931 Summenregel (BR-CO) verletzt":
+    "Conditional approval — EN 16931 arithmetic rule (BR-CO) violated",
   "Pflichtangaben nach § 14 UStG erfüllt, aber nicht konform zum angegebenen XRechnung-Standard; Eingangsplattformen öffentlicher Auftraggeber prüfen gegen diese Regeln. Daher Freigabe unter Vorbehalt, ohne Punktabzug.":
     "Mandatory details under Sec. 14 UStG are met, but the invoice does not conform to the XRechnung standard it declares; public-sector receiving platforms validate against these rules. Hence conditional approval, without score deduction.",
   "Vollständig verkehrsfähig & konform": "Fully compliant & valid",
@@ -113,6 +117,9 @@ const EXACT_EN: Record<string, string> = {
   "IBAN valide · Mischsätze (Prüfhinweis)": "IBAN valid · Mixed rates (review notice)",
   "IBAN ungültig · Mischsätze (Prüfhinweis)": "IBAN invalid · Mixed rates (review notice)",
   "Mischsätze (Prüfhinweis)": "Mixed rates (review notice)",
+  "IBAN valide · Prüfhinweis (MwSt. / Summen)": "IBAN valid · Review notice (VAT / totals)",
+  "IBAN ungültig · Prüfhinweis (MwSt. / Summen)": "IBAN invalid · Review notice (VAT / totals)",
+  "Prüfhinweis (MwSt. / Summen)": "Review notice (VAT / totals)",
   "IBAN valide": "IBAN valid",
   "IBAN ungültig": "IBAN invalid",
   "Hochrisiko (Anhang III)": "High-Risk (Annex III)",
@@ -318,6 +325,105 @@ const EXACT_EN: Record<string, string> = {
   "Keine Git-Arbeitskopie - Update über ein neues Image.": "Not a Git checkout — update via container image.",
   "Ein Update läuft bereits.": "An update is already running.",
   "Lokale Änderungen vorhanden - Update abgebrochen.": "Local changes present — update aborted.",
+
+  // 10 TextView PII tooltip labels (app/redaction.py _VIEW_CATEGORIES)
+  "Kontaktdaten (E-Mail)": "Contact details (email)",
+  "Kontaktdaten (Telefon)": "Contact details (phone)",
+  "Bankverbindung (IBAN)": "Bank account (IBAN)",
+  "USt-IdNr.": "VAT ID",
+  "Steuernummer": "Tax number",
+  "Ausweis-/Kennnummer": "ID / passport number",
+  "Besondere Kategorie (Art. 9/10 DSGVO)": "Special category (Art. 9/10 GDPR)",
+  "Firma / Organisation": "Company / organization",
+  "Betrag": "Amount",
+  "Datum": "Date",
+
+  // Privacy Vault & DLP uppercase category keys
+  EMAIL: "Email",
+  PHONE: "Phone",
+  IBAN: "IBAN",
+  VAT_ID: "VAT ID",
+  TAX_NUMBER: "Tax ID",
+  ID_NUMBER: "ID / SSN",
+  DATE_OF_BIRTH: "Date of birth",
+  ART9: "Art. 9/10",
+  PERSON: "Person",
+  ORG: "Organization",
+  ADDRESS: "Address",
+  AMOUNT: "Amount",
+  DATE: "Date",
+  SECRET: "Secret / token",
+  CUSTOM_TERM: "Blocked term",
+
+  // Audit trail, scoring & new v2.8.0 checks
+  "Keine Compliance-Auffälligkeiten": "No compliance findings",
+  "EN-16931 Summenregeln (BR-CO)": "EN 16931 arithmetic rules (BR-CO)",
+  "Kein unberechtigter Steuerausweis bei Befreiung/Reverse Charge": "No unauthorized VAT on exempt / reverse-charge supply",
+  "Prüfung nach § 14 UStG deaktiviert.": "§ 14 UStG audit disabled in settings.",
+  "Prüfung nach § 14 UStG in den Einstellungen deaktiviert.": "§ 14 UStG audit disabled in settings.",
+  "Deaktiviert": "Disabled",
+  "Unlesbares XML": "Unreadable XML",
+  "Kein API-Key hinterlegt - Vorschlagsliste.": "No API key stored — suggested list.",
+  "Analyse startet …": "Starting audit …",
+  "Fertig": "Done",
+  "Abgebrochen": "Cancelled",
+  "Datenbank nicht erreichbar.": "Database unreachable.",
+
+  // Legal references (German -> English)
+  "§ 14 Abs. 1 UStG i. d. F. des Wachstumschancengesetzes": "Sec. 14(1) UStG (German Growth Opportunities Act)",
+  "§ 14 Abs. 4 Satz 1 Nr. 1 UStG": "Sec. 14(4) sent. 1 no. 1 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 2 UStG": "Sec. 14(4) sent. 1 no. 2 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 3 UStG": "Sec. 14(4) sent. 1 no. 3 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 4 UStG": "Sec. 14(4) sent. 1 no. 4 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 5 UStG": "Sec. 14(4) sent. 1 no. 5 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 6 UStG": "Sec. 14(4) sent. 1 no. 6 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 7 UStG": "Sec. 14(4) sent. 1 no. 7 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 8 UStG": "Sec. 14(4) sent. 1 no. 8 UStG",
+  "§ 14 Abs. 4 UStG": "Sec. 14(4) UStG",
+  "§ 12 UStG": "Sec. 12 UStG",
+  "§ 14c UStG": "Sec. 14c UStG",
+  "BMF-Schreiben vom 15.10.2024, Rz. 36": "German BMF decree 15 Oct 2024, para. 36",
+  "§ 3 ERechV / Landesrecht": "Sec. 3 ERechV / German state law",
+  "Art. 9 / 10 DSGVO": "Art. 9 / 10 GDPR",
+  "Art. 5 Abs. 1 lit. c / Art. 32 DSGVO": "Art. 5(1)(c) / Art. 32 GDPR",
+  "Art. 5 Abs. 1 lit. c / Art. 25 DSGVO": "Art. 5(1)(c) / Art. 25 GDPR",
+  "Art. 5 Abs. 1 lit. e / Art. 32 DSGVO": "Art. 5(1)(e) / Art. 32 GDPR",
+  "Art. 6 Abs. 2 i. V. m. Anhang III EU AI Act": "Art. 6(2) in conj. with Annex III EU AI Act",
+  "Art. 5 VO (EU) 2024/1689": "Art. 5 Reg. (EU) 2024/1689",
+  "Art. 6 Abs. 2 VO (EU) 2024/1689": "Art. 6(2) Reg. (EU) 2024/1689",
+  "Art. 50 VO (EU) 2024/1689": "Art. 50 Reg. (EU) 2024/1689",
+  "Art. 4 VO (EU) 2024/1689": "Art. 4 Reg. (EU) 2024/1689",
+  "Art. 3 Nr. 1 VO (EU) 2024/1689": "Art. 3(1) Reg. (EU) 2024/1689",
+
+  // Sample-case reference texts (app/demo.py)
+  "Das Dokument ist eine Rechnung über Waren bzw. Dienstleistungen und beschreibt kein KI-System im Sinne von Art. 3 Nr. 1.":
+    "This document is an invoice for goods or services and does not describe an AI system within the meaning of Art. 3(1).",
+  "Rechnung der Nordlicht IT-Services GmbH über Managed-Security-Leistungen im Februar 2025. Alle Pflichtangaben sind vorhanden, die Beträge sind rechnerisch korrekt.":
+    "Invoice from Nordlicht IT-Services GmbH for Managed Security Services in February 2025. All statutory disclosures are present and amounts are mathematically accurate.",
+  "Rechnung über drei Büromöbel-Sets. Steuernummer bzw. USt-IdNr. und Leistungsdatum fehlen, der Steuersatz von 16 % ist unzulässig und die IBAN besteht die Prüfziffernkontrolle nicht.":
+    "Invoice for three office furniture sets. Supplier tax/VAT ID and supply date are missing, the 16% VAT rate is invalid, and the IBAN fails MOD-97 check-digit validation.",
+  "Weder Steuernummer noch USt-IdNr. des Ausstellers angegeben.": "Neither supplier tax number nor VAT ID stated.",
+  "Umsatzsteuersatz 16 % ist seit 01.01.2021 nicht mehr zulässig.": "16% VAT rate has not been valid since 01 Jan 2021.",
+  "Kein Liefer- bzw. Leistungsdatum angegeben.": "No delivery or performance date stated.",
+  "Vertrag über das KI-System TalentAI, das Bewerberinnen und Bewerber automatisiert bewertet. Vergütung 45.000 EUR, fällig zum 31.12.2024.":
+    "Contract for the TalentAI system, which automatically evaluates job applicants. Fee EUR 45,000, due 31 Dec 2024.",
+  "Kein Nachweis einer Konformitätsbewertung bzw. CE-Kennzeichnung für das KI-System.":
+    "No evidence of conformity assessment or CE marking for the AI system.",
+  "Automatisierte Bewertung und Vorauswahl von Bewerberinnen und Bewerbern":
+    "Automated evaluation and pre-selection of job applicants",
+  "TalentAI bewertet Bewerber automatisiert. Das fällt unter Anhang III Nr. 4 lit. a (Einstellung und Auswahl natürlicher Personen) und ist nach Art. 6 Abs. 2 ein Hochrisiko-KI-System. Die Ausnahme nach Art. 6 Abs. 3 greift nicht, weil eine Bewertung von Bewerbern ein Profiling natürlicher Personen ist.":
+    "TalentAI evaluates applicants automatically. This falls under Annex III No. 4(a) (recruitment and selection of natural persons) and constitutes a high-risk AI system under Art. 6(2). The Art. 6(3) derogation does not apply because applicant scoring involves profiling of natural persons.",
+  "Betreiberpflichten nach Art. 26: Einsatz gemäß Gebrauchsanweisung, menschliche Aufsicht, Aufbewahrung der Logs mindestens sechs Monate":
+    "Deployer obligations under Art. 26: use per instructions, human oversight, retain logs for at least six months",
+  "Information der Beschäftigtenvertretung vor Inbetriebnahme (Art. 26 Abs. 7)":
+    "Inform employee representatives prior to putting into service (Art. 26(7))",
+  "Nachweis der Konformitätsbewertung (Art. 43) und CE-Kennzeichnung (Art. 48) durch den Anbieter anfordern":
+    "Request proof of conformity assessment (Art. 43) and CE marking (Art. 48) from the provider",
+  "Datenschutz-Folgenabschätzung nach Art. 35 DSGVO": "Data Protection Impact Assessment under Art. 35 GDPR",
+  "Datenschutz-Folgenabschätzung (Art. 35 DSGVO) vor Einsatz durchführen":
+    "Conduct a Data Protection Impact Assessment (Art. 35 GDPR) before deployment",
+  "Auftragsverarbeitungsvertrag nach Art. 28 DSGVO mit dem Anbieter abschließen":
+    "Conclude a Data Processing Agreement (Art. 28 GDPR) with the provider",
 };
 
 const EXACT_ES: Record<string, string> = {
@@ -326,10 +432,14 @@ const EXACT_ES: Record<string, string> = {
   "Freigabe gesperrt — Nachforderung nötig": "Aprobación bloqueada — rectificación requerida",
   "Freigabe gesperrt — Konformitätsbewertung nach Art. 43 EU AI Act nachweisen":
     "Aprobación bloqueada — acreditar evaluación de conformidad según el art. 43 del Reglamento de IA",
+  "Freigabe gesperrt — verbotene KI-Praktik nach Art. 5 EU AI Act (Einsatz untersagt)":
+    "Aprobación bloqueada — práctica de IA prohibida según el art. 5 del Reglamento de IA (uso vetado)",
   "Freigabe unter Vorbehalt — Abweichung zwischen XML und PDF klären (XML maßgeblich)":
     "Aprobación condicional — aclarar discrepancia entre XML y PDF (prevalece el XML)",
   "Freigabe unter Vorbehalt — Nachbesserung empfohlen": "Aprobación condicional — se recomienda subsanación",
   "Freigabe unter Vorbehalt — XRechnung-Standard nicht eingehalten": "Aprobación condicional — no cumple el estándar XRechnung",
+  "Freigabe unter Vorbehalt — EN-16931 Summenregel (BR-CO) verletzt":
+    "Aprobación condicional — regla aritmética EN 16931 (BR-CO) infringida",
   "Pflichtangaben nach § 14 UStG erfüllt, aber nicht konform zum angegebenen XRechnung-Standard; Eingangsplattformen öffentlicher Auftraggeber prüfen gegen diese Regeln. Daher Freigabe unter Vorbehalt, ohne Punktabzug.":
     "Se cumplen los datos obligatorios del § 14 UStG, pero la factura no se ajusta al estándar XRechnung que declara; las plataformas de recepción públicas validan contra estas reglas. Por ello, aprobación condicional, sin penalización.",
   "Vollständig verkehrsfähig & konform": "Totalmente conforme y válido",
@@ -388,6 +498,9 @@ const EXACT_ES: Record<string, string> = {
   "IBAN valide · Mischsätze (Prüfhinweis)": "IBAN válido · Tipos mixtos (aviso)",
   "IBAN ungültig · Mischsätze (Prüfhinweis)": "IBAN inválido · Tipos mixtos (aviso)",
   "Mischsätze (Prüfhinweis)": "Tipos mixtos (aviso)",
+  "IBAN valide · Prüfhinweis (MwSt. / Summen)": "IBAN válido · Aviso de revisión (IVA / sumas)",
+  "IBAN ungültig · Prüfhinweis (MwSt. / Summen)": "IBAN inválido · Aviso de revisión (IVA / sumas)",
+  "Prüfhinweis (MwSt. / Summen)": "Aviso de revisión (IVA / sumas)",
   "IBAN valide": "IBAN válido",
   "IBAN ungültig": "IBAN inválido",
   "Hochrisiko (Anhang III)": "Alto riesgo (Anexo III)",
@@ -593,6 +706,105 @@ const EXACT_ES: Record<string, string> = {
   "Keine Git-Arbeitskopie - Update über ein neues Image.": "No es un repositorio Git — actualice mediante nueva imagen.",
   "Ein Update läuft bereits.": "Ya hay una actualización en curso.",
   "Lokale Änderungen vorhanden - Update abgebrochen.": "Hay cambios locales — actualización cancelada.",
+
+  // 10 TextView PII tooltip labels (app/redaction.py _VIEW_CATEGORIES)
+  "Kontaktdaten (E-Mail)": "Datos de contacto (correo)",
+  "Kontaktdaten (Telefon)": "Datos de contacto (teléfono)",
+  "Bankverbindung (IBAN)": "Cuenta bancaria (IBAN)",
+  "USt-IdNr.": "NIF-IVA",
+  "Steuernummer": "Número fiscal",
+  "Ausweis-/Kennnummer": "Número de documento / ID",
+  "Besondere Kategorie (Art. 9/10 DSGVO)": "Categoría especial (Art. 9/10 RGPD)",
+  "Firma / Organisation": "Empresa / organización",
+  "Betrag": "Importe",
+  "Datum": "Fecha",
+
+  // Privacy Vault & DLP uppercase category keys
+  EMAIL: "Correo",
+  PHONE: "Teléfono",
+  IBAN: "IBAN",
+  VAT_ID: "NIF-IVA",
+  TAX_NUMBER: "NIF",
+  ID_NUMBER: "DNI / SS",
+  DATE_OF_BIRTH: "Fecha de nacimiento",
+  ART9: "Art. 9/10",
+  PERSON: "Persona",
+  ORG: "Organización",
+  ADDRESS: "Dirección",
+  AMOUNT: "Importe",
+  DATE: "Fecha",
+  SECRET: "Clave / secreto",
+  CUSTOM_TERM: "Término bloqueado",
+
+  // Audit trail, scoring & new v2.8.0 checks
+  "Keine Compliance-Auffälligkeiten": "Sin incidencias de cumplimiento",
+  "EN-16931 Summenregeln (BR-CO)": "Reglas aritméticas EN 16931 (BR-CO)",
+  "Kein unberechtigter Steuerausweis bei Befreiung/Reverse Charge": "Sin IVA indebido en exención / inversión del sujeto pasivo",
+  "Prüfung nach § 14 UStG deaktiviert.": "Comprobación del § 14 UStG desactivada en ajustes.",
+  "Prüfung nach § 14 UStG in den Einstellungen deaktiviert.": "Comprobación del § 14 UStG desactivada en ajustes.",
+  "Deaktiviert": "Desactivado",
+  "Unlesbares XML": "XML ilegible",
+  "Kein API-Key hinterlegt - Vorschlagsliste.": "Sin clave API configurada — lista sugerida.",
+  "Analyse startet …": "Iniciando auditoría …",
+  "Fertig": "Completado",
+  "Abgebrochen": "Cancelado",
+  "Datenbank nicht erreichbar.": "Base de datos no disponible.",
+
+  // Legal references (German -> Spanish)
+  "§ 14 Abs. 1 UStG i. d. F. des Wachstumschancengesetzes": "§ 14(1) UStG (Ley de Oportunidades de Crecimiento)",
+  "§ 14 Abs. 4 Satz 1 Nr. 1 UStG": "§ 14(4) frase 1 n.º 1 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 2 UStG": "§ 14(4) frase 1 n.º 2 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 3 UStG": "§ 14(4) frase 1 n.º 3 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 4 UStG": "§ 14(4) frase 1 n.º 4 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 5 UStG": "§ 14(4) frase 1 n.º 5 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 6 UStG": "§ 14(4) frase 1 n.º 6 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 7 UStG": "§ 14(4) frase 1 n.º 7 UStG",
+  "§ 14 Abs. 4 Satz 1 Nr. 8 UStG": "§ 14(4) frase 1 n.º 8 UStG",
+  "§ 14 Abs. 4 UStG": "§ 14(4) UStG",
+  "§ 12 UStG": "§ 12 UStG",
+  "§ 14c UStG": "§ 14c UStG",
+  "BMF-Schreiben vom 15.10.2024, Rz. 36": "Circular BMF 15/10/2024, Rz. 36",
+  "§ 3 ERechV / Landesrecht": "§ 3 ERechV / derecho regional",
+  "Art. 9 / 10 DSGVO": "Art. 9 / 10 RGPD",
+  "Art. 5 Abs. 1 lit. c / Art. 32 DSGVO": "Art. 5(1)(c) / Art. 32 RGPD",
+  "Art. 5 Abs. 1 lit. c / Art. 25 DSGVO": "Art. 5(1)(c) / Art. 25 RGPD",
+  "Art. 5 Abs. 1 lit. e / Art. 32 DSGVO": "Art. 5(1)(e) / Art. 32 RGPD",
+  "Art. 6 Abs. 2 i. V. m. Anhang III EU AI Act": "Art. 6(2) en rel. con Anexo III Reglamento IA",
+  "Art. 5 VO (EU) 2024/1689": "Art. 5 Reg. (UE) 2024/1689",
+  "Art. 6 Abs. 2 VO (EU) 2024/1689": "Art. 6(2) Reg. (UE) 2024/1689",
+  "Art. 50 VO (EU) 2024/1689": "Art. 50 Reg. (UE) 2024/1689",
+  "Art. 4 VO (EU) 2024/1689": "Art. 4 Reg. (UE) 2024/1689",
+  "Art. 3 Nr. 1 VO (EU) 2024/1689": "Art. 3(1) Reg. (UE) 2024/1689",
+
+  // Sample-case reference texts (app/demo.py)
+  "Das Dokument ist eine Rechnung über Waren bzw. Dienstleistungen und beschreibt kein KI-System im Sinne von Art. 3 Nr. 1.":
+    "El documento es una factura de bienes o servicios y no describe ningún sistema de IA según el art. 3(1).",
+  "Rechnung der Nordlicht IT-Services GmbH über Managed-Security-Leistungen im Februar 2025. Alle Pflichtangaben sind vorhanden, die Beträge sind rechnerisch korrekt.":
+    "Factura de Nordlicht IT-Services GmbH por servicios de seguridad gestionada en febrero de 2025. Todos los datos obligatorios constan y los importes son correctos.",
+  "Rechnung über drei Büromöbel-Sets. Steuernummer bzw. USt-IdNr. und Leistungsdatum fehlen, der Steuersatz von 16 % ist unzulässig und die IBAN besteht die Prüfziffernkontrolle nicht.":
+    "Factura por tres conjuntos de mobiliario de oficina. Faltan el NIF/IVA y la fecha de prestación, el tipo del 16 % no es válido y el IBAN no supera la validación MOD-97.",
+  "Weder Steuernummer noch USt-IdNr. des Ausstellers angegeben.": "No se indica número fiscal ni NIF-IVA del emisor.",
+  "Umsatzsteuersatz 16 % ist seit 01.01.2021 nicht mehr zulässig.": "El tipo de IVA del 16 % dejó de ser válido el 01/01/2021.",
+  "Kein Liefer- bzw. Leistungsdatum angegeben.": "No se indica fecha de entrega ni de prestación.",
+  "Vertrag über das KI-System TalentAI, das Bewerberinnen und Bewerber automatisiert bewertet. Vergütung 45.000 EUR, fällig zum 31.12.2024.":
+    "Contrato del sistema de IA TalentAI para la evaluación automatizada de candidatos. Importe 45.000 EUR, vencimiento 31/12/2024.",
+  "Kein Nachweis einer Konformitätsbewertung bzw. CE-Kennzeichnung für das KI-System.":
+    "Sin acreditación de evaluación de conformidad ni marcado CE para el sistema de IA.",
+  "Automatisierte Bewertung und Vorauswahl von Bewerberinnen und Bewerbern":
+    "Evaluación y preselección automatizada de candidatos",
+  "TalentAI bewertet Bewerber automatisiert. Das fällt unter Anhang III Nr. 4 lit. a (Einstellung und Auswahl natürlicher Personen) und ist nach Art. 6 Abs. 2 ein Hochrisiko-KI-System. Die Ausnahme nach Art. 6 Abs. 3 greift nicht, weil eine Bewertung von Bewerbern ein Profiling natürlicher Personen ist.":
+    "TalentAI evalúa candidatos de forma automatizada. Encaja en el Anexo III n.º 4 letra a (contratación y selección de personas físicas) y constituye un sistema de alto riesgo según el art. 6(2). La excepción del art. 6(3) no aplica porque implica elaboración de perfiles.",
+  "Betreiberpflichten nach Art. 26: Einsatz gemäß Gebrauchsanweisung, menschliche Aufsicht, Aufbewahrung der Logs mindestens sechs Monate":
+    "Obligaciones del responsable del despliegue (Art. 26): uso conforme a instrucciones, supervisión humana y conservación de registros al menos seis meses",
+  "Information der Beschäftigtenvertretung vor Inbetriebnahme (Art. 26 Abs. 7)":
+    "Informar a los representantes de los trabajadores antes de la puesta en servicio (Art. 26(7))",
+  "Nachweis der Konformitätsbewertung (Art. 43) und CE-Kennzeichnung (Art. 48) durch den Anbieter anfordern":
+    "Solicitar al proveedor la evaluación de conformidad (Art. 43) y el marcado CE (Art. 48)",
+  "Datenschutz-Folgenabschätzung nach Art. 35 DSGVO": "Evaluación de impacto de protección de datos según el art. 35 RGPD",
+  "Datenschutz-Folgenabschätzung (Art. 35 DSGVO) vor Einsatz durchführen":
+    "Realizar una evaluación de impacto (Art. 35 RGPD) antes de su puesta en uso",
+  "Auftragsverarbeitungsvertrag nach Art. 28 DSGVO mit dem Anbieter abschließen":
+    "Suscribir un contrato de encargado del tratamiento (Art. 28 RGPD) con el proveedor",
 };
 
 /**
@@ -714,6 +926,9 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
         "According to KoSIT, XRechnung $1 was only valid until $2; XRechnung $3 is in force (since $4). Receiving platforms validate against the current version and usually reject older datasets. No score deduction.")
       .replace(/^Diskrepanz zwischen visuellem PDF und maßgeblichem XML-Datensatz \(BMF 15\.10\.2024: XML hat Vorrang\)\. (.+)$/, "Mismatch between visual PDF and authoritative XML (BMF 15 Oct 2024: XML prevails). $1")
       .replace(/^Steuersatz (.+) ist zum Rechnungsdatum nicht zulässig\.$/, "VAT rate $1 is not valid on the invoice date.")
+      .replace(/^Ausländischer Steuersatz (.+) erkannt – Zulässigkeit im Ausstellerland prüfen\.$/, "Foreign VAT rate $1 detected — verify validity in issuer's country.")
+      .replace(/^Mischsteuersätze \((.+)\) erkannt – Netto \+ USt = Brutto stimmt; Aufschlüsselung im PDF-Text manuell prüfen\.$/, "Mixed VAT rates ($1) detected — Net + VAT = Gross holds; verify breakdown manually in PDF text.")
+      .replace(/^Widerspruch: Hinweis auf Steuerbefreiung\/Reverse Charge, dennoch Umsatzsteuer \((.+)\) ausgewiesen \(§ 14c UStG – Gefährdung des Vorsteuerabzugs\)\.$/, "Conflict: tax exemption / reverse-charge notice present, yet VAT ($1) stated (§ 14c UStG — input VAT deduction at risk).")
       .replace(/^(.+) \+ (.+) ergibt (.+), ausgewiesen sind (.+)\.$/, "$1 + $2 equals $3, but $4 is stated.")
       .replace(/^Erwartet (.+), ausgewiesen (.+)\.$/, "Expected $1, stated $2.")
       .replace(/^Profil ([^,]+), Syntax ([^(]+) \((eingebettet als ([^)]+)|reines XML)\)\. Geprüft: Profilkennung BT-24, Pflichtfelder und Summenregeln \(BR-CO-10\/13\/14\/15, (BR-DE-2, )?BR-DE-15\)\. Keine (?:vollständige )?Validierung gegen XSD und Schematron \(z\. B\. KoSIT-Validator\)\.(.*)$/,
@@ -726,13 +941,18 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
       .replace(/^Eingebetteter Datensatz (.*?) ist nicht auswertbar: (.+?) Bewertet wird der Bildteil\. Kein Punktabzug\.$/,
         "Embedded dataset $1 cannot be parsed: $2 Falling back to visual PDF. No score deduction.")
       .replace(/Käufer „(.+?)“ ist als öffentliche Stelle erkennbar \(„(.+?)“\)\./g, "Buyer “$1” identified as public authority (“$2”).")
-      .replace(/^([^:]+): Aufbau und Prüfziffer \(ISO\/IEC 7064, MOD 97-10\) gültig\. (.+)$/, "$1: Format and check digits (ISO/IEC 7064, MOD 97-10) valid. $2")
-      .replace(/^Öffentlicher Auftraggeber erkannt, aber keine Leitweg-ID angegeben\. (.+)$/, "Public buyer detected, but no Leitweg-ID provided. $1")
+      .replace(/^([^:]+): Aufbau und Prüfziffer \(ISO\/IEC 7064, MOD 97-10\) gültig\. (.+)$/,
+        (_m, id: string, reason: string) => `${id}: Format and check digits (ISO/IEC 7064, MOD 97-10) valid. ${translateDynamic(reason, "en")}`)
+      .replace(/^Öffentlicher Auftraggeber erkannt, aber keine Leitweg-ID angegeben\. (.+)$/,
+        (_m, reason: string) => `Public buyer detected, but no Leitweg-ID provided. ${translateDynamic(reason, "en")}`)
       .replace(/^Prüfziffer ungültig \(erwartet ([^,]+), angegeben ([^)]+)\)\.$/, "Invalid check digit (expected $1, provided $2).")
-      .replace(/^(.+?)\. Kein Nachweis einer Konformitätsbewertung \(Art\. 43\) und CE-Kennzeichnung \(Art\. 48\); Betreiberpflichten nach Art\. 26 beachten\.$/, "$1. No proof of conformity assessment (Art. 43) or CE marking (Art. 48); observe deployer duties under Art. 26.")
-      .replace(/^(.+?)\. Hinweis auf Konformitätsbewertung vorhanden – Nachweis prüfen \(Art\. 43\)\.$/, "$1. Conformity indicator present — verify evidence (Art. 43).")
+      .replace(/^(.+?)\. Kein Nachweis einer Konformitätsbewertung \(Art\. 43\) und CE-Kennzeichnung \(Art\. 48\); Betreiberpflichten nach Art\. 26 beachten\.$/,
+        (_m, cats: string) => `${cats.split(", ").map((c) => translateDynamic(c.trim(), "en")).join(", ")}. No proof of conformity assessment (Art. 43) or CE marking (Art. 48); observe deployer duties under Art. 26.`)
+      .replace(/^(.+?)\. Hinweis auf Konformitätsbewertung vorhanden – Nachweis prüfen \(Art\. 43\)\.$/,
+        (_m, cats: string) => `${cats.split(", ").map((c) => translateDynamic(c.trim(), "en")).join(", ")}. Conformity indicator present — verify evidence (Art. 43).`)
       .replace(/^Ollama ist als entfernter Dienst konfiguriert \(([^)]+)\)\.$/, "Ollama is configured as a remote service ($1).")
       .replace(/^Update-Server nicht erreichbar: (.+)$/, "Update server unreachable: $1")
+      .replace(/^Wechsle auf Ausweichmodell (.+?)(?: …)?$/, "Switching to fallback model $1 …")
       .replace(/^Wechsle auf (.+?): (.+)$/, "Switching to $1: $2")
       .replace(/^(.+?) prüft Belegstellen und Rechtsnormen$/, "$1 reviewing excerpts and statutory rules");
   } else if (locale === "es") {
@@ -754,6 +974,9 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
         "Según KoSIT, XRechnung $1 solo fue válida hasta $2; está en vigor XRechnung $3 (desde $4). Las plataformas de recepción validan contra la versión actual y suelen rechazar datos antiguos. Sin penalización.")
       .replace(/^Diskrepanz zwischen visuellem PDF und maßgeblichem XML-Datensatz \(BMF 15\.10\.2024: XML hat Vorrang\)\. (.+)$/, "Discrepancia entre el PDF visual y el XML vinculante (BMF 15/10/2024). $1")
       .replace(/^Steuersatz (.+) ist zum Rechnungsdatum nicht zulässig\.$/, "El tipo de IVA $1 no es válido en la fecha de la factura.")
+      .replace(/^Ausländischer Steuersatz (.+) erkannt – Zulässigkeit im Ausstellerland prüfen\.$/, "Tipo de IVA extranjero $1 detectado — comprobar validez en el país emisor.")
+      .replace(/^Mischsteuersätze \((.+)\) erkannt – Netto \+ USt = Brutto stimmt; Aufschlüsselung im PDF-Text manuell prüfen\.$/, "Tipos de IVA mixtos ($1) detectados — Neto + IVA = Bruto correcto; revisar desglose manualmente en el PDF.")
+      .replace(/^Widerspruch: Hinweis auf Steuerbefreiung\/Reverse Charge, dennoch Umsatzsteuer \((.+)\) ausgewiesen \(§ 14c UStG – Gefährdung des Vorsteuerabzugs\)\.$/, "Conflicto: mención de exención / inversión del sujeto pasivo, pero se consigna IVA ($1) (§ 14c UStG — riesgo para la deducción).")
       .replace(/^(.+) \+ (.+) ergibt (.+), ausgewiesen sind (.+)\.$/, "$1 + $2 suma $3, pero figura $4.")
       .replace(/^Erwartet (.+), ausgewiesen (.+)\.$/, "Esperado $1, consignado $2.")
       .replace(/^Profil ([^,]+), Syntax ([^(]+) \((eingebettet als ([^)]+)|reines XML)\)\. Geprüft: Profilkennung BT-24, Pflichtfelder und Summenregeln \(BR-CO-10\/13\/14\/15, (BR-DE-2, )?BR-DE-15\)\. Keine (?:vollständige )?Validierung gegen XSD und Schematron \(z\. B\. KoSIT-Validator\)\.(.*)$/,
@@ -766,13 +989,18 @@ export function translateDynamic(text: string | null | undefined, locale: Locale
       .replace(/^Eingebetteter Datensatz (.*?) ist nicht auswertbar: (.+?) Bewertet wird der Bildteil\. Kein Punktabzug\.$/,
         "El XML incrustado $1 no se pudo analizar: $2 Se evalúa el PDF visual. Sin penalización.")
       .replace(/Käufer „(.+?)“ ist als öffentliche Stelle erkennbar \(„(.+?)“\)\./g, "Comprador «$1» identificado como organismo público («$2»).")
-      .replace(/^([^:]+): Aufbau und Prüfziffer \(ISO\/IEC 7064, MOD 97-10\) gültig\. (.+)$/, "$1: Formato y dígitos de control (ISO/IEC 7064, MOD 97-10) válidos. $2")
-      .replace(/^Öffentlicher Auftraggeber erkannt, aber keine Leitweg-ID angegeben\. (.+)$/, "Comprador público detectado, pero sin Leitweg-ID. $1")
+      .replace(/^([^:]+): Aufbau und Prüfziffer \(ISO\/IEC 7064, MOD 97-10\) gültig\. (.+)$/,
+        (_m, id: string, reason: string) => `${id}: Formato y dígitos de control (ISO/IEC 7064, MOD 97-10) válidos. ${translateDynamic(reason, "es")}`)
+      .replace(/^Öffentlicher Auftraggeber erkannt, aber keine Leitweg-ID angegeben\. (.+)$/,
+        (_m, reason: string) => `Comprador público detectado, pero sin Leitweg-ID. ${translateDynamic(reason, "es")}`)
       .replace(/^Prüfziffer ungültig \(erwartet ([^,]+), angegeben ([^)]+)\)\.$/, "Dígito de control inválido (esperado $1, indicado $2).")
-      .replace(/^(.+?)\. Kein Nachweis einer Konformitätsbewertung \(Art\. 43\) und CE-Kennzeichnung \(Art\. 48\); Betreiberpflichten nach Art\. 26 beachten\.$/, "$1. Sin acreditación de conformidad (Art. 43) ni marcado CE (Art. 48); cumplir obligaciones del art. 26.")
-      .replace(/^(.+?)\. Hinweis auf Konformitätsbewertung vorhanden – Nachweis prüfen \(Art\. 43\)\.$/, "$1. Indicio de evaluación de conformidad — verificar acreditación (Art. 43).")
+      .replace(/^(.+?)\. Kein Nachweis einer Konformitätsbewertung \(Art\. 43\) und CE-Kennzeichnung \(Art\. 48\); Betreiberpflichten nach Art\. 26 beachten\.$/,
+        (_m, cats: string) => `${cats.split(", ").map((c) => translateDynamic(c.trim(), "es")).join(", ")}. Sin acreditación de conformidad (Art. 43) ni marcado CE (Art. 48); cumplir obligaciones del art. 26.`)
+      .replace(/^(.+?)\. Hinweis auf Konformitätsbewertung vorhanden – Nachweis prüfen \(Art\. 43\)\.$/,
+        (_m, cats: string) => `${cats.split(", ").map((c) => translateDynamic(c.trim(), "es")).join(", ")}. Indicio de evaluación de conformidad — verificar acreditación (Art. 43).`)
       .replace(/^Ollama ist als entfernter Dienst konfiguriert \(([^)]+)\)\.$/, "Ollama está configurado como servicio remoto ($1).")
       .replace(/^Update-Server nicht erreichbar: (.+)$/, "Servidor de actualizaciones inaccesible: $1")
+      .replace(/^Wechsle auf Ausweichmodell (.+?)(?: …)?$/, "Cambiando a modelo alternativo $1 …")
       .replace(/^Wechsle auf (.+?): (.+)$/, "Cambiando a $1: $2")
       .replace(/^(.+?) prüft Belegstellen und Rechtsnormen$/, "$1 comprobando citas y normativa");
   }

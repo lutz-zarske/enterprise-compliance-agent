@@ -45,12 +45,13 @@ export function useJobs(online: boolean, onFinished: (job: JobSnapshot) => void)
         const open = response.jobs;
         active = open.length > 0;
         const openIds = new Set(open.map((job) => job.job_id));
-        // Verschwundene Jobs: Endstand holen und genau einmal melden.
-        for (const [jobId] of known.current) {
+        // Verschwundene Jobs: Endstand holen und genau einmal melden (erst nach Erfolg aus known streichen).
+        for (const [jobId] of Array.from(known.current.entries())) {
           if (openIds.has(jobId)) continue;
-          known.current.delete(jobId);
           const final = await api.job(jobId).catch(() => null);
-          if (final && !stop) report(final);
+          if (stop) return;
+          known.current.delete(jobId);
+          if (final) report(final);
         }
         open.forEach((job) => known.current.set(job.job_id, job));
         setJobs(open);
@@ -80,6 +81,8 @@ export function useJobs(online: boolean, onFinished: (job: JobSnapshot) => void)
   const cancel = useCallback(async (jobId: string) => {
     try {
       await api.cancelJob(jobId);
+    } catch {
+      /* Job kann im selben Moment bereits beendet worden sein */
     } finally {
       setNonce((n) => n + 1);
     }

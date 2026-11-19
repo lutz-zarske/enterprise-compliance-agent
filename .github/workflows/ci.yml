@@ -1,5 +1,8 @@
 name: Compliance Agent CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ master, main ]

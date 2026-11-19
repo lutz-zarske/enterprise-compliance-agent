@@ -48,12 +48,25 @@ export function Select<T extends string = string>({ value, options, onChange, ar
     if (open) setActive(Math.max(0, options.findIndex((option) => option.value === value)));
   }, [open, options, value]);
 
-  // Klick nach draußen, Scrollen der Seite und Größenänderung schließen die Liste.
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector<HTMLElement>(`#${CSS.escape(`${id}-opt-${active}`)}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, active, id]);
+
+  // Klick nach draußen, Escape (Capture vor Modal!), Scrollen und Resize schließen die Liste.
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!buttonRef.current?.contains(target) && !listRef.current?.contains(target)) setOpen(false);
+    };
+    const onKeyCapture = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
     };
     const onScroll = (event: Event) => {
       if (event.target instanceof Node && listRef.current?.contains(event.target)) return;
@@ -61,10 +74,12 @@ export function Select<T extends string = string>({ value, options, onChange, ar
     };
     const onResize = () => setOpen(false);
     document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKeyCapture, true);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKeyCapture, true);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
@@ -115,7 +130,8 @@ export function Select<T extends string = string>({ value, options, onChange, ar
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-controls={`${id}-list`}
+        aria-controls={open ? `${id}-list` : undefined}
+        aria-activedescendant={open && options[active] ? `${id}-opt-${active}` : undefined}
         aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
@@ -149,6 +165,7 @@ export function Select<T extends string = string>({ value, options, onChange, ar
               return (
                 <li
                   key={option.value}
+                  id={`${id}-opt-${index}`}
                   role="option"
                   aria-selected={isSelected}
                   onMouseEnter={() => setActive(index)}

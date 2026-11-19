@@ -408,7 +408,16 @@ class StructuredLLMClient:
             {"role": "user", "content": user_prompt},
         ]
         started = time.perf_counter()
-        last_error: Exception | None = None
+        last_error_text: str | None = None
+
+        def _safe_error(exc: Exception) -> str:
+            if isinstance(exc, ValidationError):
+                parts = []
+                for item in exc.errors()[:5]:
+                    loc = ".".join(str(segment) for segment in item.get("loc", ())) or "root"
+                    parts.append(f"{loc}: {item.get('msg', 'ungültig')}")
+                return "; ".join(parts) or "Schemavalidierung fehlgeschlagen."
+            return str(exc)
 
         for attempt in range(1, max_attempts + 1):
             content = await self._post_chat(messages)
@@ -416,16 +425,17 @@ class StructuredLLMClient:
                 data = extract_json_object(content)
                 validated = schema.model_validate(data)
             except (LLMResponseError, ValidationError) as exc:
-                last_error = exc
+                safe_msg = _safe_error(exc)
+                last_error_text = safe_msg
                 logger.warning(
                     "Schemavalidierung fehlgeschlagen (Versuch %s/%s): %s",
                     attempt,
                     max_attempts,
-                    exc,
+                    safe_msg,
                 )
                 if attempt == max_attempts:
                     break
-                # Reparaturrunde: das Modell bekommt seine eigenen Fehler zurück.
+                # Reparaturrunde: das Modell bekommt seine eigenen Fehler ohne Klartext-Eingabewerte zurück.
                 messages = [
                     *messages,
                     {"role": "assistant", "content": content[:4000]},
@@ -433,7 +443,7 @@ class StructuredLLMClient:
                         "role": "user",
                         "content": (
                             "Deine Antwort entsprach nicht dem geforderten Schema. "
-                            f"Fehler:\n{exc}\n\n"
+                            f"Fehler:\n{safe_msg}\n\n"
                             "Antworte erneut - ausschließlich mit einem einzigen, "
                             "gültigen JSON-Objekt gemäß Schema."
                         ),
@@ -446,7 +456,7 @@ class StructuredLLMClient:
 
         raise LLMResponseError(
             f"Das Modell lieferte auch nach {max_attempts} Versuchen keine "
-            f"schemakonforme Antwort. Letzter Fehler: {last_error}"
+            f"schemakonforme Antwort. Letzter Fehler: {last_error_text}"
         )
 
     async def chat_text(
@@ -572,9 +582,8 @@ class OllamaClient(StructuredLLMClient):
                 f"Ollama ist ausgelastet oder gestört (HTTP {response.status_code})."
             )
         if response.status_code >= 400:
-            raise LLMResponseError(
-                f"Ollama antwortete mit HTTP {response.status_code}: {response.text[:300]}"
-            )
+            logger.warning("Ollama HTTP %s: %s", response.status_code, response.text[:300])
+            raise LLMResponseError(f"Ollama antwortete mit HTTP {response.status_code}.")
 
         try:
             body = response.json()

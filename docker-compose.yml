@@ -17,8 +17,11 @@ services:
     container_name: compliance-agent-api
     restart: unless-stopped
     ports:
-      # Host 8001 -> Container 8000 (Frontend und Doku erwarten die API auf 8001).
-      - "8001:8000"
+      # Host 8001 -> Container 8000 (Standard: nur lokal erreichbar; BIND_HOST=0.0.0.0 öffnet fürs Netz).
+      - "${BIND_HOST:-127.0.0.1}:8001:8000"
+    env_file:
+      - path: .env
+        required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -69,7 +72,7 @@ services:
     container_name: compliance-agent-frontend
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "${BIND_HOST:-127.0.0.1}:3001:3001"
     depends_on:
       api:
         condition: service_healthy
@@ -80,11 +83,17 @@ services:
     profiles: ["full"]
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "${BIND_HOST:-127.0.0.1}:11434:11434"
     environment:
       # 32k Kontext eines 14B-Modells in 16 GB Grafikspeicher.
       OLLAMA_FLASH_ATTENTION: "1"
       OLLAMA_KV_CACHE_TYPE: q8_0
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     volumes:
       - ollama-models:/root/.ollama
 

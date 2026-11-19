@@ -215,7 +215,7 @@ class AnnexIIICategory(str, Enum):
     CRITICAL_INFRASTRUCTURE = "critical_infrastructure"             # Nr. 2
     EDUCATION = "education_and_vocational_training"                 # Nr. 3
     EMPLOYMENT = "employment_and_worker_management"                 # Nr. 4 (HR/Recruiting)
-    ESSENTIAL_SERVICES = "essential_services_and_creditworthiness"  # Nr. 5 (Kreditwuerdigkeit)
+    ESSENTIAL_SERVICES = "essential_services_and_creditworthiness"  # Nr. 5 (Kreditwürdigkeit)
     LAW_ENFORCEMENT = "law_enforcement"                             # Nr. 6
     MIGRATION_AND_BORDER = "migration_asylum_border_control"        # Nr. 7
     JUSTICE_AND_DEMOCRACY = "justice_and_democratic_processes"      # Nr. 8
@@ -300,7 +300,7 @@ PII_CATEGORY_LABELS: dict[PIICategory, str] = {
 
 
 class RiskLevel(str, Enum):
-    """Generische Risiköinstufung für den DSGVO-Teilbericht."""
+    """Generische Risikoeinstufung für den DSGVO-Teilbericht."""
 
     NONE = "none"
     LOW = "low"
@@ -935,7 +935,7 @@ class CheckStatus(str, Enum):
 
 
 class ScoreBand(str, Enum):
-    GREEN = "green"   # >= 85: verkehrsfaehig
+    GREEN = "green"   # >= 85: verkehrsfähig
     AMBER = "amber"   # 60-84: Nachbesserung
     RED = "red"       # < 60: Revisionssperre
 
@@ -1249,6 +1249,22 @@ class SignOff(ApiModel):
 InferenceModeLiteral = Literal["local", "gemini", "anthropic", "openai"]
 
 
+_MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$")
+
+
+def _validate_model_name(value: str | None, *, allow_empty: bool = False) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        if allow_empty:
+            return ""
+        raise ValueError("Modellkennung darf nicht leer sein.")
+    if ".." in cleaned or not _MODEL_ID_RE.fullmatch(cleaned):
+        raise ValueError(f"Ungültige Modellkennung '{cleaned[:40]}'.")
+    return cleaned
+
+
 class BackupKeyInput(ApiModel):
     """Ein Ausweich-Schlüssel der Kaskade (wird verschlüsselt gespeichert, nie zurückgegeben)."""
 
@@ -1256,6 +1272,11 @@ class BackupKeyInput(ApiModel):
     provider: Literal["gemini", "anthropic", "openai"]
     model: str | None = Field(default=None, max_length=120, description="Leer = Hauptmodell des Anbieters.")
     api_key: str | None = Field(default=None, max_length=400, description="Leer = gespeicherten Schlüssel behalten.")
+
+    @field_validator("model")
+    @classmethod
+    def _check_model(cls, value: str | None) -> str | None:
+        return _validate_model_name(value, allow_empty=True)
 
 
 class SettingsUpdate(ApiModel):
@@ -1292,6 +1313,20 @@ class SettingsUpdate(ApiModel):
             "den gespeicherten Schlüssel derselben id."
         ),
     )
+
+    @field_validator("models")
+    @classmethod
+    def _check_models(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is None:
+            return None
+        return {k: (_validate_model_name(v, allow_empty=True) or "") for k, v in value.items()}
+
+    @field_validator("ausweich_modelle")
+    @classmethod
+    def _check_ausweich_modelle(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is None:
+            return None
+        return {k: (_validate_model_name(v, allow_empty=True) or "") for k, v in value.items()}
 
 
 class ConnectionTestRequest(ApiModel):

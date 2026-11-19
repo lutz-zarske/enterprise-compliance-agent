@@ -246,15 +246,28 @@ def _load_fernet(settings: Settings) -> Fernet:
     key_file: Path = settings.data_dir / ".settings.key"
     if key_file.exists():
         return Fernet(key_file.read_bytes().strip())
-    key_file.parent.mkdir(parents=True, exist_ok=True)
-    key = Fernet.generate_key()
-    key_file.write_bytes(key)
-    try:
-        os.chmod(key_file, 0o600)
-    except OSError:  # pragma: no cover - z. B. Windows ohne POSIX-Rechte
-        pass
-    logger.info("Neuer Settings-Schlüssel erzeugt (%s).", key_file.name)
-    return Fernet(key)
+    from app.signing import write_secret_file
+
+    generated = Fernet.generate_key()
+    stored = write_secret_file(key_file, generated).strip()
+    if stored == generated:
+        logger.info("Neuer Settings-Schlüssel erzeugt (%s).", key_file.name)
+    return Fernet(stored)
+
+
+_MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$")
+
+
+def validate_model_id(value: str, *, allow_empty: bool = False) -> str:
+    """Prüft Modellkennungen gegen Pfad-Traversal und Steuerzeichen."""
+    cleaned = value.strip()
+    if not cleaned:
+        if allow_empty:
+            return ""
+        raise SettingsError("Modellname darf nicht leer sein.")
+    if ".." in cleaned or not _MODEL_ID_PATTERN.fullmatch(cleaned):
+        raise SettingsError(f"Ungültige Modellkennung '{cleaned[:40]}'.")
+    return cleaned
 
 
 class RuntimeSettingsStore:
@@ -404,11 +417,14 @@ class RuntimeSettingsStore:
                 ausweich_schluessel=self._state["ausweich_schluessel"],
             )
 
-    def _merge_backup_keys(self, entries: list[dict[str, Any]]) -> tuple[BackupKey, ...]:
+    def _merge_backup_keys(
+        self, entries: list[dict[str, Any]], *, models: dict[str, str] | None = None
+    ) -> tuple[BackupKey, ...]:
         """Ganze Liste übernehmen; Einträge ohne ``api_key`` behalten den Schlüssel gleicher ID."""
         if len(entries) > MAX_BACKUP_KEYS:
             raise SettingsError(f"Höchstens {MAX_BACKUP_KEYS} Ausweich-Schlüssel.")
         known = {key.id: key for key in self._state["ausweich_schluessel"]}
+        base_models = models if models is not None else self._state["models"]
         merged: list[BackupKey] = []
         for entry in entries:
             backup_id = str(entry.get("id") or "").strip()
@@ -426,67 +442,77 @@ class RuntimeSettingsStore:
                 secret = previous.api_key
             if not secret:
                 raise SettingsError(f"Ausweich-Schlüssel '{backup_id}' ohne API-Key.")
-            model = (entry.get("model") or "").strip() or self._state["models"][provider.value]
+            raw_model = (entry.get("model") or "").strip()
+            model = validate_model_id(raw_model) if raw_model else base_models[provider.value]
             merged.append(BackupKey(backup_id, provider, model[:120], secret))
         return tuple(merged)
 
     def _update(self, changes: dict[str, Any]) -> RuntimeSnapshot:
-        # Erst prüfen, dann ändern: Eine abgelehnte Eingabe lässt den Stand unverändert.
+        # Erst vollständig auf einer Kopie prüfen und persistieren, erst dann im Speicher aktivieren.
         ceiling = self._server_token_limit
         wanted = changes.get("cloud_daily_token_limit")
         if wanted is not None and ceiling >= 0 and (int(wanted) < 0 or int(wanted) > ceiling):
             raise SettingsError(
                 f"Das Tageslimit darf höchstens {ceiling:,} Tokens betragen (Vorgabe des Servers).".replace(",", ".")
             )
-        persisted: dict[str, str | None] = {}
         with self._lock:
+            staged: dict[str, Any] = {
+                **self._state,
+                "models": dict(self._state["models"]),
+                "ausweich_modelle": dict(self._state["ausweich_modelle"]),
+                "keys": dict(self._state["keys"]),
+            }
+            persisted: dict[str, str | None] = {}
             if changes.get("inference_mode") is not None:
-                self._state["inference_mode"] = InferenceMode(changes["inference_mode"])
-                persisted["inference_mode"] = self._state["inference_mode"].value
+                staged["inference_mode"] = InferenceMode(changes["inference_mode"])
+                persisted["inference_mode"] = staged["inference_mode"].value
             if changes.get("pii_strictness") is not None:
-                self._state["pii_strictness"] = PIIStrictness(changes["pii_strictness"])
-                persisted["pii_strictness"] = self._state["pii_strictness"].value
+                staged["pii_strictness"] = PIIStrictness(changes["pii_strictness"])
+                persisted["pii_strictness"] = staged["pii_strictness"].value
             if changes.get("fallbacks") is not None:
-                self._state["fallbacks"] = self._coerce_fallbacks(changes["fallbacks"])
-                persisted["fallbacks"] = json.dumps([mode.value for mode in self._state["fallbacks"]])
+                staged["fallbacks"] = self._coerce_fallbacks(changes["fallbacks"])
+                persisted["fallbacks"] = json.dumps([mode.value for mode in staged["fallbacks"]])
             if changes.get("cloud_daily_token_limit") is not None:
-                self._state["cloud_daily_token_limit"] = max(-1, int(changes["cloud_daily_token_limit"]))
-                persisted["cloud_daily_token_limit"] = json.dumps(self._state["cloud_daily_token_limit"])
+                staged["cloud_daily_token_limit"] = max(-1, int(changes["cloud_daily_token_limit"]))
+                persisted["cloud_daily_token_limit"] = json.dumps(staged["cloud_daily_token_limit"])
             for flag in ("enforce_ustg_check", "ai_act_escalation"):
                 if changes.get(flag) is not None:
-                    self._state[flag] = bool(changes[flag])
-                    persisted[flag] = json.dumps(self._state[flag])
+                    staged[flag] = bool(changes[flag])
+                    persisted[flag] = json.dumps(staged[flag])
             models = changes.get("models") or {}
             for provider, model in models.items():
-                if provider in self._state["models"] and model and model.strip():
-                    self._state["models"][provider] = model.strip()
+                if provider in staged["models"] and model and model.strip():
+                    staged["models"][provider] = validate_model_id(model)
             if models:
-                persisted["models"] = json.dumps(self._state["models"])
+                persisted["models"] = json.dumps(staged["models"])
             ausweich = changes.get("ausweich_modelle") or {}
             for provider, model in ausweich.items():
-                if provider in self._state["ausweich_modelle"] and model is not None:
-                    self._state["ausweich_modelle"][provider] = model.strip()[:120]
+                if provider in staged["ausweich_modelle"] and model is not None:
+                    staged["ausweich_modelle"][provider] = validate_model_id(model, allow_empty=True)[:120]
             if ausweich:
-                persisted["ausweich_modelle"] = json.dumps(self._state["ausweich_modelle"])
+                persisted["ausweich_modelle"] = json.dumps(staged["ausweich_modelle"])
             if changes.get("ausweich_schluessel") is not None:
-                self._state["ausweich_schluessel"] = self._merge_backup_keys(list(changes["ausweich_schluessel"]))
+                staged["ausweich_schluessel"] = self._merge_backup_keys(
+                    list(changes["ausweich_schluessel"]), models=staged["models"]
+                )
                 payload = json.dumps([
                     {"id": key.id, "provider": key.provider.value, "model": key.model, "api_key": key.api_key}
-                    for key in self._state["ausweich_schluessel"]
+                    for key in staged["ausweich_schluessel"]
                 ])
                 persisted["ausweich_schluessel"] = self._fernet.encrypt(payload.encode()).decode()
             keys = changes.get("api_keys") or {}
             for provider, secret in keys.items():
-                if provider not in self._state["keys"] or secret is None:
+                if provider not in staged["keys"] or secret is None:
                     continue
                 cleaned = secret.strip()
                 # Leerer String = Schlüssel löschen.
-                self._state["keys"][provider] = cleaned or None
+                staged["keys"][provider] = cleaned or None
                 persisted[f"{provider}_api_key"] = (
                     self._fernet.encrypt(cleaned.encode()).decode() if cleaned else None
                 )
-        if persisted:
-            self._persist(persisted)
+            if persisted:
+                self._persist(persisted)
+            self._state = staged
         return self.snapshot()
 
     async def update(self, changes: dict[str, Any]) -> RuntimeSnapshot:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import io
+import re
 import unicodedata
 from typing import Any
 
@@ -70,11 +71,14 @@ _CHAR_MAP = str.maketrans({
 })
 
 
+_CTRL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
 def _w(value: Any, *, empty: str = "–") -> str:
     """Normalisiert beliebigen Unicode-Text verlustarm in WinAnsi (CP1252) für Helvetica/Courier."""
     if value is None or value == "":
         return empty
-    text = str(value).translate(_CHAR_MAP)
+    text = _CTRL_CHARS.sub("", str(value)).translate(_CHAR_MAP)
     out: list[str] = []
     for ch in text:
         try:
@@ -87,8 +91,11 @@ def _w(value: Any, *, empty: str = "–") -> str:
     return "".join(out)
 
 
-def _xml(value: Any, *, empty: str = "–") -> str:
-    return html.escape(_w(value, empty=empty))
+def _xml(value: Any, *, empty: str = "–", max_len: int | None = 2500) -> str:
+    text = _w(value, empty=empty)
+    if max_len is not None and len(text) > max_len:
+        text = text[: max_len - 1] + "…"
+    return html.escape(text)
 
 
 def _truncate(text: str, limit: int = 72) -> str:
@@ -259,9 +266,12 @@ class _ScoreHero(Flowable):
         _, band_h = self._band_para.wrap(self._left_w - 8, 200)
 
         self._rec_label = _w(rec_label).upper()
-        v_fg = colors.HexColor("#9f1239" if blocked else "#065f46")
-        v_stroke = colors.HexColor("#fecdd3" if blocked else "#a7f3d0")
-        v_fill = colors.HexColor("#fff1f2" if blocked else "#ecfdf5")
+        if blocked:
+            v_fg, v_stroke, v_fill = colors.HexColor("#9f1239"), colors.HexColor("#fecdd3"), colors.HexColor("#fff1f2")
+        elif band == "amber":
+            v_fg, v_stroke, v_fill = colors.HexColor("#92400e"), colors.HexColor("#fde68a"), colors.HexColor("#fffbeb")
+        else:
+            v_fg, v_stroke, v_fill = colors.HexColor("#065f46"), colors.HexColor("#a7f3d0"), colors.HexColor("#ecfdf5")
         self._verdict_colors = (v_stroke, v_fill)
         self._verdict_para = Paragraph(
             _xml(rec_text),
@@ -478,7 +488,7 @@ def _styled_table(
 ) -> Table:
     num_cols = num_cols or set()
     status_cells = status_cells or {}
-    tbl = Table(rows_data, colWidths=col_widths, repeatRows=1 if repeat_header else 0, splitByRow=1)
+    tbl = Table(rows_data, colWidths=col_widths, repeatRows=1 if repeat_header else 0, splitByRow=1, splitInRow=1)
     cmds: list[Any] = [
         ("LEFTPADDING", (0, 0), (-1, -1), 4.5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4.5),
@@ -578,6 +588,8 @@ def render_report_pdf(report: dict[str, Any], *, lang: str | None = None) -> byt
         story += [_DashedBox(_xml(data["reference_note"]), st["callout"]), Spacer(1, 3 * mm)]
     if report["inference"].get("structured"):
         story += [_DashedBox(_xml(data["structured_note"]), st["callout"]), Spacer(1, 3 * mm)]
+    if report["inference"].get("heuristic"):
+        story += [_DashedBox(_xml(data["heuristic_note"]), st["callout"]), Spacer(1, 3 * mm)]
 
     rec_text = report["release_recommendation"] + (f" · {score['cap_applied']}" if score.get("cap_applied") else "")
     story += [
@@ -784,7 +796,7 @@ def render_report_pdf(report: dict[str, Any], *, lang: str | None = None) -> byt
             [Paragraph(_xml(t["reason"]), st["td_small"]), Paragraph(_xml(override["reason"]), st["td"])],
             [Paragraph(_xml(t["ledger_entry"]), st["td_small"]), Paragraph(f"{_xml(override['ledger_entry_hash'])} · {_xml(t['ed25519_signed'])}", st["hash"])],
         ]
-        ov_tbl = Table(ov_rows, colWidths=[38 * mm, _CONTENT_W - 38 * mm])
+        ov_tbl = Table(ov_rows, colWidths=[38 * mm, _CONTENT_W - 38 * mm], splitByRow=1, splitInRow=1)
         ov_tbl.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#eef2ff")),
             ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#c7d2fe")),
@@ -794,7 +806,7 @@ def render_report_pdf(report: dict[str, Any], *, lang: str | None = None) -> byt
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
-        story += [KeepTogether([_section_heading(sec_no, t["override_h"], st), ov_tbl]), Spacer(1, 5 * mm)]
+        story += [_section_heading(sec_no, t["override_h"], st), ov_tbl, Spacer(1, 5 * mm)]
         sec_no += 1
 
     led_rows: list[list[Any]] = [[
@@ -895,7 +907,11 @@ def render_procedural_pdf(doc: dict[str, Any], *, lang: str | None = None) -> by
                 tbl_rows = [[Paragraph(_xml(cell).upper(), st["th"]) for cell in head]]
                 for row in block["table"]["rows"]:
                     tbl_rows.append([Paragraph(todo_xml(str(cell)), st["td"]) for cell in row])
-                cols = [48 * mm, _CONTENT_W - 48 * mm] if len(head) == 2 else [44 * mm, 36 * mm, _CONTENT_W - 80 * mm]
+                cols = (
+                    [48 * mm, _CONTENT_W - 48 * mm]
+                    if len(head) == 2
+                    else [42 * mm, _CONTENT_W - 84 * mm, 42 * mm]
+                )
                 story += [_styled_table(tbl_rows, cols), Spacer(1, 2.5 * mm)]
             if "list" in block:
                 for item in block["list"]:

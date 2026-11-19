@@ -53,7 +53,7 @@ interface Props {
 }
 
 export function OverrideModal({ document, open, onClose, onDone, notify }: Props) {
-  const { locale, tr } = useI18n();
+  const { locale, tr, td } = useI18n();
   const current = document?.compliance?.ai_act.overall_risk_level ?? "not_applicable";
   const [auditor, setAuditor] = useState("");
   const [level, setLevel] = useState<AIActRiskLevel>("limited");
@@ -110,7 +110,7 @@ export function OverrideModal({ document, open, onClose, onDone, notify }: Props
       notify(
         "bad",
         tr("Übersteuerung abgelehnt", "Override rejected", "Anulación rechazada"),
-        `${error.message}${error.hint ? ` – ${error.hint}` : ""}`,
+        `${td(error.message)}${error.hint ? ` – ${td(error.hint)}` : ""}`,
       );
     } finally {
       setBusy(false);

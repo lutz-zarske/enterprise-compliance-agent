@@ -90,7 +90,7 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
             )}
             {scorecard.human_override && (
               <Tooltip
-                content={`${scorecard.human_override.auditor_name}, ${formatDate(scorecard.human_override.overridden_at, true)}: ${scorecard.human_override.legal_basis}. Score ${scorecard.human_override.previous_score ?? "–"} → ${scorecard.human_override.new_score}.`}
+                content={`${scorecard.human_override.auditor_name}, ${formatDate(scorecard.human_override.overridden_at, true)}: ${scorecard.human_override.legal_basis}. ${tr("Score", "Score", "Puntuación")} ${scorecard.human_override.previous_score ?? "–"} → ${scorecard.human_override.new_score}.`}
               >
                 <span tabIndex={0} className="chip cursor-help border-accent-line bg-accent-soft text-accent">
                   <Scale size={11} aria-hidden="true" /> {tr("Durch Prüfperson übersteuert", "Overridden by auditor", "Anulado por auditor")}

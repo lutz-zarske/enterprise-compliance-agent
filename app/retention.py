@@ -70,7 +70,8 @@ RETENTION_NOTE = (
 
 def retention_end(document_date: date, years: int) -> date:
     """Letzter Tag der Aufbewahrungsfrist: 31.12. des Jahres (Belegjahr + Jahre)."""
-    return date(document_date.year + years, 12, 31)
+    target_year = min(document_date.year + years, date.max.year)
+    return date(target_year, 12, 31)
 
 
 @dataclass(frozen=True, slots=True)

@@ -46,13 +46,16 @@ export function DocumentUploader({ disabled, onUploaded, onError }: Props) {
       data-tour="upload"
       onDragOver={(event) => {
         event.preventDefault();
-        if (!disabled) setDragCount(event.dataTransfer.items?.length ?? 0);
+        if (!disabled && busy === null) setDragCount(event.dataTransfer.items?.length ?? 0);
       }}
-      onDragLeave={() => setDragCount(null)}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDragCount(null);
+      }}
       onDrop={(event) => {
         event.preventDefault();
         setDragCount(null);
-        if (!disabled) void upload(event.dataTransfer.files);
+        if (!disabled && busy === null) void upload(event.dataTransfer.files);
       }}
       className={cx(
         "card flex flex-col items-center gap-2 border-dashed px-4 py-5 text-center transition-colors duration-150",
@@ -68,7 +71,7 @@ export function DocumentUploader({ disabled, onUploaded, onError }: Props) {
           {busy !== null
             ? tr(`${fileCount(busy)} werden geprüft…`, `Checking ${fileCount(busy)}…`, `Analizando ${fileCount(busy)}…`)
             : dragging && dragCount
-              ? tr(`Drop ${fileCount(dragCount)}`, `Drop ${fileCount(dragCount)}`, `Soltar ${fileCount(dragCount)}`)
+              ? tr(`${fileCount(dragCount)} ablegen`, `Drop ${fileCount(dragCount)}`, `Soltar ${fileCount(dragCount)}`)
               : tr("PDFs oder E-Rechnungen hier ablegen", "Drop PDFs or E-Invoices here", "Suelta PDF o facturas electrónicas aquí")}
         </p>
         <p className="text-xs text-subtle">

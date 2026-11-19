@@ -287,7 +287,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
       ],
     },
     {
-      title: "Navigation",
+      title: tr("Navigation", "Navigation", "Navegación"),
       items: [
         [<><Kbd>J</Kbd><Kbd>K</Kbd></>, tr("Nächstes / vorheriges Dokument", "Next / previous document", "Documento siguiente / anterior")],
         [<><Kbd>↓</Kbd><Kbd>↑</Kbd></>, tr("Nächstes / vorheriges Dokument (Pfeiltasten)", "Next / previous document (arrow keys)", "Documento siguiente / anterior (flechas)")],

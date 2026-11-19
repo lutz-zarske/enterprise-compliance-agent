@@ -216,7 +216,7 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Stamp size={16} className="text-accent" aria-hidden="true" />
           <p className="text-sm font-semibold text-fg">{tr("Auditor Sign-Off & Siegel", "Auditor Sign-Off & Seal", "Aprobación y sello del auditor")}</p>
-          <span className="text-xs tabular-nums text-subtle">Human Oversight · Art. 14 EU AI Act</span>
+          <span className="text-xs tabular-nums text-subtle">{tr("Menschliche Aufsicht · Art. 14 EU AI Act", "Human Oversight · Art. 14 EU AI Act", "Supervisión humana · Art. 14 Reglamento IA")}</span>
         </div>
         <SignOffPanel document={document} shortcutActive={open} notify={notify} onSealed={onSealed} />
       </div>

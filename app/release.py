@@ -17,11 +17,13 @@ Grundsätze - kein unkontrolliertes Auto-Pulling:
 from __future__ import annotations
 
 import base64
+import contextlib
 import os
 import re
 import sqlite3
 import subprocess
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -92,6 +94,7 @@ class ReleaseManager:
     repo_dir: Path
     current_version: str
     busy: bool = False
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def _git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
@@ -177,7 +180,9 @@ class ReleaseManager:
         backup_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         target = backup_dir / f"agent-{stamp}-{label}.db"
-        with sqlite3.connect(database_file) as source, sqlite3.connect(target) as copy:
+        with contextlib.closing(sqlite3.connect(database_file)) as source, contextlib.closing(
+            sqlite3.connect(target)
+        ) as copy:
             source.backup(copy)
         return target
 
@@ -196,23 +201,55 @@ class ReleaseManager:
             raise ReleaseError("hash_mismatch", "Der bestätigte Commit-Hash passt nicht zum Release-Tag.")
         if latest["signature"] == "invalid":
             raise ReleaseError("signature_invalid", "Die Signatur des Release-Tags ist ungültig.")
+        if not latest.get("fast_forward", True):
+            raise ReleaseError(
+                "not_fast_forward",
+                "Lokaler Branch weicht vom Release-Tag ab - kein sicherer Fast-Forward möglich.",
+            )
         if self._git("status", "--porcelain", "--untracked-files=no").stdout.strip():
             raise ReleaseError("dirty_worktree", "Lokale Änderungen vorhanden - Update abgebrochen.")
         return latest
 
     def fast_forward(self, tag: str) -> str:
-        """Spielt ``tag`` ein (Fast-Forward oder sauberer Wechsel ohne ungesicherte Änderungen); liefert den vorherigen Commit."""
+        """Spielt ``tag`` ausschließlich per Fast-Forward ein; liefert den vorherigen Commit."""
+        previous_busy = self.busy
         self.busy = True
         try:
             previous = self._git("rev-parse", "HEAD").stdout.strip()
-            if self._git("merge-base", "--is-ancestor", "HEAD", tag, check=False).returncode == 0:
-                self._git("merge", "--ff-only", "--quiet", tag)
-            else:
-                self._git("reset", "--hard", "--quiet", tag)
+            if self._git("merge-base", "--is-ancestor", "HEAD", tag, check=False).returncode != 0:
+                raise ReleaseError(
+                    "not_fast_forward",
+                    "Lokaler Branch weicht vom Release-Tag ab - kein sicherer Fast-Forward möglich.",
+                )
+            self._git("merge", "--ff-only", "--quiet", tag)
             self.current_version = tag.removeprefix("v")
             return previous
         finally:
-            self.busy = False
+            self.busy = previous_busy
+
+    def apply_update(
+        self,
+        tag: str,
+        confirm_commit: str,
+        *,
+        active_analyses: int,
+        database_file: Path | None,
+        backup_dir: Path,
+    ) -> tuple[dict[str, Any], Path | None, str]:
+        """Atomare Sperre über Preflight, DB-Backup und Fast-Forward."""
+        if not self._lock.acquire(blocking=False):
+            raise ReleaseError("release_update_running", "Ein Update läuft bereits.")
+        try:
+            release = self.preflight(tag, confirm_commit, active_analyses=active_analyses)
+            self.busy = True
+            try:
+                backup = self.backup_database(database_file, backup_dir, tag)
+                previous = self.fast_forward(tag)
+            finally:
+                self.busy = False
+            return release, backup, previous
+        finally:
+            self._lock.release()
 
     def schedule_restart_if_managed(self) -> bool:
         """Startet unter Windows den Agent automatisch neu, wenn er über Start_Compliance_Agent.bat läuft."""

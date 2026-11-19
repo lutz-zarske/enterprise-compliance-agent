@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
-import { cx, formatDate, formatModel, providerLabel, TONE_TEXT, toneForScore } from "../lib/format";
+import { cx, formatDate, formatDateUtc, formatModel, providerLabel, TONE_TEXT, toneForScore } from "../lib/format";
 import { normalizeStored, useI18n } from "../lib/i18n";
 import type { DocumentDetail, DocumentSummary, LedgerEntry, LedgerVerification } from "../types/api";
 import { AlertTriangle, BookOpen, Download, Fingerprint, Hash, Layers, Link, Lock, Package, RefreshCw, Scale } from "./icons";
@@ -149,7 +149,7 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
           <th scope="col" className="border-b border-line px-3 py-2 font-medium">{tr("Ereignis", "Event", "Evento")}</th>
           <th scope="col" className="border-b border-line px-3 py-2 font-medium">{tr("Beleg", "Document", "Documento")}</th>
           <th scope="col" className="border-b border-line px-3 py-2 font-medium">{tr("Zusammenfassung", "Summary", "Resumen")}</th>
-          <th scope="col" className="border-b border-line px-3 py-2 text-right font-medium">Score</th>
+          <th scope="col" className="border-b border-line px-3 py-2 text-right font-medium">{tr("Score", "Score", "Puntuación")}</th>
           <th scope="col" className="border-b border-line px-3 py-2 font-medium">{tr("Eintrag", "Entry", "Entrada")}</th>
         </tr>
       </thead>
@@ -160,7 +160,7 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
           return (
             <tr key={entry.entry_id} className="align-top transition-colors duration-150 hover:bg-surface-hover">
               <td className="border-b border-line px-3 py-2 text-right tabular-nums text-subtle">{entry.seq}</td>
-              <td className="whitespace-nowrap border-b border-line px-3 py-2 tabular-nums text-muted">{formatDate(entry.timestamp_utc, true)}</td>
+              <td className="whitespace-nowrap border-b border-line px-3 py-2 tabular-nums text-muted">{formatDateUtc(entry.timestamp_utc, true)}</td>
               <td className="border-b border-line px-3 py-2">
                 <span className={cx("font-medium", milestone ? "text-fg" : "text-muted")}>{eventLabels[entry.event_type] ?? entry.event_type}</span>
                 {entry.signature_status === "valid" && (
@@ -185,7 +185,7 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
               </td>
               <td className="max-w-[14rem] border-b border-line px-3 py-2 text-muted">
                 <span className="block truncate" title={system ? tr("Systemereignis", "System event", "Evento del sistema") : names.get(entry.document_id) ?? entry.document_id}>
-                  {system ? "System" : names.get(entry.document_id) ?? `${entry.document_id.slice(0, 8)}…`}
+                  {system ? tr("System", "System", "Sistema") : names.get(entry.document_id) ?? `${entry.document_id.slice(0, 8)}…`}
                 </span>
                 {entry.model_name && <span className="block truncate text-subtle">{formatModel(entry.model_name)}</span>}
               </td>
@@ -216,7 +216,7 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
   onOpenExport: () => void;
   notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 }) {
-  const { tr } = useI18n();
+  const { tr, td } = useI18n();
   const [filter, setFilter] = useState<Filter>("all");
   const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -265,9 +265,9 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
     try {
       setEntries((await api.fullTrail(1000)).items);
     } catch (err) {
-      setError(err instanceof ApiError ? `${err.message}${err.hint ? ` – ${err.hint}` : ""}` : String(err));
+      setError(err instanceof ApiError ? `${td(err.message)}${err.hint ? ` – ${td(err.hint)}` : ""}` : String(err));
     }
-  }, []);
+  }, [td]);
 
   // Beim Öffnen der Ansicht und nach jeder Änderung des Kopf-Hashes neu laden.
   useEffect(() => {
@@ -277,7 +277,7 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
   useEffect(() => {
     if (!active || fingerprint) return;
     api.signingKey().then((key) => setFingerprint(key.fingerprint)).catch(() => undefined);
-  }, [active, fingerprint]);
+  }, [active, fingerprint, ledger?.head_hash]);
 
   const shown = (entries ?? []).filter((entry) =>
     filter === "all" ? true : filter === "system" ? entry.document_id === "system" : entry.document_id === document?.id,
@@ -288,7 +288,7 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
     try {
       await task();
     } catch (err) {
-      notify("bad", tr("Export fehlgeschlagen", "Export failed", "Error al exportar"), err instanceof ApiError ? err.message : String(err));
+      notify("bad", tr("Export fehlgeschlagen", "Export failed", "Error al exportar"), err instanceof ApiError ? td(err.message) : String(err));
     } finally {
       setBusy(null);
     }
@@ -326,7 +326,7 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
             </div>
             <PillTabs<Filter>
               size="sm"
-              ariaLabel="Filter"
+              ariaLabel={tr("Filter", "Filter", "Filtro")}
               value={filter}
               onChange={setFilter}
               items={[

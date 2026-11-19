@@ -22,13 +22,25 @@ function Baum-Beenden([int]$prozessId, [string]$was) {
     return $true
 }
 
-# 1. Beenden über PID-Dateien
-foreach ($eintrag in @(@("backend.pid", "FastAPI Backend"), @("frontend.pid", "Next.js Frontend"))) {
+function Ist-Eigener-Prozess([int]$prozessId, [string]$muster) {
+    $p = Get-CimInstance Win32_Process -Filter "ProcessId = $prozessId" -ErrorAction SilentlyContinue
+    if (-not $p) { return $false }
+    $cmd = [string]$p.CommandLine
+    return ($cmd -match $muster)
+}
+
+# 1. Beenden über PID-Dateien (nur wenn die Kommandozeile zum eigenen Prozess passt)
+foreach ($eintrag in @(
+    @("backend.pid", "FastAPI Backend", "uvicorn.*app\.main"),
+    @("frontend.pid", "Next.js Frontend", "(next|npm).*(start|dev|next-server|next\\dist)")
+)) {
     $datei = Join-Path $RunDir $eintrag[0]
     if (Test-Path $datei) {
         $prozessId = 0
         if ([int]::TryParse((Get-Content $datei -ErrorAction SilentlyContinue | Select-Object -First 1), [ref]$prozessId) -and $prozessId -gt 0) {
-            if (Baum-Beenden $prozessId $eintrag[1]) { $beendet++ }
+            if (Ist-Eigener-Prozess $prozessId $eintrag[2]) {
+                if (Baum-Beenden $prozessId $eintrag[1]) { $beendet++ }
+            }
         }
         Remove-Item $datei -ErrorAction SilentlyContinue
     }

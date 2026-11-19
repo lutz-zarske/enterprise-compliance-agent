@@ -227,7 +227,8 @@ export function GitSyncButton({ online, notify }: {
         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-ok-line bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok transition-colors duration-150 hover:border-ok"
       >
         <ArrowUpCircle size={13} aria-hidden="true" />
-        <span className="tabular-nums">{tr(`Release ${status.latest.tag} verfügbar`, `Release ${status.latest.tag} available`, `Versión ${status.latest.tag} disponible`)}</span>
+        <span className="tabular-nums sm:hidden">{status.latest.tag}</span>
+        <span className="hidden tabular-nums sm:inline">{tr(`Release ${status.latest.tag} verfügbar`, `Release ${status.latest.tag} available`, `Versión ${status.latest.tag} disponible`)}</span>
         <span className="hidden text-subtle xl:inline">{tr("(Update verfügbar)", "(Update available)", "(Actualización disponible)")}</span>
       </button>
       <Modal

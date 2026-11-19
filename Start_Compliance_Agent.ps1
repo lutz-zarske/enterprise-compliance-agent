@@ -161,10 +161,11 @@ if ($node.Geaendert -or -not (Test-Path (Join-Path $FrontendDir "node_modules"))
     Write-Host "[>] Installiere Frontend-Pakete..." -ForegroundColor Cyan
     $NpmLog = Join-Path $LogDir "npm-setup.log"
     $NpmErrLog = Join-Path $LogDir "npm-setup.err.log"
-    $npmProc = Start-Process -FilePath $NpmExe -ArgumentList @("install", "--silent", "--no-audit", "--no-fund") -WorkingDirectory $FrontendDir -NoNewWindow -PassThru -RedirectStandardOutput $NpmLog -RedirectStandardError $NpmErrLog
+    $npmSub = if (Test-Path (Join-Path $FrontendDir "package-lock.json")) { "ci" } else { "install" }
+    $npmProc = Start-Process -FilePath $NpmExe -ArgumentList @($npmSub, "--silent", "--no-audit", "--no-fund") -WorkingDirectory $FrontendDir -NoNewWindow -PassThru -RedirectStandardOutput $NpmLog -RedirectStandardError $NpmErrLog
     $null = $npmProc.Handle; $npmProc.WaitForExit()
     if (Test-Path $NpmErrLog) { [System.IO.File]::AppendAllText($NpmLog, [System.IO.File]::ReadAllText($NpmErrLog)); Remove-Item $NpmErrLog -Force -ErrorAction SilentlyContinue }
-    if ($npmProc.ExitCode -ne 0) { Write-Host "FEHLER: npm install fehlgeschlagen (Logs: $NpmLog)." -ForegroundColor Red; exit 1 }
+    if ($npmProc.ExitCode -ne 0) { Write-Host "FEHLER: npm $npmSub fehlgeschlagen (Logs: $NpmLog)." -ForegroundColor Red; exit 1 }
     Set-Content -Path $NpmMarker -Value $node.Hash -Encoding ascii
 }
 
@@ -238,8 +239,8 @@ if ($FrontendActive) {
     Write-Host "[x] Oberfläche läuft bereits auf Port $FrontendPort." -ForegroundColor Green
 } else {
     Write-Host "[>] Starte Oberfläche (Next.js) auf Port $FrontendPort" -ForegroundColor Cyan
-    $startArgs = @("run", "start")
-    if ($FrontendPort -ne 3001) { $startArgs += @("--", "-p", "$FrontendPort") }
+    $startArgs = @("run", "start", "--", "-H", "127.0.0.1")
+    if ($FrontendPort -ne 3001) { $startArgs += @("-p", "$FrontendPort") }
     $FrontendProc = Start-Process -FilePath $NpmExe -ArgumentList $startArgs -WorkingDirectory $FrontendDir -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $LogDir "frontend.log") -RedirectStandardError $FrontendErr
     Set-Content -Path (Join-Path $RunDir "frontend.pid") -Value $FrontendProc.Id -Encoding ascii
 }

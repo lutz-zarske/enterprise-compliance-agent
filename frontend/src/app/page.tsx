@@ -8,7 +8,7 @@ import { DocumentList } from "../components/DocumentList";
 import { DocumentUploader } from "../components/DocumentUploader";
 import { ExportModal } from "../components/ExportModal";
 import { Header, type View } from "../components/Header";
-import { Download, FileText, Info, Layers, RefreshCw, WifiOff, Zap } from "../components/icons";
+import { Download, FileText, Info, Layers, Lock, RefreshCw, WifiOff, Zap } from "../components/icons";
 import { NACHLAUF_MS, type FinishedJob } from "../components/JobMonitor";
 import { KpiStrip } from "../components/KpiStrip";
 import { markOnboardingDone, onboardingDone, ShortcutsModal, SpotlightTour, WelcomeModal } from "../components/Onboarding";
@@ -20,7 +20,7 @@ import { prefetchModelCatalog, SettingsModal } from "../components/SettingsModal
 import { SealModal } from "../components/SignOffPanel";
 import { meldeBereit } from "../components/SplashAbbau";
 import { EmptyState, HashBadge, isModEnter, isTypingTarget, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
-import { api, ApiError, fetchHealth, hasCachedApiBase } from "../lib/api";
+import { api, ApiError, fetchHealth } from "../lib/api";
 import { cx, formatBytes, formatDate, formatModel, providerDisplayName, providerLabel } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useJobs } from "../lib/useJobs";
@@ -69,6 +69,7 @@ export default function DashboardPage() {
   };
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [offline, setOffline] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
   const [settings, setSettings] = useState<RuntimeSettings | null>(null);
   const [kpis, setKpis] = useState<KpiResponse | null>(null);
   const [ledger, setLedger] = useState<LedgerVerification | null>(null);
@@ -79,6 +80,7 @@ export default function DashboardPage() {
   const [view, setViewState] = useState<View>("workspace");
   const [tab, setTab] = useState<InspectorTab>("ustg");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<"ai" | "compliance" | "appearance" | "connection" | "about" | undefined>(undefined);
   const [exportOpen, setExportOpen] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [sealOpen, setSealOpen] = useState(false);
@@ -91,6 +93,9 @@ export default function DashboardPage() {
   const { toasts, push, dismiss, pause, resume } = useToasts();
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
+  const trRef = useRef(tr);
+  trRef.current = tr;
+  const detailReq = useRef(0);
 
   const notify = useCallback(
     (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => push({ tone, title, message }),
@@ -128,16 +133,26 @@ export default function DashboardPage() {
   }, []);
 
   const loadDetail = useCallback(async (id: string) => {
+    const req = ++detailReq.current;
     setLoadingDetail(true);
     try {
       const doc = await api.document(id);
-      if (selectedRef.current === id) setDetail(doc);
+      if (detailReq.current === req && selectedRef.current === id) setDetail(doc);
     } catch (err) {
-      if (asApiError(err).isOffline) setOffline(true);
+      if (detailReq.current !== req) return;
+      const error = asApiError(err);
+      if (error.isOffline) {
+        setOffline(true);
+      } else if (error.status === 401) {
+        setAuthRequired(true);
+      } else {
+        if (error.status === 404) setDetail(null);
+        reportError(trRef.current("Dokument konnte nicht geladen werden", "Failed to load document", "No se pudo cargar el documento"), error);
+      }
     } finally {
-      setLoadingDetail(false);
+      if (detailReq.current === req) setLoadingDetail(false);
     }
-  }, []);
+  }, [reportError]);
 
   const refreshData = useCallback(async () => {
     const [list, kpiData, chain] = await Promise.all([
@@ -156,36 +171,46 @@ export default function DashboardPage() {
   const bootVersion = useRef<string | null>(null);
   const loadAll = useCallback(async () => {
     lastLoad.current = Date.now();
+    let h: HealthResponse;
     try {
-      const discovered = hasCachedApiBase() ? null : await fetchHealth();
-      const [h, items, runtime] = await Promise.all([
-        discovered ? Promise.resolve(discovered) : fetchHealth(),
-        refreshData(),
-        api.settings(),
-      ]);
-      // Neues Backend nach Neustart (z. B. von Hand im Terminal): einmal neu laden,
-      // damit nie ein altes Client-Bundle gegen ein neues Backend läuft.
-      if (bootVersion.current === null) {
-        bootVersion.current = h.version;
-      } else if (h.version !== bootVersion.current) {
-        let alreadyReloaded = false;
-        try {
-          alreadyReloaded = window.sessionStorage.getItem(VERSION_RELOAD_STORAGE) === h.version;
-          window.sessionStorage.setItem(VERSION_RELOAD_STORAGE, h.version);
-        } catch {
-          /* privater Modus */
-        }
-        if (!alreadyReloaded) {
-          window.location.reload();
-          return;
-        }
-        bootVersion.current = h.version;
+      h = await fetchHealth();
+    } catch (err) {
+      if (asApiError(err).isOffline) {
+        setOffline(true);
+        setHealth(null);
       }
-      setHealth(h);
-      setOffline(false);
+      return;
+    }
+    // Neues Backend nach Neustart (z. B. von Hand im Terminal): einmal neu laden,
+    // damit nie ein altes Client-Bundle gegen ein neues Backend läuft.
+    if (bootVersion.current === null) {
+      bootVersion.current = h.version;
+    } else if (h.version !== bootVersion.current) {
+      let alreadyReloaded = false;
+      try {
+        alreadyReloaded = window.sessionStorage.getItem(VERSION_RELOAD_STORAGE) === h.version;
+        window.sessionStorage.setItem(VERSION_RELOAD_STORAGE, h.version);
+      } catch {
+        /* privater Modus */
+      }
+      if (!alreadyReloaded) {
+        window.location.reload();
+        return;
+      }
+      bootVersion.current = h.version;
+    }
+    setHealth(h);
+    setOffline(false);
+
+    try {
+      const [items, runtime] = await Promise.all([refreshData(), api.settings()]);
+      setAuthRequired(false);
       setSettings(runtime);
       prefetchModelCatalog(runtime);
-      if (!selectedRef.current && items.length) setSelectedId(items[0].id);
+      if (!selectedRef.current && items.length) {
+        const firstActive = items.find((doc) => !doc.archived) ?? items[0];
+        setSelectedId(firstActive.id);
+      }
       if (selectedRef.current) await loadDetail(selectedRef.current);
     } catch (err) {
       const error = asApiError(err);
@@ -193,10 +218,12 @@ export default function DashboardPage() {
         setOffline(true);
         setHealth(null);
       } else if (error.status === 401) {
+        setAuthRequired(true);
+        setSettings(null);
         notify(
           "warn",
-          tr("Zugang verweigert", "Access denied", "Acceso denegado"),
-          tr(
+          trRef.current("Zugang verweigert", "Access denied", "Acceso denegado"),
+          trRef.current(
             "Das Backend verlangt einen X-API-Key – unter Einstellungen › Verbindung hinterlegen.",
             "Backend requires an X-API-Key – configure under Settings › Connection.",
             "El backend requiere un X-API-Key – configúrelo en Ajustes › Conexión.",
@@ -204,7 +231,7 @@ export default function DashboardPage() {
         );
       }
     }
-  }, [refreshData, loadDetail, notify, tr]);
+  }, [refreshData, loadDetail, notify]);
 
   // Erster Ladevorgang: Splash abbauen, Erstbesucher begrüßen.
   useEffect(() => {
@@ -287,7 +314,7 @@ export default function DashboardPage() {
     [notify, refreshData, loadDetail, tr, td],
   );
 
-  const { jobs, track, cancel } = useJobs(!offline && Boolean(health), onJobFinished);
+  const { jobs, track, cancel } = useJobs(!offline && !authRequired && Boolean(health), onJobFinished);
   const analysingIds = new Set(jobs.map((job) => job.document_id));
 
   const runExtraction = useCallback(
@@ -308,20 +335,30 @@ export default function DashboardPage() {
       try {
         const result = await api.submitJobs(ids);
         result.jobs.forEach(track);
-        notify(
-          "info",
-          tr(`${result.jobs.length} Belege eingereiht`, `${result.jobs.length} documents queued`, `${result.jobs.length} documentos en cola`),
-          tr(
-            "Die Prüfungen laufen nacheinander im Hintergrund – Fortschritt im Job-Monitor oben rechts.",
-            "Audits run sequentially in the background – monitor progress at top right.",
-            "Las auditorías se ejecutan en segundo plano – progreso arriba a la derecha.",
-          ),
-        );
+        if (result.jobs.length > 0) {
+          notify(
+            "info",
+            tr(`${result.jobs.length} Belege eingereiht`, `${result.jobs.length} documents queued`, `${result.jobs.length} documentos en cola`),
+            tr(
+              "Die Prüfungen laufen nacheinander im Hintergrund – Fortschritt im Job-Monitor oben rechts.",
+              "Audits run sequentially in the background – monitor progress at top right.",
+              "Las auditorías se ejecutan en segundo plano – progreso arriba a la derecha.",
+            ),
+          );
+        }
+        if (result.rejected.length > 0) {
+          const reason = result.rejected[0]?.message ? td(result.rejected[0].message) : undefined;
+          notify(
+            "warn",
+            tr(`${result.rejected.length} Beleg(e) nicht eingereiht`, `${result.rejected.length} document(s) skipped`, `${result.rejected.length} documento(s) omitido(s)`),
+            reason,
+          );
+        }
       } catch (err) {
         reportError(tr("Batch-Prüfung konnte nicht gestartet werden", "Could not start batch audit", "Error en auditoría por lotes"), err);
       }
     },
-    [track, notify, reportError, tr],
+    [track, notify, reportError, tr, td],
   );
 
   async function handleSeed(file?: string) {
@@ -372,13 +409,22 @@ export default function DashboardPage() {
     }
     result.items
       .filter((item) => !item.ok)
-      .forEach((item) => notify("bad", `${tr("Upload abgelehnt:", "Upload rejected:", "Subida rechazada:")} ${item.filename}`, item.error?.message));
+      .forEach((item) => notify("bad", `${tr("Upload abgelehnt:", "Upload rejected:", "Subida rechazada:")} ${item.filename}`, item.error?.message ? td(item.error.message) : undefined));
   }
 
   async function handleToggleArchive(doc: DocumentSummary) {
     try {
       await api.archive(doc.id, !doc.archived);
-      await refreshData();
+      const updated = await refreshData();
+      if (selectedRef.current === doc.id) {
+        if (!doc.archived) {
+          const nextActive = updated.find((item) => !item.archived);
+          if (nextActive) setSelectedId(nextActive.id);
+          else void loadDetail(doc.id);
+        } else {
+          void loadDetail(doc.id);
+        }
+      }
       notify(
         "info",
         doc.archived ? tr("Aus dem Archiv geholt", "Unarchived", "Desarchivado") : tr("Archiviert", "Archived", "Archivado"),
@@ -422,7 +468,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (overlayOpen || !canSeal || view !== "workspace") return;
     const onKey = (event: KeyboardEvent) => {
-      if (!isModEnter(event)) return;
+      if (event.defaultPrevented || !isModEnter(event) || isTypingTarget(event.target)) return;
       event.preventDefault();
       setSealOpen(true);
     };
@@ -483,7 +529,10 @@ export default function DashboardPage() {
           copilotBusy={copilotBusy}
           onCancelJob={cancel}
           onSeed={(file) => void handleSeed(file)}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => {
+            setSettingsSection(authRequired ? "connection" : undefined);
+            setSettingsOpen(true);
+          }}
           onStartTour={() => {
             setView("workspace");
             setWelcomeOpen(false);
@@ -510,10 +559,28 @@ export default function DashboardPage() {
               <button className="btn" onClick={() => void loadAll()}><RefreshCw size={14} aria-hidden="true" /> {tr("Erneut verbinden", "Reconnect", "Reconectar")}</button>
             </div>
           )}
+          {!offline && authRequired && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-sm text-fg" role="status">
+              <Lock size={16} className="shrink-0 text-warn" aria-hidden="true" />
+              <p className="min-w-0 flex-1">
+                <strong className="text-warn">{tr("Zugangsschlüssel erforderlich.", "Access key required.", "Se requiere clave de acceso.")}</strong>{" "}
+                {tr("Das Backend ist aktiv, verlangt aber einen X-API-Key. Hinterlegen Sie ihn unter Einstellungen › Verbindung.", "The backend is reachable but requires an X-API-Key. Configure it under Settings › Connection.", "El backend está activo pero requiere un X-API-Key. Configúrelo en Ajustes › Conexión.")}
+              </p>
+              <button
+                className="btn"
+                onClick={() => {
+                  setSettingsSection("connection");
+                  setSettingsOpen(true);
+                }}
+              >
+                {tr("Schlüssel eingeben", "Enter key", "Introducir clave")}
+              </button>
+            </div>
+          )}
 
           {/* Keep-Alive: alle Ansichten bleiben eingehängt - ein Wechsel bricht keine Prüfung und kein Gespräch ab. */}
           <div hidden={view !== "workspace"} className="space-y-4 2xl:space-y-5">
-            <KpiStrip kpis={kpis} loading={!health && !offline} />
+            <KpiStrip kpis={kpis} loading={!health && !offline && !authRequired} />
 
             {/* Kompakte Queue (340 bzw. 400 px), der Rest gehört der Workbench. */}
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)] 2xl:gap-5">
@@ -735,10 +802,15 @@ export default function DashboardPage() {
 
       <SettingsModal
         open={settingsOpen}
+        initialSection={settingsSection}
+        authRequired={authRequired}
         settings={settings}
         health={health}
         version={health?.version ?? ""}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+          setSettingsOpen(false);
+          setSettingsSection(undefined);
+        }}
         onSaved={(updated) => {
           setSettings(updated);
           void fetchHealth().then(setHealth).catch(() => undefined);

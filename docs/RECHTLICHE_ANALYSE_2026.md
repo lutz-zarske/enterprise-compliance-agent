@@ -7,7 +7,7 @@ EU AI Act, Umsatzsteuerrecht und E-Rechnung, GoBD sowie Datenschutz – und ihre
 > Technische Einordnung, keine Rechts- oder Steuerberatung. Die Quellen zu den
 > einzelnen Angaben stehen in [`RECHTSQUELLEN.md`](RECHTSQUELLEN.md); wie das
 > System die Anforderungen umsetzt, beschreibt der Abschnitt
-> [Anmerkungen aus der Umsetzung](#anmerkungen-aus-der-umsetzung-stand-v25-november-2026).
+> [Anmerkungen aus der Umsetzung](#anmerkungen-aus-der-umsetzung-stand-v28-november-2026).
 
 ## Inhalt
 
@@ -16,7 +16,7 @@ EU AI Act, Umsatzsteuerrecht und E-Rechnung, GoBD sowie Datenschutz – und ihre
 3. [Steuerrecht und E-Rechnung: die Digitalisierung des Vorsteuerabzugs](#3-steuerrecht-und-e-rechnung-die-digitalisierung-des-vorsteuerabzugs)
 4. [Datenschutz, Cloud-Inferenz und Drittlandtransfer](#4-datenschutz-cloud-inferenz-und-drittlandtransfer)
 5. [Architektonische Synthese](#5-architektonische-synthese)
-6. [Anmerkungen aus der Umsetzung](#anmerkungen-aus-der-umsetzung-stand-v25-november-2026)
+6. [Anmerkungen aus der Umsetzung](#anmerkungen-aus-der-umsetzung-stand-v28-november-2026)
 
 ---
 
@@ -428,7 +428,7 @@ technische Spezifikation verstehen und umsetzen.
 
 ---
 
-## Anmerkungen aus der Umsetzung (Stand v2.5, November 2026)
+## Anmerkungen aus der Umsetzung (Stand v2.8, November 2026)
 
 Abgleich der Analyse mit dem implementierten Stand des Enterprise Compliance
 Agent. Der Analysetext oben bleibt inhaltlich unverändert; die folgenden Punkte

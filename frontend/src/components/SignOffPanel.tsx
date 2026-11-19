@@ -25,7 +25,7 @@ interface PanelProps {
  * Ed25519-signierter Eintrag in die Hash-Kette geschrieben.
  */
 export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoFocus }: PanelProps) {
-  const { tr } = useI18n();
+  const { tr, td } = useI18n();
   const [auditor, setAuditor] = useState("");
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<SignOffDecision>("SEALED_APPROVED");
@@ -77,11 +77,11 @@ export function SignOffPanel({ document, onSealed, notify, shortcutActive, autoF
         ),
       );
     } catch (err) {
-      notify("bad", tr("Siegel fehlgeschlagen", "Seal failed", "Error al sellar"), err instanceof ApiError ? err.message : String(err));
+      notify("bad", tr("Siegel fehlgeschlagen", "Seal failed", "Error al sellar"), err instanceof ApiError ? td(err.message) : String(err));
     } finally {
       setBusy(false);
     }
-  }, [ready, document.id, auditor, note, decision, onSealed, notify, tr]);
+  }, [ready, document.id, auditor, note, decision, onSealed, notify, tr, td]);
 
   useEffect(() => {
     if (!shortcutActive) return;
@@ -214,7 +214,7 @@ export function SealModal({ document, open, onClose, onSealed, notify }: {
       {card && (
         <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
           <span className="text-subtle">
-            Score <span className="font-semibold tabular-nums text-fg">{card.score}</span>
+            {tr("Score", "Score", "Puntuación")} <span className="font-semibold tabular-nums text-fg">{card.score}</span>
             <span className="tabular-nums"> / 100</span>
           </span>
           <span className={TONE_TEXT[verdictTone(card)]}>{td(card.release_recommendation)}</span>

@@ -64,6 +64,8 @@ const LANGUAGE_OPTIONS: { value: Locale; label: string }[] = [
 
 interface Props {
   open: boolean;
+  initialSection?: Section;
+  authRequired?: boolean;
   settings: RuntimeSettings | null;
   health: HealthResponse | null;
   version: string;
@@ -76,14 +78,21 @@ interface Props {
 const hasKey = (settings: RuntimeSettings | null, mode: InferenceMode) =>
   mode === "local" || Boolean(settings?.[`has_${mode}_key` as keyof RuntimeSettings]);
 
+const keyStamp = (settings: RuntimeSettings | null, mode: InferenceMode) =>
+  mode === "local"
+    ? "local"
+    : hasKey(settings, mode)
+      ? `key:${settings?.masked_keys?.[mode] ?? "1"}`
+      : "-";
+
 /** Geladene Kataloge je Anbieter und Key-Stand: Die Einstellungen öffnen ohne Ladezustand. */
 const catalogCache = new Map<string, { at: number; catalog: ModelCatalog }>();
 const CATALOG_TTL_MS = 5 * 60_000;
-const catalogKey = (provider: InferenceMode, keyStored: boolean) => `${provider}|${keyStored ? "key" : "-"}`;
+const catalogKey = (provider: InferenceMode, stamp: string) => `${provider}|${stamp}`;
 
-function loadCatalog(provider: InferenceMode, keyStored: boolean): Promise<ModelCatalog> {
+function loadCatalog(provider: InferenceMode, stamp: string): Promise<ModelCatalog> {
   return api.models(provider).then((catalog) => {
-    catalogCache.set(catalogKey(provider, keyStored), { at: Date.now(), catalog });
+    catalogCache.set(catalogKey(provider, stamp), { at: Date.now(), catalog });
     return catalog;
   });
 }
@@ -95,39 +104,41 @@ export function prefetchModelCatalog(settings: RuntimeSettings) {
   if (cloud) providers.add(cloud);
   for (const provider of providers) {
     if (!hasKey(settings, provider)) continue;
-    const entry = catalogCache.get(catalogKey(provider, true));
+    const stamp = keyStamp(settings, provider);
+    const entry = catalogCache.get(catalogKey(provider, stamp));
     if (entry && Date.now() - entry.at < CATALOG_TTL_MS) continue;
-    loadCatalog(provider, true).catch(() => undefined);
+    loadCatalog(provider, stamp).catch(() => undefined);
   }
 }
 
 /** Modell-Katalog des Providers (neueste zuerst, live aus der API); ohne Key die Vorschlagsliste. */
 function useCatalog(provider: InferenceMode, enabled: boolean, settings: RuntimeSettings | null) {
   const [, rerender] = useState(0);
-  const keyStored = hasKey(settings, provider);
+  const stamp = keyStamp(settings, provider);
   useEffect(() => {
     if (!enabled) return;
-    const entry = catalogCache.get(catalogKey(provider, keyStored));
+    const entry = catalogCache.get(catalogKey(provider, stamp));
     if (entry && Date.now() - entry.at < CATALOG_TTL_MS) return;
     let alive = true;
-    loadCatalog(provider, keyStored)
+    loadCatalog(provider, stamp)
       .then(() => alive && rerender((n) => n + 1))
       .catch(() => undefined);
     return () => {
       alive = false;
     };
-  }, [provider, enabled, keyStored]);
-  return enabled ? catalogCache.get(catalogKey(provider, keyStored))?.catalog ?? null : null;
+  }, [provider, enabled, stamp]);
+  return enabled ? catalogCache.get(catalogKey(provider, stamp))?.catalog ?? null : null;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
+  const { tr } = useI18n();
   return (
     <div>
       <span className="label-caps flex items-center gap-1.5">
         {label}
         {hint && (
           <Tooltip content={hint}>
-            <span tabIndex={0} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
+            <span tabIndex={0} role="button" aria-label={tr(`Hinweis zu ${label}`, `Info: ${label}`, `Información: ${label}`)} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
           </Tooltip>
         )}
       </span>
@@ -138,9 +149,10 @@ function Field({ label, hint, children }: { label: string; hint?: React.ReactNod
 
 /** Überschrift eines Bereichs; ``quiet``: Titel nur für Screenreader (der Reiter darüber nennt ihn schon). */
 function SectionTitle({ title, text, hint, quiet = false }: { title: string; text?: string; hint?: React.ReactNode; quiet?: boolean }) {
+  const { tr } = useI18n();
   const info = hint && (
     <Tooltip content={hint}>
-      <span tabIndex={0} className="inline-flex align-[-2px] text-subtle"><Info size={13} aria-hidden="true" /></span>
+      <span tabIndex={0} role="button" aria-label={tr(`Hinweis zu ${title}`, `Info: ${title}`, `Información: ${title}`)} className="inline-flex align-[-2px] text-subtle"><Info size={13} aria-hidden="true" /></span>
     </Tooltip>
   );
   return (
@@ -261,7 +273,7 @@ function KeyInput({ value, onChange, placeholder, name, label, disabled = false 
 }
 
 function useSave(onSaved: (settings: RuntimeSettings) => void, notify: Notify) {
-  const { tr } = useI18n();
+  const { tr, td } = useI18n();
   const [busy, setBusy] = useState(false);
   const save = useCallback(
     async (update: SettingsUpdate) => {
@@ -271,13 +283,13 @@ function useSave(onSaved: (settings: RuntimeSettings) => void, notify: Notify) {
         onSaved(updated);
         return updated;
       } catch (err) {
-        notify("bad", tr("Speichern fehlgeschlagen", "Save failed", "Error al guardar"), err instanceof ApiError ? err.message : String(err));
+        notify("bad", tr("Speichern fehlgeschlagen", "Save failed", "Error al guardar"), err instanceof ApiError ? td(err.message) : String(err));
         return null;
       } finally {
         setBusy(false);
       }
     },
-    [onSaved, notify, tr],
+    [onSaved, notify, tr, td],
   );
   return { busy, save };
 }
@@ -405,6 +417,8 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
   const { busy: saving, save } = useSave(onSaved, notify);
 
   const mode: InferenceMode | null = location === "local" ? "local" : provider || null;
+  const modeRef = useRef<InferenceMode | null>(mode);
+  modeRef.current = mode;
   const cloud = mode !== null && mode !== "local";
   const keyStored = mode !== null && hasKey(settings, mode);
   const modelsReady = mode === "local" || keyStored;
@@ -458,10 +472,10 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
       try {
         outcome = await api.testConnection(mode);
       } catch (err) {
-        outcome = { ok: false, provider: mode, model, message: err instanceof ApiError ? err.message : String(err) };
+        outcome = { ok: false, provider: mode, model, message: err instanceof ApiError ? td(err.message) : String(err) };
       }
       lastTests.set(testKey(current, mode), outcome);
-      setResult(outcome);
+      if (modeRef.current === mode) setResult(outcome);
     } finally {
       running.current = false;
       setPhase("idle");
@@ -500,6 +514,7 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
         ariaLabel={tr("Wo geprüft wird", "Where audits run", "Dónde se analiza")}
         value={location}
         onChange={setLocation}
+        disabled={busy}
         options={[
           { value: "local", label: tr("Lokal (Ollama)", "Local (Ollama)", "Local (Ollama)") },
           { value: "cloud", label: tr("Cloud (API)", "Cloud (API)", "Nube (API)") },
@@ -525,6 +540,7 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
               value={provider}
               onChange={setProvider}
               options={CLOUD}
+              disabled={busy}
               placeholder={tr("Anbieter wählen …", "Choose a provider …", "Elegir proveedor …")}
               ariaLabel={tr("Cloud-Anbieter", "Cloud provider", "Proveedor en la nube")}
               width={320}
@@ -541,7 +557,7 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
                   "Se guarda cifrada en el servidor y nunca se muestra en claro. Más claves en «Cascada de respaldo».",
                 )}
               >
-                <span tabIndex={0} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
+                <span tabIndex={0} role="button" aria-label={tr("Hinweis zu API-Key", "Info: API key", "Información: Clave API")} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
               </Tooltip>
               {keyStored && (
                 <span className="ml-auto flex items-center gap-1.5 normal-case tracking-normal text-subtle">
@@ -576,7 +592,7 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
       {mode !== null && (
         <div className="space-y-2">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ModelSelect provider={mode} value={model} current={settings.models[mode]} onChange={setModel} catalog={catalog} label={tr("Hauptmodell", "Primary model", "Modelo principal")} disabled={!modelsReady} />
+            <ModelSelect provider={mode} value={model} current={settings.models[mode]} onChange={setModel} catalog={catalog} label={tr("Hauptmodell", "Primary model", "Modelo principal")} disabled={!modelsReady || busy} />
             {cloud && (
               <div>
                 <ModelSelect
@@ -588,12 +604,12 @@ function ModelsSection({ settings, active, onSaved, onAccessChanged, notify }: {
                   label={tr("Ausweichmodell bei Überlast", "Fallback model on overload", "Modelo alternativo por sobrecarga")}
                   allowOff
                   exclude={model}
-                  disabled={!modelsReady}
+                  disabled={!modelsReady || busy}
                 />
                 {modelsReady && fallbackModel === "" && settings.suggested_fallback_models?.[mode] && (
                   <p className="mt-1.5 text-xs text-subtle">
                     {tr("Empfohlen:", "Recommended:", "Recomendado:")}{" "}
-                    <button type="button" className="font-medium text-accent underline-offset-2 hover:underline" onClick={() => setFallbackModel(settings.suggested_fallback_models[mode])}>
+                    <button type="button" disabled={busy} className="font-medium text-accent underline-offset-2 hover:underline disabled:opacity-50" onClick={() => setFallbackModel(settings.suggested_fallback_models[mode])}>
                       {settings.suggested_fallback_models[mode]}
                     </button>
                   </p>
@@ -792,7 +808,7 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
           <ol className="divide-y divide-line overflow-hidden rounded-lg border border-line">
             {backups.map((backup, index) => (
               <li key={backup.id} className="flex items-center gap-2.5 px-3 py-2 text-xs">
-                <span className="w-16 shrink-0 tabular-nums text-subtle">Backup {index + 1}</span>
+                <span className="w-20 shrink-0 tabular-nums text-subtle">{tr("Backup", "Backup", "Respaldo")} {index + 1}</span>
                 <KeyRound size={13} className="shrink-0 text-ok" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate text-fg">
                   {providerDisplayName(backup.provider)} · {backup.model}
@@ -925,7 +941,7 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
                   "Protege su clave API de costes inesperados. Cuenta los tokens de todas las llamadas a la nube desde medianoche (UTC); los modelos locales no cuentan. Al alcanzarlo, actúan los niveles locales o el motor de reglas hasta el día siguiente. Un límite del servidor es el máximo.",
                 )}
               >
-                <span tabIndex={0} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
+                <span tabIndex={0} role="button" aria-label={tr("Hinweis zum Cloud-Tageslimit", "Info: Daily cloud limit", "Información: Límite diario de la nube")} className="text-subtle"><Info size={12} aria-hidden="true" /></span>
               </Tooltip>
             </span>
             <span className="flex items-center gap-3">
@@ -963,8 +979,8 @@ function CascadeSection({ settings, onSaved, onAccessChanged, notify }: {
 }
 
 function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSettings; onSaved: (settings: RuntimeSettings) => void; notify: Notify }) {
-  const { tr } = useI18n();
-  const { save } = useSave(onSaved, notify);
+  const { tr, td } = useI18n();
+  const { busy: saving, save } = useSave(onSaved, notify);
   const [probe, setProbe] = useState("");
   const [result, setResult] = useState<RedactResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -981,7 +997,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
     },
     {
       value: "standard",
-      label: "Standard",
+      label: tr("Standard", "Standard", "Estándar"),
       text: tr(
         "Schwärzt IBAN, Steuernummer/USt-IdNr., E-Mail, Telefon, Kennnummern und Art.-9-Daten; Übriges wird markiert.",
         "Redacts IBAN, tax/VAT IDs, email, phone, identifiers and Art. 9 data; flags remaining matches.",
@@ -1004,7 +1020,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
     try {
       setResult(await api.redact(probe));
     } catch (err) {
-      notify("bad", tr("Testschwärzung fehlgeschlagen", "Redaction test failed", "Error en la prueba de anonimización"), err instanceof ApiError ? err.message : String(err));
+      notify("bad", tr("Testschwärzung fehlgeschlagen", "Redaction test failed", "Error en la prueba de anonimización"), err instanceof ApiError ? td(err.message) : String(err));
     } finally {
       setBusy(false);
     }
@@ -1026,6 +1042,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
           ariaLabel={tr("PII-Maskierungsgrad", "PII masking level", "Nivel de ocultación PII")}
           value={settings.pii_strictness}
           onChange={(value) => void save({ pii_strictness: value })}
+          disabled={saving}
           options={strictnessOptions.map(({ value, label }) => ({ value, label }))}
         />
         <p className="mt-2 text-xs text-muted">{strictnessOptions.find((s) => s.value === settings.pii_strictness)?.text}</p>
@@ -1036,12 +1053,14 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
       <Toggle
         checked={settings.enforce_ustg_check}
         onChange={(value) => void save({ enforce_ustg_check: value })}
+        disabled={saving}
         label={tr("Pflichtangaben nach § 14 UStG prüfen", "Check mandatory details under Sec. 14 UStG", "Comprobar datos obligatorios (§ 14 UStG)")}
         description={tr("Bei Rechnungen alle Angaben nach § 14 Abs. 4 UStG; fließt in den Score ein.", "All details under Sec. 14(4) UStG for invoices; counts towards the score.", "Todos los datos del § 14(4) UStG en facturas; cuenta para la puntuación.")}
       />
       <Toggle
         checked={settings.ai_act_escalation}
         onChange={(value) => void save({ ai_act_escalation: value })}
+        disabled={saving}
         label={tr("Hochrisiko nach EU AI Act automatisch einstufen", "Auto-classify high risk under the EU AI Act", "Clasificar alto riesgo (Reglamento IA) automáticamente")}
         description={tr("Sobald eine Anhang-III-Kategorie belegt ist – auch wenn das Modell niedriger bewertet.", "As soon as an Annex III category applies – even if the model rates lower.", "En cuanto aplica una categoría del Anexo III, aunque el modelo valore más bajo.")}
       />
@@ -1089,7 +1108,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
             <p className="whitespace-pre-wrap break-words text-fg">{result.redacted_text}</p>
             <p className="mt-2 text-subtle">
               <span className="tabular-nums">{result.total}</span> {tr("Schwärzungen", "redactions", "ocultaciones")}
-              {Object.keys(result.counts).length > 0 && ` · ${Object.entries(result.counts).map(([category, count]) => `${category} ${count}`).join(" · ")}`}
+              {Object.keys(result.counts).length > 0 && ` · ${Object.entries(result.counts).map(([category, count]) => `${td(category)} ${count}`).join(" · ")}`}
             </p>
           </div>
         )}
@@ -1127,7 +1146,7 @@ function AppearanceSection() {
           options={[
             { value: "dark", label: tr("Dunkel", "Dark", "Oscuro") },
             { value: "light", label: tr("Hell", "Light", "Claro") },
-            { value: "system", label: "System" },
+            { value: "system", label: tr("System", "System", "Sistema") },
           ]}
         />
       </Field>
@@ -1375,17 +1394,21 @@ function AboutSection({ version, release, checking, notify }: {
 const SOURCE_URL = "https://github.com/lutz-zarske/enterprise-compliance-agent";
 
 /** Einstellungen: Kategorien links, ruhige Formulare rechts; feste Höhe, Inhalte scrollen im Panel. */
-export function SettingsModal({ open, settings, health, version, onClose, onSaved, onAccessChanged, notify }: Props) {
+export function SettingsModal({ open, initialSection, authRequired = false, settings, health, version, onClose, onSaved, onAccessChanged, notify }: Props) {
   const { tr } = useI18n();
-  const [section, setSection] = useState<Section>("ai");
+  const [section, setSection] = useState<Section>(initialSection ?? "ai");
   const [aiPart, setAiPart] = useState<AiPart>("models");
   const [release, setRelease] = useState<ReleaseStatus | null>(null);
   const [releaseChecking, setReleaseChecking] = useState(false);
   const needsSettings = section === "ai" || section === "compliance";
 
+  useEffect(() => {
+    if (open && initialSection) setSection(initialSection);
+  }, [open, initialSection]);
+
   // Release-Status beim Öffnen vorab laden: zuerst lokal (sofort), dann mit Abgleich des Servers.
   useEffect(() => {
-    if (!open) return;
+    if (!open || !health || authRequired) return;
     let alive = true;
     setReleaseChecking(true);
     api.release(false)
@@ -1404,7 +1427,7 @@ export function SettingsModal({ open, settings, health, version, onClose, onSave
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, health, authRequired]);
 
   const sections: { key: Section; label: string; icon: React.ReactNode }[] = [
     { key: "ai", label: tr("KI-Einrichtung", "AI setup", "Configuración IA"), icon: <Bot size={16} aria-hidden="true" /> },
@@ -1415,7 +1438,7 @@ export function SettingsModal({ open, settings, health, version, onClose, onSave
   ];
   return (
     <Modal open={open} onClose={onClose} title={tr("Einstellungen", "Settings", "Ajustes")} width="max-w-5xl" padded={false}>
-      <div className="grid h-[min(720px,calc(100vh-12rem))] min-h-[420px] grid-cols-1 md:grid-cols-[230px_minmax(0,1fr)]">
+      <div className="grid h-[min(720px,calc(100vh-12rem))] min-h-[420px] grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[230px_minmax(0,1fr)] md:grid-rows-1">
         <nav aria-label={tr("Kategorien", "Categories", "Categorías")} className="flex gap-1 overflow-x-auto border-b border-line p-2 md:flex-col md:overflow-visible md:border-b-0 md:border-r md:p-3">
           {sections.map((item) => (
             <button
@@ -1435,9 +1458,18 @@ export function SettingsModal({ open, settings, health, version, onClose, onSave
         </nav>
         <div key={section} className="scroll-area anim-fade min-h-0 px-5 py-5 pr-4 md:px-6">
           {needsSettings && !settings && (
-            <p className="py-8 text-center text-sm text-subtle">
-              {tr("Backend nicht erreichbar – Einstellungen können nicht geladen werden.", "Backend unreachable – settings cannot be loaded.", "Backend no disponible – no se pueden cargar los ajustes.")}
-            </p>
+            <div className="py-8 text-center text-sm text-subtle">
+              <p>
+                {authRequired
+                  ? tr("Zugangsschlüssel erforderlich – bitte unter Verbindung hinterlegen.", "Access key required – please configure it under Connection.", "Se requiere clave de acceso – configúrela en Conexión.")
+                  : tr("Backend nicht erreichbar – Einstellungen können nicht geladen werden.", "Backend unreachable – settings cannot be loaded.", "Backend no disponible – no se pueden cargar los ajustes.")}
+              </p>
+              {authRequired && (
+                <button type="button" className="btn btn-sm mt-3" onClick={() => setSection("connection")}>
+                  {tr("Zu Verbindung wechseln", "Open Connection", "Ir a Conexión")}
+                </button>
+              )}
+            </div>
           )}
           {section === "ai" && settings && (
             <>

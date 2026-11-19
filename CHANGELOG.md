@@ -3,6 +3,31 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.8.0 – 19.11.2026
+
+Finales Abschluss-Release nach vollständigem Sicherheits-, Fachlogik-, Krypto-, Export-, Frontend- und DevOps-Audit (`380` Offline-Tests, `0` npm-Audit-Schwachstellen):
+
+**Sicherheit, Datenschutz & Kryptografie**
+
+- **Zip-Slip- & Archiv-Härtung:** Eingebettete PDF-Anhangsnamen werden vor der Extraktion und dem GoBD-ZIP-Export bereinigt und gegen Systemdateinamen (`manifest.json` etc.) abgegrenzt; `pdf_attachments.py` prüft die entpackte Größe vor der RAM-Allokation (Schutz vor Dekompressionsbomben); `gobd_export.verify_package()` weist doppelte ZIP-Einträge sowie Traversal-Pfade ab und prüft `manifest.document.sha256` gegen die Originaldatei.
+- **Eigenständige Offline-Verifikation:** `scripts/verify_pruefpaket.py` nutzt ausschließlich Python-Stdlib und `cryptography` (keine `app.*`-Abhängigkeit); `manifest.json` dokumentiert `ensure_ascii=False` und die 128-Bit-Kürzung des Ed25519-Fingerprints präzise.
+- **Loopback-CORS & Cross-Site-Schutz:** Standard-`CORS_ORIGINS` auf `http://127.0.0.1:3001,http://localhost:3001` eingeschränkt; bei deaktiviertem `API_KEY` weist die Middleware Cross-Site-`Origin` und `Sec-Fetch-Site: cross-site` auf schreibenden bzw. lokalen Routen mit HTTP 403 ab.
+- **Modell-ID-Allowlist & atomare Einstellungen:** Modellnamen werden per Allowlist-Regex validiert und in Provider-URLs URL-kodiert (Schutz vor Pfad-Traversal); `RuntimeSettingsStore._update()` validiert und persistiert atomar unter Lock; geheime Schlüsseldateien entstehen atomar mit Dateirechten `0600`.
+- **Privacy Vault & DLP-Gateway:** Alle 4 verankerten Identifikator-Kategorien (Personalausweis/Pass, Sozialversicherungsnummer, 11-stellige Steuer-ID, Geburtsdatum) sowie breitere EU-USt-IdNr. und Fremdwährungen werden vor Cloud-Aufrufen pseudonymisiert; die `ADDRESS`-Regel erhält Zeilenumbrüche (`\n`); `O(N log N)`-Überlappungsauflösung per `bisect` beseitigt quadratische Laufzeiten in `POST /api/v1/redact`, `PrivacyVault` und `build_text_view()`.
+- **Härtung von Logs, Fehlermeldungen, Ledger & Updater:** Plaintext-Logs bereinigen `exc_info`-Tracebacks; `llm.py` und `/health` geben keine Pydantic-`input_value`-Auszüge oder interne DB-Fehlermeldungen nach außen; `audit_trails.previous_hash` ist `UNIQUE`, unsignierte `HUMAN`-Einträge werden gezählt (`unsigned_human_entries`); `ReleaseManager` lehnt nicht-Fast-Forward-Stände sauber ab (`not_fast_forward`) statt `git reset --hard` auszuführen; SQLite nutzt `PRAGMA busy_timeout=15000` und schließt `raw_text` aus Listen-/KPI-Abfragen aus.
+
+**Fachlogik, Recht & Exporte**
+
+- **§ 14 UStG, EN 16931 & Steuern:** Einzelne Absenderadressen umgehen die Empfängeradress-Prüfung (`ustg_1_recipient`) nicht mehr; Kleinbetragsgrenze (`<= 250`) greift nur bei `EUR`; Steuersätze werden ohne wissenschaftliche Notation (`20 %` statt `2E+1 %`) ausgegeben; ausländische Steuersätze liefern Prüfhinweis statt deutschem Fehler; § 14c-Widersprüche (Steuerbefreiung + positive USt) und EN-16931-`BR-CO-*`-Verstöße werden explizit geprüft; negative Gutschriften (inkl. UNTDID `389` und Mischsätzen) werden korrekt bewertet; `facts_has_positions()` fällt nicht mehr auf verneinende Sätze herein; Art.-9-Scanner vermeidet Geschäftsdeutsch-Fehlalarme (`Prüfbefund`, `steuerliche Behandlung`) und schwärzt deutsche Komposita (`Universitätsklinik`) vollständig.
+- **EU AI Act & Human Override:** Verbotene Praktiken nach Art. 5 (`UNACCEPTABLE`) zeigen die korrekte Verbotsempfehlung statt Art. 43; `override()` aktualisiert `systems[].risk_level` konsistent, sodass `is_high_risk` und Kachel-Headline nach Herabstufung stimmen; Zukunftsverpflichtungen heben die Hochrisiko-Sperre nicht mehr auf.
+- **Exporte & Robustheit:** Regelwerk-Fallbacks (`provider="heuristic"`) tragen ein klares Kennzeichnungs-Banner in PDF, HTML, Markdown und Verfahrensdokumentation (DE/EN/ES); ReportLab nutzt `splitInRow=1` gegen `LayoutError` bei überlangen Zellen und optimierte 3-Spalten-Breiten; XML-Parser weist `NaN`/`Infinity`/`> 1e15` ab und `retention.py` begrenzt Jahreszahlen sicher auf `9999`.
+
+**Oberfläche, i18n, Barrierefreiheit & DevOps**
+
+- **Race-Conditions, UTC & Auth:** `ViesCheck` schützt per Request-ID gegen Belegwechsel; `ProtocolView` zeigt in der `UTC`-Spalte echte UTC-Zeit (`formatDateUtc`) und `formatDate()` parst reine `YYYY-MM-DD`-Werte lokal ohne Zeitzonen-Versatz; HTTP 401 behält `/health`-Daten und zeigt einen direkten Zugangsschlüssel-Hinweis; `loadAll` nutzt `trRef` ohne Doppel-Waterfall bei EN/ES; `useJobs`/`JobMonitor`/`loadDetail`/`SettingsModal` bereinigen Timer, Abbruch- und Katalog-Cache-Kanten.
+- **Interaktion, IME, Responsive & i18n:** IME-sichere Enter-Eingabe in `CopilotView` (`isComposing` / `keyCode === 229`), `Escape`-Konflikte in `CopilotView`, `<Select>`, `Tooltip` und `Modal` gelöst; Mobile-Layout für `CopilotView` und `SettingsModal` korrigiert; vollständige EN/ES-Übersetzungen für alle PII-Tooltips, Musterbeleg-Texte, Rechtsnormen und neue Prüfregeln; `aria-activedescendant`, `aria-describedby` am Trigger-Element und zugängliche Icon-Labels ergänzt.
+- **Docker, CI & Windows-Starter:** `docker-compose.yml` bindet standardmäßig an `127.0.0.1` (`BIND_HOST` überschreibbar), nutzt optionales `env_file: .env` und `ollama`-Healthcheck; `Dockerfile` prüft `database.status == "ok"`; `ci.yml` setzt `permissions: { contents: read }`; `Start_Compliance_Agent.ps1` nutzt `npm ci` + `-H 127.0.0.1`; `Stop_Compliance_Agent.ps1` prüft die Kommandozeile vor dem Beenden von PID-Datei-Prozessen; `npm audit` auf `0 vulnerabilities`.
+
 ## v2.7.5 – 18.11.2026
 
 Feinschliff aus einem Live-Chrome-End-to-End-Stresstest (`1440×900`, `1024×768` und `390×844` inkl. Mehrseiten-PDF-Verträgen, i18n-Wechsel und Upload-Negativtests):

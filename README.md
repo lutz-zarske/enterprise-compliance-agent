@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 363 pytest](https://img.shields.io/badge/pytest-363_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 379 pytest](https://img.shields.io/badge/pytest-379_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
 > Checks mandatory invoice details and arithmetic; it does not replace full
 > EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
-> FastAPI · Next.js 15 · 363 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 379 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -135,7 +135,7 @@ flowchart LR
 
 | Ebene | Technik |
 |---|---|
-| **Backend** | Python 3.12 · FastAPI · Pydantic v2 · SQLAlchemy 2.0 Core · httpx · pdfplumber/pypdfium2 · defusedxml · cryptography (Fernet, Ed25519) |
+| **Backend** | Python 3.12 · FastAPI · Pydantic v2 · SQLAlchemy 2.0 Core · httpx · pdfplumber/pypdfium2 · defusedxml · ReportLab · cryptography (Fernet, Ed25519) |
 | **Frontend** | Next.js 15 · React 19 · Tailwind CSS 4 · TypeScript (strict) · Schriften lokal über `@fontsource` |
 | **Inferenz** | Ollama (`qwen2.5:14b-instruct`, auf Geräten ohne GPU z. B. `7b`/`3b`) · Google Gemini · Anthropic Claude · OpenAI – reines HTTP, kein SDK, kein Agenten-Framework |
 | **Persistenz** | SQLite (Default) · PostgreSQL über `DATABASE_URL` |
@@ -332,8 +332,9 @@ Musterdaten: gültige Rechnung 100, Steuerfalle 45, KI-Recruiting-Vertrag 59
 
 * **Lokal als Standard.** Im Modus `local` verlässt kein Dokumentinhalt den Rechner.
 * **Cloud nur mit Vault.** Jeder Cloud-Client ist vom `VaultedClient` umhüllt;
-  ersetzt werden Personen (mit Anrede oder Rolle), Firmen, IBAN, USt-IdNr.,
-  Steuernummer, E-Mail, Telefon, Adressen und Beträge. Das Mapping lebt nur im
+  ersetzt werden Personen (mit Anrede oder Rolle), Firmen, IBAN, EU-USt-IdNr.,
+  Steuernummer, 11-stellige Steuer-ID, Ausweis-/Passnummer, SV-Nr.,
+  Geburtsdatum, E-Mail, Telefon, Adressen und Beträge. Das Mapping lebt nur im
   Speicher und nur für einen Auftrag.
 * **Rechtlich nüchtern:** Pseudonymisierte Daten bleiben personenbezogen; für
   jeden Anbieter der Kaskade sind AV-Vertrag und Transfergrundlage nötig.
@@ -361,8 +362,8 @@ Vollständig und interaktiv unter `/docs` (Swagger).
 | `PUT` | `/documents/{id}/pin` · `/documents/{id}/archive` | Anpinnen · Archivieren (nur ausblenden, signiert) |
 | `POST` | `/documents/{id}/sign-off` | Prüfer-Siegel (Art. 14), Ed25519-signiert |
 | `POST` | `/api/documents/{id}/override` | Übersteuerung der KI-Einstufung (Art. 14 Abs. 4 lit. d), Score neu |
-| `GET` | `/documents/{id}/report?format=html\|markdown\|json` | Prüfzertifikat |
-| `GET` | `/api/documents/{id}/export/gobd` · `…/export/procedural-doc?format=html\|markdown\|docx` | Prüfdatenpaket (ZIP) · Verfahrensdokumentation |
+| `GET` | `/documents/{id}/report?format=pdf\|html\|markdown\|json&lang=de\|en\|es` | Prüfzertifikat (A4-PDF, HTML, Markdown, JSON) |
+| `GET` | `/api/documents/{id}/export/gobd?lang=de\|en\|es` · `…/export/procedural-doc?format=pdf\|docx\|html\|markdown&lang=de\|en\|es` | Prüfdatenpaket (ZIP) · Verfahrensdokumentation |
 | `POST` | `/documents/{id}/copilot` | Frage zum Beleg (`thinking`, `progress_id`) |
 | `GET` · `POST` | `/api/v1/copilot/progress/{id}` · `/api/v1/copilot/cancel/{id}` | Live-Arbeitsschritte bzw. Abbruch einer laufenden Copilot-Anfrage |
 | `GET` · `POST` | `/api/v1/ai/local` · `/api/v1/ai/start-ollama` · `/api/v1/ai/stop-local` | Lokale KI erkennen, starten, stoppen (nur localhost) |
@@ -425,7 +426,7 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 | `LOCAL_AI_CONTROL_LOCAL_ONLY` | `true` | Ollama-Start/-Stopp nur von localhost |
 | `PII_STRICTNESS` | `standard` | `strict` · `standard` · `audit_only` |
 | `SETTINGS_ENCRYPTION_KEY` | leer | Fernet-Schlüssel für gespeicherte Provider-Keys |
-| `CORS_ORIGINS` | `*` | Produktiv auf die Frontend-Origin beschränken |
+| `CORS_ORIGINS` | `http://127.0.0.1:3001,http://localhost:3001` | Zulässige Browser-Origins (Loopback-Standard; produktiv anpassen) |
 | `DLP_TERMS` | leer | Sperrbegriffe für `/api/v1/redact` |
 | `RATE_LIMIT_*` | siehe `.env.example` | Token-Bucket je Client-IP; `0` = unbegrenzt |
 | `RELEASE_UPDATE_LOCAL_ONLY` | `true` | Updates nur von localhost einspielen |
@@ -435,12 +436,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 363 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 379 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-363 Tests (Stand v2.7.5) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+379 Tests (Stand v2.8.0) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -516,7 +517,7 @@ app/
   scoring.py           Deterministische Scorecard (Regelwerk 2026.3)
   audit_ledger.py      Append-only-Ledger mit Hash-Kette und Signaturen
   extractors/          EN-16931-Parser (CII/UBL), PDF-Anhänge, Leitweg-ID
-  gobd_export.py · procedural_doc.py · docx_export.py · reporting.py · print_layout.py · retention.py · signing.py
+  gobd_export.py · procedural_doc.py · docx_export.py · pdf_export.py · reporting.py · print_layout.py · retention.py · signing.py
   redact.py            DLP-Gateway
   release.py           Release-Assistent
 frontend/src/
@@ -525,7 +526,7 @@ frontend/src/
                        DocumentInspector, SettingsModal, Select, ui …
   lib/                 api.ts, i18n.tsx, format.ts, useJobs.ts, popover.ts, markdown.tsx, evidence.ts
 docs/                  ARCHITECTURE.md, RECHTSQUELLEN.md, RECHTLICHE_ANALYSE_2026.md, screenshots/
-scripts/               verify_pruefpaket.py, smoke_test_ollama.py
+scripts/               verify_pruefpaket.py (eigenständig, nur Stdlib + cryptography), smoke_test_ollama.py
 tests/                 pytest-Suite (HTTP-Mocks, keine Netzzugriffe)
 ```
 

@@ -10,7 +10,7 @@ Einordnung
 Eine Verfahrensdokumentation beschreibt das *Verfahren* eines Unternehmens,
 nicht einen einzelnen Beleg.  Das System kennt seine eigene Technik genau, die
 Organisation des Unternehmens dagegen nicht: Verantwortliche, Rollen und
-Intervalle sind deshalb als ``[vom Unternehmen zu ergaenzen]`` markiert.  Der
+Intervalle sind deshalb als ``[vom Unternehmen zu ergänzen]`` markiert.  Der
 Generator liefert einen belastbaren technischen Kern, keinen fertigen
 Prüfungsnachweis.  Für ersetzendes Scannen gelten ergänzend die
 Muster-Verfahrensdokumentation von BStBK/DStV und die BSI TR-03138 (RESISCAN) -
@@ -69,6 +69,7 @@ _EVENT_LABELS_I18N: dict[str, dict[str, str]] = {
 _PATH_LABELS = {
     STRUCTURED_PROVIDER: "XML-Pfad (EN 16931, deterministisch, ohne KI)",
     "reference": "Referenz-Audit der Musterdaten (vorberechnete KI-Antwort)",
+    "heuristic": "Regelbasiertes Referenz-Audit (KI nicht verfügbar, deterministische Heuristik)",
     "local": "LLM-Pfad, lokale Inferenz (Ollama)",
     "gemini": "LLM-Pfad, Cloud-Inferenz über Privacy Gateway (Google Gemini)",
     "anthropic": "LLM-Pfad, Cloud-Inferenz über Privacy Gateway (Anthropic Claude)",
@@ -80,6 +81,7 @@ _PATH_LABELS_I18N: dict[str, dict[str, str]] = {
     "en": {
         STRUCTURED_PROVIDER: "XML Path (EN 16931, deterministic, offline)",
         "reference": "Sample Reference Audit (precomputed AI response)",
+        "heuristic": "Rule-Based Fallback Audit (AI unavailable, deterministic heuristic)",
         "local": "LLM Path, local inference (Ollama)",
         "gemini": "LLM Path, cloud inference via Privacy Gateway (Google Gemini)",
         "anthropic": "LLM Path, cloud inference via Privacy Gateway (Anthropic Claude)",
@@ -88,6 +90,7 @@ _PATH_LABELS_I18N: dict[str, dict[str, str]] = {
     "es": {
         STRUCTURED_PROVIDER: "Ruta XML (EN 16931, determinista, sin IA)",
         "reference": "Auditoría de referencia (respuesta precalculada)",
+        "heuristic": "Auditoría basada en reglas (IA no disponible, heurística determinista)",
         "local": "Ruta LLM, inferencia local (Ollama)",
         "gemini": "Ruta LLM, nube vía Privacy Gateway (Google Gemini)",
         "anthropic": "Ruta LLM, nube vía Privacy Gateway (Anthropic Claude)",
@@ -495,7 +498,7 @@ def _sections_de(
                         "Parser: defusedxml mit forbid_dtd=True – keine DTDs, keine Entitäten, keine externen "
                         f"Referenzen; Obergrenze {MAX_XML_BYTES // 1_048_576} MB je Datensatz",
                         "Syntaxen: UN/CEFACT CII und OASIS UBL 2.1; Profil aus BT-24",
-                        "Geprüft: Pflichtfelder, Summenregeln BR-CO-10/13/14/15, BR-DE-15, Steuer je Satz",
+                        "Geprüft: Pflichtfelder, Summenregeln BR-CO-10/13/14/15, BR-DE-2, BR-DE-15, BR-DE-TMP-32, Steuer je Satz",
                         "Nicht geprüft: XSD und Schematron (KoSIT-Validator) – Annahme beim Empfänger nicht garantiert",
                     ],
                 },
@@ -538,8 +541,9 @@ def _sections_de(
                     "list": [
                         "Anwendungsversion, Regelwerk und Prompt-Hash stehen in jedem Ledger-Eintrag; ein Wechsel "
                         "von Regeln oder Prompts ist dadurch je Prüfung nachvollziehbar.",
-                        "Änderungen der Einstellungen (Inferenz-Modus, Schlüssel, PII-Strenge) werden im "
-                        "Anwendungsprotokoll (JSON-Logs mit Request-ID) festgehalten, nicht im Ledger.",
+                        "Änderungen an Provider, Modell oder Ausweich-Kaskade werden als Ed25519-signierter "
+                        "Eintrag (model_change) im Prüfprotokoll festgehalten; übrige Einstellungsänderungen "
+                        "erscheinen im Anwendungsprotokoll (JSON-Logs mit Request-ID).",
                         "Software-Updates und Änderungen dieser Dokumentation sind zu historisieren "
                         "(Versionsstand, Datum, freigebende Person): " + ZU_ERGAENZEN,
                     ],
@@ -600,6 +604,7 @@ def _sections_i18n(
                             "rows": [
                                 ["Factura híbrida (ZUGFeRD 2.x, Factur-X)", "XML incrustado PDF/A-3", "Conjunto XML (BMF 15/10/2024, Rz. 36)"],
                                 ["XRechnung (CII / UBL .xml)", "Conjunto XML", "Conjunto XML"],
+                                ["ZUGFeRD MINIMUM / BASIC WL", "Metadatos XML + revisión visual", "PDF visual (no es e-factura)"],
                                 ["PDF simple sin XML", "Capa de texto, LLM + regex", "PDF"],
                                 ["Contratos", "Capa de texto, evaluación Reglamento IA", "PDF"],
                             ],
@@ -666,6 +671,7 @@ def _sections_i18n(
                                 ["Autenticación (X-API-Key)", auth_txt],
                                 ["Clave pública (huella)", signing_key.get("fingerprint", "–")],
                                 ["Cadena SHA-256", f"{chain_state} ({verification.entries} entradas, {verification.signed_entries} firmadas)"],
+                                ["Hash de cabecera (head_hash)", verification.head_hash],
                             ],
                         },
                     },
@@ -771,6 +777,7 @@ def _sections_i18n(
                             ["API Authentication (X-API-Key)", auth_txt],
                             ["Ed25519 Key Fingerprint", signing_key.get("fingerprint", "–")],
                             ["SHA-256 Chain Verification", f"{chain_state} ({verification.entries} entries, {verification.signed_entries} signed)"],
+                            ["Chain Head Hash (head_hash)", verification.head_hash],
                         ],
                     },
                 },

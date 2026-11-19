@@ -50,6 +50,7 @@ export function useModalFocusLock(
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (event.defaultPrevented) return;
         closeRef.current();
         return;
       }
@@ -280,12 +281,13 @@ export function Tabs<T extends string>({ tabs, active, onChange, className, idPr
   return <PillTabs items={tabs} value={active} onChange={onChange} className={className} idPrefix={idPrefix} />;
 }
 
-export function Segmented<T extends string>({ options, value, onChange, size = "md", ariaLabel }: {
+export function Segmented<T extends string>({ options, value, onChange, size = "md", ariaLabel, disabled = false }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
   size?: "sm" | "md";
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <PillTabs
@@ -294,7 +296,7 @@ export function Segmented<T extends string>({ options, value, onChange, size = "
       ariaLabel={ariaLabel}
       value={value}
       onChange={onChange}
-      items={options.map((option) => ({ key: option.value, label: option.label }))}
+      items={options.map((option) => ({ key: option.value, label: option.label, disabled }))}
     />
   );
 }
@@ -412,14 +414,15 @@ export const AutoTextarea = React.forwardRef<HTMLTextAreaElement, React.Textarea
   );
 });
 
-export function Toggle({ checked, onChange, label, description }: {
+export function Toggle({ checked, onChange, label, description, disabled = false }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   label: string;
   description?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-line p-3">
+    <label className={cx("flex items-start justify-between gap-4 rounded-lg border border-line p-3", disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer")}>
       <span>
         <span className="block text-sm font-medium text-fg">{label}</span>
         {description && <span className="mt-0.5 block text-xs text-subtle">{description}</span>}
@@ -428,9 +431,10 @@ export function Toggle({ checked, onChange, label, description }: {
         type="button"
         role="switch"
         aria-checked={checked}
-        onClick={() => onChange(!checked)}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
         className={cx(
-          "relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors duration-150",
+          "relative mt-0.5 h-5 w-9 shrink-0 rounded-full border transition-colors duration-150 disabled:cursor-not-allowed",
           checked ? "border-accent bg-accent" : "border-line-strong bg-surface-2",
         )}
       >
@@ -462,8 +466,11 @@ const TOAST_MS: Record<Toast["tone"], number> = { ok: 3000, info: 3000, warn: 60
 
 export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastsRef = useRef<Toast[]>(toasts);
+  toastsRef.current = toasts;
   const counter = useRef(0);
   const timers = useRef(new Map<number, number>());
+  const leaveTimers = useRef(new Map<number, number>());
   const paused = useRef(false);
 
   const remove = useCallback((id: number) => {
@@ -471,7 +478,11 @@ export function useToasts() {
     timers.current.delete(id);
     // Erst ausblenden (180 ms), dann entfernen.
     setToasts((all) => all.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
-    window.setTimeout(() => setToasts((all) => all.filter((t) => t.id !== id)), 180);
+    const leaveId = window.setTimeout(() => {
+      leaveTimers.current.delete(id);
+      setToasts((all) => all.filter((t) => t.id !== id));
+    }, 180);
+    leaveTimers.current.set(id, leaveId);
   }, []);
 
   const schedule = useCallback(
@@ -485,6 +496,13 @@ export function useToasts() {
   const push = useCallback(
     (toast: Omit<Toast, "id" | "leaving">) => {
       const id = ++counter.current;
+      const prev = toastsRef.current;
+      if (prev.length > 3) {
+        for (const dropped of prev.slice(0, prev.length - 3)) {
+          window.clearTimeout(timers.current.get(dropped.id));
+          timers.current.delete(dropped.id);
+        }
+      }
       setToasts((all) => [...all.slice(-3), { ...toast, id }]);
       if (!paused.current) schedule(id, TOAST_MS[toast.tone]);
     },
@@ -497,11 +515,19 @@ export function useToasts() {
   }, []);
   const resume = useCallback(() => {
     paused.current = false;
-    setToasts((all) => {
-      all.filter((t) => !t.leaving).forEach((t) => schedule(t.id, 1500));
-      return all;
-    });
+    toastsRef.current.filter((t) => !t.leaving).forEach((t) => schedule(t.id, 1500));
   }, [schedule]);
+
+  useEffect(() => {
+    const activeTimers = timers.current;
+    const activeLeave = leaveTimers.current;
+    return () => {
+      activeTimers.forEach((t) => window.clearTimeout(t));
+      activeTimers.clear();
+      activeLeave.forEach((t) => window.clearTimeout(t));
+      activeLeave.clear();
+    };
+  }, []);
 
   return { toasts, push, dismiss: remove, pause, resume };
 }
@@ -620,12 +646,18 @@ export function Tooltip({ content, children, align = "left", side = "top", class
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && hide();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        hide();
+      }
+    };
     const onScroll = () => hide();
-    window.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     window.addEventListener("scroll", onScroll, true);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
       window.removeEventListener("scroll", onScroll, true);
     };
   }, [open, hide]);
@@ -648,6 +680,13 @@ export function Tooltip({ content, children, align = "left", side = "top", class
   }, [open, align, side]);
 
   if (!content) return <>{children}</>;
+  const trigger = React.isValidElement<{ "aria-describedby"?: string }>(children)
+    ? React.cloneElement(children, {
+        "aria-describedby": open
+          ? [children.props["aria-describedby"], id].filter(Boolean).join(" ")
+          : children.props["aria-describedby"],
+      })
+    : children;
   return (
     <span
       ref={anchorRef}
@@ -656,9 +695,8 @@ export function Tooltip({ content, children, align = "left", side = "top", class
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
-      aria-describedby={open ? id : undefined}
     >
-      {children}
+      {trigger}
       {open &&
         typeof document !== "undefined" &&
         createPortal(

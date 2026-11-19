@@ -40,9 +40,26 @@ def canonical_bytes(payload: dict[str, Any]) -> bytes:
 
 
 def fingerprint(public_raw: bytes) -> str:
-    """SHA-256 über den rohen öffentlichen Schlüssel, in Vierergruppen."""
+    """Erste 128 Bit (32 Hex-Zeichen) von SHA-256 über den rohen öffentlichen Schlüssel, in Vierergruppen."""
     digest = hashlib.sha256(public_raw).hexdigest()
     return ":".join(digest[i : i + 4] for i in range(0, 32, 4))
+
+
+def write_secret_file(path: Path, data: bytes) -> bytes:
+    """Legt eine Schlüsseldatei atomar mit Dateirechten 0600 an; bei Rennen gewinnt die bestehende Datei."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    try:
+        fd = os.open(path, flags, 0o600)
+    except FileExistsError:
+        return path.read_bytes()
+    with os.fdopen(fd, "wb") as handle:
+        handle.write(data)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:  # pragma: no cover - z. B. Windows ohne POSIX-Rechte
+        pass
+    return data
 
 
 class SystemSigner:
@@ -59,16 +76,14 @@ class SystemSigner:
                     self._private = Ed25519PrivateKey.from_private_bytes(self._key_file.read_bytes()[:32])
                 else:
                     self._private = Ed25519PrivateKey.generate()
-                    self._key_file.parent.mkdir(parents=True, exist_ok=True)
                     raw = self._private.private_bytes(
                         serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
                     )
-                    self._key_file.write_bytes(raw)
-                    try:
-                        os.chmod(self._key_file, 0o600)
-                    except OSError:  # pragma: no cover - z. B. Windows ohne POSIX-Rechte
-                        pass
-                    logger.info("Neuer Signaturschlüssel erzeugt (%s).", self._key_file.name)
+                    stored = write_secret_file(self._key_file, raw)
+                    if stored[:32] != raw:
+                        self._private = Ed25519PrivateKey.from_private_bytes(stored[:32])
+                    else:
+                        logger.info("Neuer Signaturschlüssel erzeugt (%s).", self._key_file.name)
             return self._private
 
     @property

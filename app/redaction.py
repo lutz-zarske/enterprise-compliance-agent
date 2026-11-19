@@ -14,6 +14,7 @@ Zwei Aufgaben:
 
 from __future__ import annotations
 
+import bisect
 import re
 from collections.abc import Iterable
 
@@ -184,7 +185,16 @@ KEYWORD_RULES: dict[PIICategory, tuple[str, ...]] = {
 #: "Softwarehaus".  Längere Begriffe bleiben Teilstrings (deutsche Komposita
 #: wie "Arztattest" oder "Universitätsklinik").
 _SHORT_KEYWORD = 5
-_KEYWORD_OVERRIDES = {"rezept": r"rezept(?!ion)"}  # "Rezeption" ist kein Gesundheitsdatum
+_KEYWORD_OVERRIDES = {
+    "rezept": r"rezept(?!ion)",  # "Rezeption" ist kein Gesundheitsdatum
+    "befund": r"(?<!prüf)(?<!pruef)(?<!ohne )befund",  # "Prüfbefund" / "ohne Befund" kein Gesundheitsdatum
+    "behandlung": (
+        r"(?<!gleich)(?<!vorzugs)"
+        r"(?<!steuerliche )(?<!steuerlichen )(?<!steuerlicher )"
+        r"(?<!vertrauliche )(?<!vertraulichen )(?<!vertraulicher )"
+        r"behandlung"
+    ),
+}
 
 
 def _keyword_pattern(keyword: str) -> re.Pattern[str]:
@@ -195,8 +205,13 @@ def _keyword_pattern(keyword: str) -> re.Pattern[str]:
 
 def _keyword_span_pattern(keyword: str) -> re.Pattern[str]:
     body = _KEYWORD_OVERRIDES.get(keyword, re.escape(keyword))
-    prefix = r"(?<![a-zäöüß])" if len(keyword) <= _SHORT_KEYWORD else r"\b"
-    return re.compile(rf"{prefix}(?:{body})\w*", re.IGNORECASE)
+    if len(keyword) <= _SHORT_KEYWORD:
+        return re.compile(rf"(?<![a-zäöüß])(?:{body})\w*", re.IGNORECASE)
+    # Komposita ("Arztattest", "Universitätsklinik") mit erfassen, aber bei negativen Lookbehinds
+    # ("Prüfbefund", "Gleichbehandlung") exakt an der Override-Prüfung bleiben.
+    if keyword in _KEYWORD_OVERRIDES:
+        return re.compile(rf"(?:{body})\w*", re.IGNORECASE)
+    return re.compile(rf"\b[a-zäöüß]*(?:{body})\w*", re.IGNORECASE)
 
 
 _KEYWORD_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -443,13 +458,19 @@ def _collect_view_spans(text: str) -> list[tuple[int, int, str, str]]:
     # Leitweg-IDs sind Behördenkennungen: weder markieren noch schwärzen.
     leitweg = _leitweg_spans(text)
     chosen: list[tuple[int, int, str, str]] = []
+    starts: list[int] = []
     for item in raw:
-        if _overlaps((item[0], item[1]), leitweg):
+        start, end = item[0], item[1]
+        if start >= end or _overlaps((start, end), leitweg):
             continue
-        if any(item[0] < other[1] and other[0] < item[1] for other in chosen):
+        idx = bisect.bisect_left(starts, start)
+        if idx > 0 and chosen[idx - 1][1] > start:
             continue
-        chosen.append(item)
-    return sorted(chosen)
+        if idx < len(chosen) and chosen[idx][0] < end:
+            continue
+        starts.insert(idx, start)
+        chosen.insert(idx, item)
+    return chosen
 
 
 def build_text_view(

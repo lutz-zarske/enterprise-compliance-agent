@@ -48,7 +48,7 @@ export class ApiError extends Error {
   }
 
   get isOffline(): boolean {
-    return this.status === 0;
+    return this.status === 0 && this.code !== "aborted";
   }
 }
 
@@ -324,5 +324,5 @@ export function downloadBlob(content: BlobPart, filename: string, type: string):
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

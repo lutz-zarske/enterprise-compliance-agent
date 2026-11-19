@@ -90,8 +90,8 @@ interface Message extends CopilotTurn {
   aborted?: boolean;
 }
 
-/** Beide Spalten füllen das Fenster exakt (Kopfzeile 57 px + Innenabstand 2 x 16 px), nie unter 560 px. */
-const VIEW_HEIGHT = "h-[max(560px,calc(100vh-89px))] 2xl:h-[max(560px,calc(100vh-97px))]";
+/** Beide Spalten füllen ab xl das Fenster exakt (Kopfzeile 57 px + Innenabstand 2 x 16 px); gestapelt mobil frei scrollbar. */
+const VIEW_HEIGHT = "xl:h-[max(560px,calc(100vh-89px))] 2xl:h-[max(560px,calc(100vh-97px))]";
 
 /** Antwort zum Einfügen in E-Mail oder Ticket: Markdown-Hervorhebungen entfernt, Zeilenverweise bleiben. */
 function plainAnswer(markdown: string): string {
@@ -153,7 +153,9 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
   const { locale, tr, td } = useI18n();
   const [threads, setThreads] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyDocId, setBusyDocId] = useState<string | null>(null);
+  const busy = busyDocId !== null;
+  const busyHere = Boolean(document && busyDocId === document.id);
   const [thinking, setThinking] = useState<ThinkingLevel>("medium");
   const [step, setStep] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -234,16 +236,16 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
   }, []);
 
   useEffect(() => {
-    if (!busy) return;
+    if (!active || !busyHere) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && draft === null) {
+      if (event.key === "Escape" && !event.defaultPrevented && draft === null && !window.document.querySelector('[role="dialog"]')) {
         event.preventDefault();
         stop();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, draft, stop]);
+  }, [active, busyHere, draft, stop]);
 
   const ask = useCallback(async (question: string) => {
     const trimmed = question.trim();
@@ -262,7 +264,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
       return { ...all, [id]: [...base, { role: "user", content: trimmed }] };
     });
     setInput("");
-    setBusy(true);
+    setBusyDocId(id);
     setStep(tr("Belegstellen und Prüfergebnis aufbereiten", "Preparing citations and audit result", "Preparando citas y resultado de auditoría"));
     setStartedAt(Date.now());
     setNow(Date.now());
@@ -278,7 +280,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
     try {
       const response = await api.copilot(id, trimmed, history, thinking, progressId, controller.signal);
       const sec = (response.duration_ms / 1000).toFixed(1);
-      const secStr = locale === "de" ? `${sec.replace(".", ",")} s` : `${sec} s`;
+      const secStr = locale === "en" ? `${sec} s` : `${sec.replace(".", ",")} s`;
       const meta = response.reference
         ? tr("Musterantwort · ohne KI-Modell", "Reference answer · offline", "Respuesta de referencia · sin IA")
         : response.heuristic
@@ -303,7 +305,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
         return;
       }
       const content = error
-        ? `${error.message}${error.hint ? ` – ${error.hint}` : ""}`
+        ? `${td(error.message)}${error.hint ? ` – ${td(error.hint)}` : ""}`
         : tr(
             "Die Frage konnte nicht beantwortet werden. Bitte erneut senden.",
             "The question could not be answered. Please send again.",
@@ -316,11 +318,11 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
     } finally {
       if (abortRef.current?.controller === controller) abortRef.current = null;
       window.clearInterval(poll);
-      setBusy(false);
+      setBusyDocId(null);
       setStep(null);
       setStartedAt(null);
     }
-  }, [document, busy, threads, thinking, locale, tr]);
+  }, [document, busy, threads, thinking, locale, tr, td]);
 
   const analyzed = documents.filter((doc) => doc.status === "extracted" && !doc.archived);
   const choices: { id: string; filename: string }[] =
@@ -345,7 +347,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
 
   return (
     <div className={cx("grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] 2xl:gap-5", VIEW_HEIGHT)}>
-      <section className="card flex min-h-0 flex-col" aria-label="Compliance Copilot">
+      <section className="card flex min-h-[460px] flex-col xl:min-h-0" aria-label="Compliance Copilot">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="rounded-lg border border-line bg-surface-2 p-1.5 text-accent"><MessageSquare size={15} aria-hidden="true" /></span>
@@ -420,8 +422,9 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
                       <li key={suggestion.label}>
                         <button
                           type="button"
+                          disabled={busy}
                           onClick={() => void ask(suggestion.prompt)}
-                          className="group flex w-full items-center gap-3 rounded-lg border border-line px-3.5 py-2.5 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-hover"
+                          className="group flex w-full items-center gap-3 rounded-lg border border-line px-3.5 py-2.5 text-left text-sm text-fg transition-colors duration-150 hover:border-line-strong hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <span className="min-w-0 flex-1">{suggestion.label}</span>
                           <ArrowUp size={13} aria-hidden="true" className="shrink-0 text-subtle transition-colors duration-150 group-hover:text-accent" />
@@ -482,7 +485,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
               </div>
             ),
           )}
-          {busy && (
+          {busyHere && (
             <div className="flex items-center gap-2.5 text-xs text-subtle" role="status" aria-live="polite">
               <Spinner size={12} />
               <span className="text-muted">{td(step ?? tr("Belegstellen und Rechtsnormen prüfen", "Checking citations and regulations", "Comprobando citas y normativa"))}</span>
@@ -532,6 +535,7 @@ export function CopilotView({ document, documents, onSelect, modelLabel, modelRe
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
+                  if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                   void ask(input);
                 }
               }}

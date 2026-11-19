@@ -14,7 +14,7 @@ Bewertungsschema (Basis 100, Abzüge je Mangel):
 * Formelle Gültigkeit, Paragraf 14 Abs. 4 UStG (nur Rechnungen):
   fehlende Steuernummer/USt-IdNr. -20, jede weitere fehlende Pflichtangabe -10.
   Kleinbetragsrechnungen bis 250 EUR brutto: reduzierter Katalog (Paragraf 33 UStDV).
-* E-Rechnung (seit Regelwerk 2026.2): Abweichung zwischen massgeblichem
+* E-Rechnung (seit Regelwerk 2026.2): Abweichung zwischen maßgeblichem
   XML-Datensatz und PDF-Bildteil -10 (BMF 15.10.2024, Rz. 36); fehlende oder
   ungültige Leitweg-ID bei öffentlichen Auftraggebern -10 (Paragraf 5 ERechV).
   Profil- und Geschäftsregel-Befunde (EN 16931) sind Hinweise ohne Abzug.
@@ -68,7 +68,11 @@ UNACCEPTABLE_CAP = 20
 _MONEY_TOLERANCE = Decimal("0.02")
 
 # --- Regex-Belege im Dokumenttext ------------------------------------------
-_VAT_ID = re.compile(r"\b(?:DE ?\d{9}|ATU\d{8})\b")
+_VAT_ID = re.compile(
+    r"\b(?:DE ?\d{9}|ATU\d{8}"
+    r"|(?:BE|BG|CY|CZ|DK|EE|EL|ES|FI|FR|HR|HU|IE|IT|LT|LU|LV|MT|NL|PL|PT|RO|SE|SI|SK|XI)"
+    r"[A-Z0-9]{0,2}\d{6,10}[A-Z0-9]{0,3})\b"
+)
 _TAX_NUMBER = re.compile(r"\b\d{2,3}/\d{3,4}/\d{4,5}\b")
 _SERVICE_DATE = re.compile(
     r"(?:leistungs|liefer)(?:datum|zeitraum|zeitpunkt|tag)|leistung\s+erbracht|zeitraum\s*:",
@@ -83,7 +87,7 @@ _STREET = re.compile(
     r"[A-ZÄÖÜ][a-zäöüß\-]+(?:straße|strasse|str\.|weg|allee|platz|gasse|ring|damm|ufer)\s+\d+",
 )
 _ZIP_CITY = re.compile(r"\b\d{5}\s+[A-ZÄÖÜ][a-zäöüß]+")
-_AMOUNT = re.compile(r"\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2}|\d+\.\d{2}(?!\d)")
+_AMOUNT = re.compile(r"(?<!\w)-?(?:\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2}|\d+\.\d{2}(?!\d))")
 _PERCENT = re.compile(r"(\d{1,2}(?:[,.]\d{1,2})?)\s?%")
 _CONFORMITY = re.compile(
     r"konformit(?:ä|ae)tsbewertung|ce-kennzeichnung|eu-konformit(?:ä|ae)tserkl(?:ä|ae)rung|art\.?\s?43",
@@ -91,7 +95,9 @@ _CONFORMITY = re.compile(
 )
 _CONFORMITY_NEGATION = re.compile(
     r"\b(?:kein\w*|nicht|ohne|fehl\w*|ausstehend\w*|verzicht\w*|unvollst(?:ä|ae)ndig\w*|"
-    r"not|no|without|missing|pending)\b",
+    r"verpflichtet\s+sich|beabsichtigt|geplant\w*|k(?:ü|ue)nftig\w*|zuk(?:ü|ue)nftig\w*|"
+    r"wird\s+(?:noch|erst|bis|nachgereicht|durchgef(?:ü|ue)hrt)|"
+    r"not|no|without|missing|pending|shall\s+provide|will\s+conduct|planned)\b",
     re.IGNORECASE,
 )
 
@@ -244,7 +250,7 @@ def analyze_text(text: str) -> TextFacts:
         tax_number=bool(_TAX_NUMBER.search(text)),
         service_date=bool(_SERVICE_DATE.search(text)),
         exemption=bool(_EXEMPTION.search(text)),
-        address_count=len(_STREET.findall(text)) + len(_ZIP_CITY.findall(text)),
+        address_count=max(len(_STREET.findall(text)), len(_ZIP_CITY.findall(text))),
         net_amount=net,
         tax_amount=tax,
         tax_rate=rate,
@@ -349,30 +355,37 @@ def _formal_tile(
         return _tile("formal", title, [check], "Nicht einschlägig"), 0, 0, False
 
     gross = extraction.total_amount if extraction.total_amount is not None else facts.gross_amount
-    small = gross is not None and Decimal(0) < gross <= SMALL_AMOUNT_LIMIT
+    currency_code = (extraction.currency or "EUR").strip().upper()
+    small = currency_code == "EUR" and gross is not None and Decimal(0) < gross <= SMALL_AMOUNT_LIMIT
     na_small = "Entbehrlich bei Kleinbetragsrechnungen bis 250 EUR (§ 33 UStDV)."
 
     addresses_in_text = facts.address_count
     xml_rates = einvoice is not None and any(entry.rate is not None for entry in einvoice.vat_breakdown)
+    xml_exemption = einvoice is not None and any(
+        ((entry.category or "").strip().upper() in {"O", "AE", "E", "K", "G", "Z"} or bool(entry.exemption_reason))
+        for entry in einvoice.vat_breakdown
+    )
     rate_known = extraction.tax_rate is not None or facts.tax_rate is not None or xml_rates
     tax_known = extraction.tax_amount is not None or facts.tax_amount is not None
-    exemption = bool(extraction.tax_exemption_note) or facts.exemption
+    exemption = bool(extraction.tax_exemption_note) or facts.exemption or xml_exemption
 
     def src(llm: bool, rule: bool) -> str | None:
         return _source(llm, rule, structured=structured)
 
+    sender_addr_rule = False if structured else addresses_in_text >= 1
+    recipient_addr_rule = False if structured else addresses_in_text >= 2
     checks = [
         _check(
             "ustg_1_sender", "Name und Anschrift des leistenden Unternehmers",
             "§ 14 Abs. 4 Satz 1 Nr. 1 UStG",
-            bool(extraction.sender) and (bool(extraction.sender_address) or addresses_in_text >= 1),
-            10, source=src(bool(extraction.sender_address), addresses_in_text >= 1),
+            bool(extraction.sender) and (bool(extraction.sender_address) or sender_addr_rule),
+            10, source=src(bool(extraction.sender_address), sender_addr_rule),
         ),
         _check(
             "ustg_1_recipient", "Name und Anschrift des Leistungsempfängers",
             "§ 14 Abs. 4 Satz 1 Nr. 1 UStG",
-            bool(extraction.recipient) and (bool(extraction.recipient_address) or addresses_in_text >= 2),
-            10, source=src(bool(extraction.recipient_address), addresses_in_text >= 2),
+            bool(extraction.recipient) and (bool(extraction.recipient_address) or recipient_addr_rule),
+            10, source=src(bool(extraction.recipient_address), recipient_addr_rule),
             required=not small, na_detail=na_small,
         ),
         _check(
@@ -417,11 +430,21 @@ def _formal_tile(
         _check(
             "ustg_8_rate", "Anzuwendender Steuersatz oder Hinweis auf Steuerbefreiung",
             "§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
-            rate_known or exemption, 10, source=src(extraction.tax_rate is not None, facts.tax_rate is not None),
+            rate_known or exemption,
+            10,
+            source=src(
+                extraction.tax_rate is not None or bool(extraction.tax_exemption_note) or xml_rates or xml_exemption,
+                facts.tax_rate is not None or facts.exemption,
+            ),
         ),
         _check(
             "ustg_8_amount", "Auf das Entgelt entfallender Steuerbetrag", "§ 14 Abs. 4 Satz 1 Nr. 8 UStG",
-            tax_known or exemption, 10, source=src(extraction.tax_amount is not None, facts.tax_amount is not None),
+            tax_known or exemption,
+            10,
+            source=src(
+                extraction.tax_amount is not None or bool(extraction.tax_exemption_note) or xml_exemption,
+                facts.tax_amount is not None or facts.exemption,
+            ),
             required=not small, na_detail=na_small,
         ),
     ]
@@ -688,10 +711,35 @@ def _leitweg_check(extraction: ExtractionResult, einvoice: EInvoiceData | None, 
     )
 
 
+_NEGATED_POSITIONS = re.compile(
+    r"\b(?:kein\w*|fehl\w*|ohne)\s+(?:(?:\w+\s+){0,2})(?:leistungsbeschreibung|position\w*|artikel|lieferung|leistung)\b",
+    re.IGNORECASE,
+)
+
+
 def facts_has_positions(extraction: ExtractionResult) -> bool:
-    """Hilfsregel für Nr. 5: Zusammenfassung beschreibt eine konkrete Leistung."""
+    """Hilfsregel für Nr. 5: Zusammenfassung beschreibt eine konkrete Leistung (nicht verneint)."""
     summary = (extraction.summary or "").casefold()
+    if not summary or _NEGATED_POSITIONS.search(summary):
+        return False
     return any(word in summary for word in ("lizenz", "lieferung", "leistung", "beratung", "artikel", "position"))
+
+
+def _fmt_pct(value: Decimal) -> str:
+    """Formatiert Steuersätze ohne wissenschaftliche Notation (``20`` statt ``2E+1``)."""
+    return f"{value.normalize():f}"
+
+
+def _is_foreign_vat_context(extraction: ExtractionResult, einvoice: EInvoiceData | None) -> bool:
+    if einvoice is not None and not einvoice.error:
+        country = (einvoice.seller.country or "").strip().upper()
+        if country and country != "DE":
+            return True
+    vat_id = (extraction.sender_vat_id or "").strip().upper()
+    if len(vat_id) >= 2 and vat_id[:2].isalpha() and not vat_id.startswith("DE"):
+        return True
+    currency = (extraction.currency or "EUR").strip().upper()
+    return currency != "EUR"
 
 
 def _allowed_rates(doc_date: date | None) -> set[Decimal]:
@@ -701,23 +749,41 @@ def _allowed_rates(doc_date: date | None) -> set[Decimal]:
     return {value.normalize() for value in allowed}
 
 
-def _structured_vat_checks(einvoice: EInvoiceData, doc_date: date | None) -> list[ScoreCheck]:
+def _structured_vat_checks(
+    einvoice: EInvoiceData, doc_date: date | None, *, foreign: bool = False
+) -> list[ScoreCheck]:
     """Steuerprüfung je Steuersatz aus der XML-Aufschlüsselung (BG-23) - auch bei Mischsätzen."""
     checks: list[ScoreCheck] = []
     rates = [entry.rate for entry in einvoice.vat_breakdown if entry.rate is not None]
     if rates:
         invalid = sorted({rate.normalize() for rate in rates} - _allowed_rates(doc_date))
-        checks.append(
-            ScoreCheck(
-                id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)", legal_reference="§ 12 UStG",
-                status=CheckStatus.FAIL if invalid else CheckStatus.PASS, deduction=10 if invalid else 0,
-                detail=(
-                    "Steuersatz " + ", ".join(f"{rate} %" for rate in invalid) + " ist zum Rechnungsdatum nicht zulässig."
-                    if invalid else None
-                ),
-                evidence_source="xml",
+        if invalid and foreign and all(Decimal(0) <= r <= Decimal(30) for r in invalid):
+            checks.append(
+                ScoreCheck(
+                    id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)", legal_reference="§ 12 UStG",
+                    status=CheckStatus.WARN, deduction=0,
+                    detail=(
+                        "Ausländischer Steuersatz "
+                        + ", ".join(f"{_fmt_pct(rate)} %" for rate in invalid)
+                        + " erkannt – Zulässigkeit im Ausstellerland prüfen."
+                    ),
+                    evidence_source="xml",
+                )
             )
-        )
+        else:
+            checks.append(
+                ScoreCheck(
+                    id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)", legal_reference="§ 12 UStG",
+                    status=CheckStatus.FAIL if invalid else CheckStatus.PASS, deduction=10 if invalid else 0,
+                    detail=(
+                        "Steuersatz "
+                        + ", ".join(f"{_fmt_pct(rate)} %" for rate in invalid)
+                        + " ist zum Rechnungsdatum nicht zulässig."
+                        if invalid else None
+                    ),
+                    evidence_source="xml",
+                )
+            )
     net, tax, gross = einvoice.net_total, einvoice.tax_total, einvoice.grand_total
     if net is not None and tax is not None and gross is not None:
         ok = abs(net + tax - gross) <= _MONEY_TOLERANCE
@@ -735,7 +801,7 @@ def _structured_vat_checks(einvoice: EInvoiceData, doc_date: date | None) -> lis
             continue
         expected = (entry.taxable_amount * entry.rate / Decimal(100)).quantize(Decimal("0.01"))
         if abs(expected - entry.tax_amount) > _MONEY_TOLERANCE:
-            deviations.append(f"{entry.rate.normalize()} %: erwartet {expected}, ausgewiesen {entry.tax_amount}")
+            deviations.append(f"{_fmt_pct(entry.rate)} %: erwartet {expected}, ausgewiesen {entry.tax_amount}")
     if any(entry.tax_amount is not None for entry in einvoice.vat_breakdown):
         checks.append(
             ScoreCheck(
@@ -744,6 +810,19 @@ def _structured_vat_checks(einvoice: EInvoiceData, doc_date: date | None) -> lis
                 status=CheckStatus.FAIL if deviations else CheckStatus.PASS, deduction=10 if deviations else 0,
                 detail="; ".join(deviations) + "." if deviations else None,
                 evidence_source="xml",
+            )
+        )
+    br_co = [rule for rule in einvoice.rule_violations if rule.startswith("BR-CO-")]
+    if br_co:
+        checks.append(
+            ScoreCheck(
+                id="einvoice_math",
+                label="EN-16931 Summenregeln (BR-CO)",
+                legal_reference="EN 16931-1",
+                status=CheckStatus.WARN,
+                deduction=0,
+                detail="; ".join(br_co[:3]),
+                evidence_source="xml_rule",
             )
         )
     return checks
@@ -772,8 +851,9 @@ def _math_tile(
                        status=CheckStatus.NOT_APPLICABLE, detail="Keine IBAN im Dokument.")
         )
 
+    foreign = _is_foreign_vat_context(extraction, einvoice)
     if extraction.doc_type is DocType.INVOICE and structured and einvoice is not None:
-        checks.extend(_structured_vat_checks(einvoice, extraction.document_date))
+        checks.extend(_structured_vat_checks(einvoice, extraction.document_date, foreign=foreign))
     elif extraction.doc_type is DocType.INVOICE:
         net = extraction.net_amount if extraction.net_amount is not None else facts.net_amount
         tax = extraction.tax_amount if extraction.tax_amount is not None else facts.tax_amount
@@ -782,16 +862,28 @@ def _math_tile(
 
         if rate is not None:
             ok = rate.normalize() in _allowed_rates(extraction.document_date)
-            checks.append(
-                ScoreCheck(
-                    id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)",
-                    legal_reference="§ 12 UStG",
-                    status=CheckStatus.PASS if ok else CheckStatus.FAIL,
-                    deduction=0 if ok else 10,
-                    detail=None if ok else f"Steuersatz {rate.normalize()} % ist zum Rechnungsdatum nicht zulässig.",
-                    evidence_source="rule_based",
+            if not ok and foreign and Decimal(0) <= rate <= Decimal(30):
+                checks.append(
+                    ScoreCheck(
+                        id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)",
+                        legal_reference="§ 12 UStG",
+                        status=CheckStatus.WARN,
+                        deduction=0,
+                        detail=f"Ausländischer Steuersatz {_fmt_pct(rate)} % erkannt – Zulässigkeit im Ausstellerland prüfen.",
+                        evidence_source="rule_based",
+                    )
                 )
-            )
+            else:
+                checks.append(
+                    ScoreCheck(
+                        id="vat_rate", label="Zulässiger Umsatzsteuersatz (19 % / 7 % / 0 %)",
+                        legal_reference="§ 12 UStG",
+                        status=CheckStatus.PASS if ok else CheckStatus.FAIL,
+                        deduction=0 if ok else 10,
+                        detail=None if ok else f"Steuersatz {_fmt_pct(rate)} % ist zum Rechnungsdatum nicht zulässig.",
+                        evidence_source="rule_based",
+                    )
+                )
         if net is not None and tax is not None and gross is not None:
             ok = abs(net + tax - gross) <= _MONEY_TOLERANCE
             checks.append(
@@ -808,15 +900,20 @@ def _math_tile(
             ok = abs(expected - tax) <= _MONEY_TOLERANCE
             allowed = _allowed_rates(extraction.document_date)
             positive_rates = sorted({r.normalize() for r in facts.tax_rates if r > 0 and r.normalize() in allowed})
+            low_bound, high_bound = (
+                sorted((net * positive_rates[0] / Decimal(100), net * positive_rates[-1] / Decimal(100)))
+                if len(positive_rates) > 1
+                else (Decimal(0), Decimal(0))
+            )
             mixed_plausible = (
                 not ok
                 and len(positive_rates) > 1
                 and gross is not None
                 and abs(net + tax - gross) <= _MONEY_TOLERANCE
-                and (net * positive_rates[0] / Decimal(100) - _MONEY_TOLERANCE) <= tax <= (net * positive_rates[-1] / Decimal(100) + _MONEY_TOLERANCE)
+                and (low_bound - _MONEY_TOLERANCE) <= tax <= (high_bound + _MONEY_TOLERANCE)
             )
             if mixed_plausible:
-                rates_str = " / ".join(f"{r} %" for r in positive_rates)
+                rates_str = " / ".join(f"{_fmt_pct(r)} %" for r in positive_rates)
                 checks.append(
                     ScoreCheck(
                         id="tax_calc", label="Umsatzsteuer = Netto x Steuersatz",
@@ -838,6 +935,23 @@ def _math_tile(
                         evidence_source="rule_based",
                     )
                 )
+        # § 14c UStG: Widerspruch zwischen Steuerbefreiung/Reverse Charge und ausgewiesener USt.
+        exemption_claimed = bool(extraction.tax_exemption_note) or facts.exemption
+        if exemption_claimed and tax is not None and abs(tax) > _MONEY_TOLERANCE:
+            checks.append(
+                ScoreCheck(
+                    id="ustg_14c_conflict",
+                    label="Kein unberechtigter Steuerausweis bei Befreiung/Reverse Charge",
+                    legal_reference="§ 14c UStG",
+                    status=CheckStatus.FAIL,
+                    deduction=10,
+                    detail=(
+                        f"Widerspruch: Hinweis auf Steuerbefreiung/Reverse Charge, dennoch Umsatzsteuer ({tax}) "
+                        "ausgewiesen (§ 14c UStG – Gefährdung des Vorsteuerabzugs)."
+                    ),
+                    evidence_source="rule_based",
+                )
+            )
 
     iban_part = next(c for c in checks if c.id == "iban_mod97")
     parts = []
@@ -845,12 +959,12 @@ def _math_tile(
         parts.append("IBAN valide")
     elif iban_part.status is CheckStatus.FAIL:
         parts.append("IBAN ungültig")
-    vat_checks = [c for c in checks if c.id in {"vat_rate", "sum_check", "tax_calc"}]
+    vat_checks = [c for c in checks if c.id in {"vat_rate", "sum_check", "tax_calc", "ustg_14c_conflict", "einvoice_math"}]
     if vat_checks:
         if any(c.status is CheckStatus.FAIL for c in vat_checks):
             parts.append("MwSt.-Fehler")
         elif any(c.status is CheckStatus.WARN for c in vat_checks):
-            parts.append("Mischsätze (Prüfhinweis)")
+            parts.append("Prüfhinweis (MwSt. / Summen)")
         else:
             parts.append("MwSt. korrekt berechnet")
     return _tile("math", "Mathematische Validität (MOD-97 & MwSt.)", checks, " · ".join(parts) or "Keine Beträge prüfbar")
@@ -947,7 +1061,7 @@ def _privacy_tile(compliance: ComplianceAudit) -> ScoreTile:
 
 
 # ---------------------------------------------------------------------------
-# Risikörklärung je Mangel (ein Satz, für Tooltips und Zertifikat)
+# Risikoerklärung je Mangel (ein Satz, für Tooltips und Zertifikat)
 # ---------------------------------------------------------------------------
 
 RISK_NOTES: dict[str, str] = {
@@ -1090,8 +1204,14 @@ def compute_scorecard(
     band = band_for(score)
 
     has_fail = any(tile.status is CheckStatus.FAIL for tile in tiles)
+    has_math_warn = any(check.id == "einvoice_math" and check.status is CheckStatus.WARN for check in math.checks)
     is_invoice = extraction.doc_type is DocType.INVOICE
-    if regulatory.status is CheckStatus.FAIL:
+    if compliance.ai_act.overall_risk_level is AIActRiskLevel.UNACCEPTABLE:
+        recommendation, blocked = (
+            "Freigabe gesperrt — verbotene KI-Praktik nach Art. 5 EU AI Act (Einsatz untersagt)",
+            True,
+        )
+    elif regulatory.status is CheckStatus.FAIL:
         recommendation, blocked = "Freigabe gesperrt — Konformitätsbewertung nach Art. 43 EU AI Act nachweisen", True
     elif band is ScoreBand.RED or (has_fail and is_invoice):
         recommendation, blocked = "Freigabe gesperrt — Nachforderung nötig", True
@@ -1099,6 +1219,8 @@ def compute_scorecard(
         recommendation, blocked = "Freigabe unter Vorbehalt — Abweichung zwischen XML und PDF klären (XML maßgeblich)", False
     elif is_invoice and xrechnung_deviation(einvoice):
         recommendation, blocked = XRECHNUNG_RESERVATION, False
+    elif is_invoice and has_math_warn:
+        recommendation, blocked = "Freigabe unter Vorbehalt — EN-16931 Summenregel (BR-CO) verletzt", False
     elif has_fail or band is ScoreBand.AMBER:
         recommendation, blocked = "Freigabe unter Vorbehalt — Nachbesserung empfohlen", False
     elif is_invoice:

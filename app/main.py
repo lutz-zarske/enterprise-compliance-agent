@@ -306,7 +306,7 @@ class LocalOnlyError(ServiceError):
 class JobNotFoundError(ServiceError):
     code = "job_not_found"
     status_code = 404
-    hint = "Beendete Jobs bleiben JOB_RETENTION_SECONDS abrufbar; die Liste liefert GET /api/v1/jobs."
+    hint = "Beendete Jobs bleiben befristet abrufbar; die aktuelle Liste liefert GET /api/v1/jobs."
 
 
 class JobCancelledError(ServiceError):
@@ -396,6 +396,29 @@ def _register_middleware(application: FastAPI) -> None:
         started = time.perf_counter()
         status_code = 500
         try:
+            # Cross-Site-Schutz im lokalen Betrieb ohne API-Key (schützt gegen Browser-Zugriffe fremder Websites).
+            settings_: Settings = request.app.state.settings
+            allowed_origins = set(settings_.cors_origin_list)
+            if not settings_.auth_enabled and "*" not in allowed_origins and request.method != "OPTIONS":
+                origin = (request.headers.get("Origin") or "").strip().rstrip("/")
+                fetch_site = (request.headers.get("Sec-Fetch-Site") or "").strip().lower()
+                is_sensitive = request.method in {"POST", "PUT", "PATCH", "DELETE"} or request.url.path.startswith(
+                    ("/api/system/release", "/api/v1/ai/")
+                )
+                if is_sensitive and (
+                    (origin and origin not in allowed_origins)
+                    or (not origin and fetch_site == "cross-site")
+                ):
+                    response = _error_response(
+                        status.HTTP_403_FORBIDDEN,
+                        "cross_site_forbidden",
+                        "Anfrage von nicht erlaubter Herkunft (Origin) abgelehnt.",
+                        "Anwendung direkt über die lokale Benutzeroberfläche aufrufen.",
+                    )
+                    status_code = response.status_code
+                    response.headers["X-Request-ID"] = request_id
+                    return response
+
             response = await call_next(request)
             status_code = response.status_code
             response.headers["X-Request-ID"] = request_id
@@ -425,7 +448,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
             status.HTTP_401_UNAUTHORIZED,
             "unauthorized",
             f"Fehlender oder ungültiger API-Key im Header '{API_KEY_HEADER}'.",
-            "Den in der .env hinterlegten Wert von API_KEY als Header senden.",
+            "Den serverseitig konfigurierten Zugangsschlüssel unter Einstellungen › Verbindung hinterlegen.",
         )
         response.headers["WWW-Authenticate"] = API_KEY_HEADER
         return response
@@ -615,7 +638,7 @@ def _register_routes(application: FastAPI) -> None:
             )
         except Exception as exc:  # noqa: BLE001 - Health darf nie selbst scheitern
             logger.warning("Datenbank-Health fehlgeschlagen: %s", exc)
-            database = DatabaseHealth(status="unavailable", detail=str(exc)[:300])
+            database = DatabaseHealth(status="unavailable", detail="Datenbank nicht erreichbar.")
 
         # --- Ollama (eingestelltes lokales Modell der Laufzeit-Konfiguration) ---
         runtime: RuntimeSettingsStore = request.app.state.runtime
@@ -1167,7 +1190,10 @@ def _register_routes(application: FastAPI) -> None:
         "/api/documents/{document_id}/export/gobd",
         tags=["Human Oversight"],
         summary="Prüfdatenpaket als ZIP (Original, XML, Ledger, Zertifikat, signiertes Manifest)",
-        dependencies=[Depends(require_api_key)],
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
         response_class=Response,
         responses={
             **error_responses,
@@ -1271,7 +1297,10 @@ def _register_routes(application: FastAPI) -> None:
         "/api/v1/copilot/cancel/{progress_id}",
         tags=["Compliance Copilot"],
         summary="Laufende Copilot-Anfrage serverseitig abbrechen",
-        dependencies=[Depends(require_api_key)],
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("copilot", "rate_limit_copilot_per_minute")),
+        ],
     )
     async def cancel_copilot_progress(
         progress_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{6,64}$"),
@@ -1507,7 +1536,10 @@ def _register_routes(application: FastAPI) -> None:
         "/api/system/release",
         tags=["System"],
         summary="Neue Version prüfen (git fetch --tags, SemVer, Tag-Signatur, Änderungen)",
-        dependencies=[Depends(require_api_key)],
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
     )
     async def release_status(
         request: Request, fetch: bool = Query(default=True, description="false = ohne Netzwerk, nur lokale Tags.")
@@ -1522,7 +1554,10 @@ def _register_routes(application: FastAPI) -> None:
         "/api/system/release/apply",
         tags=["System"],
         summary="Release einspielen: nach Bestätigung des Commit-Hashes, nur Fast-Forward, mit DB-Sicherung",
-        dependencies=[Depends(require_api_key)],
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
         responses={403: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
     )
     async def release_apply(request: Request, body: ReleaseApplyRequest) -> JSONResponse:
@@ -1532,18 +1567,19 @@ def _register_routes(application: FastAPI) -> None:
         try:
             if settings_.release_update_local_only and host not in {"127.0.0.1", "::1", "localhost"}:
                 raise ReleaseError("local_only", "Updates nur direkt am Server (localhost) einspielen.", 403)
-            release = await anyio.to_thread.run_sync(
-                partial(manager.preflight, body.tag, body.commit,
-                        # Ein laufender Job zählt in beiden Zählern - Maximum statt Summe.
-                        active_analyses=max(PROGRESS.active, request.app.state.jobs.open_count))
-            )
             database_file = (
                 FsPath(settings_.resolved_database_url.removeprefix("sqlite:///")) if settings_.is_sqlite else None
             )
-            backup = await anyio.to_thread.run_sync(
-                manager.backup_database, database_file, settings_.data_dir / "backups", body.tag
+            release, backup, previous = await anyio.to_thread.run_sync(
+                partial(
+                    manager.apply_update,
+                    body.tag,
+                    body.commit,
+                    active_analyses=max(PROGRESS.active, request.app.state.jobs.open_count),
+                    database_file=database_file,
+                    backup_dir=settings_.data_dir / "backups",
+                )
             )
-            previous = await anyio.to_thread.run_sync(manager.fast_forward, body.tag)
         except ReleaseError as exc:
             return JSONResponse(
                 status_code=exc.status_code, content={"error": {"code": exc.code, "message": str(exc), "hint": None}}
@@ -1639,7 +1675,10 @@ def _register_routes(application: FastAPI) -> None:
         "/api/audit/verify",
         tags=["Audit-Ledger"],
         summary="Hash-Kette vollständig nachrechnen",
-        dependencies=[Depends(require_api_key)],
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("settings", "rate_limit_settings_per_minute")),
+        ],
     )
     async def audit_verify(request: Request) -> dict[str, object]:
         """Prüft Sequenz, Verkettung und Inhalts-Hash jedes Eintrags."""

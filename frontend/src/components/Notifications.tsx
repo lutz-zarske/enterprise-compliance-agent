@@ -89,19 +89,19 @@ export function Notifications({ health, settings, ledger, online, onOpenSettings
       notify(
         result.ok ? "ok" : "warn",
         result.ok ? tr("Lokale KI läuft", "Local AI running", "IA local activa") : tr("Lokale KI nicht gestartet", "Local AI not started", "IA local no iniciada"),
-        result.message,
+        td(result.message),
       );
       if (result.ok) onChanged();
     } catch (err) {
       notify(
         "warn",
         tr("Lokale KI nicht gestartet", "Local AI not started", "IA local no iniciada"),
-        err instanceof ApiError ? `${err.message}${err.hint ? ` – ${err.hint}` : ""}` : String(err),
+        err instanceof ApiError ? `${td(err.message)}${err.hint ? ` – ${td(err.hint)}` : ""}` : String(err),
       );
     } finally {
       setStarting(false);
     }
-  }, [notify, onChanged, tr]);
+  }, [notify, onChanged, td, tr]);
 
   const adoptModel = useCallback(async (model: string) => {
     try {
@@ -214,6 +214,7 @@ export function Notifications({ health, settings, ledger, online, onOpenSettings
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
+        aria-label={visible.length > 1 ? `${lead.title} (+${visible.length - 1})` : lead.title}
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cx(

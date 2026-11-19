@@ -10,9 +10,12 @@ verhindern - das Dokument fällt dann auf die reine Textanalyse zurück.
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,28 @@ MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 _XML_ROOT_HINT = re.compile(
     rb"CrossIndustryInvoice|CrossIndustryDocument|urn:oasis:names:specification:ubl:schema:xsd:(?:Invoice|CreditNote)-2"
 )
+_UNSAFE_ATTACHMENT_CHARS = re.compile(r"[^\w.\- ]+", re.UNICODE)
+
+
+def _safe_attachment_name(raw_name: str | None, fallback: str) -> str:
+    """Entfernt Pfadanteile und Traversal-Sequenzen aus eingebetteten Dateinamen."""
+    cleaned = unicodedata.normalize("NFKC", raw_name or "").strip()
+    cleaned = Path(cleaned.replace("\\", "/")).name
+    cleaned = _UNSAFE_ATTACHMENT_CHARS.sub("_", cleaned).lstrip(".")
+    if not cleaned or cleaned in {".", ".."}:
+        return fallback
+    return cleaned[:160]
+
+
+def _attachment_byte_length(attachment: object) -> int | None:
+    """Liest die dekomprimierte Anhangsgröße, bevor pypdfium2 RAM allokiert."""
+    try:
+        import pypdfium2.raw as pdfium_c
+    except ImportError:  # pragma: no cover
+        return None
+    n_bytes = ctypes.c_ulong()
+    ok = pdfium_c.FPDFAttachment_GetFile(attachment, None, 0, ctypes.byref(n_bytes))
+    return int(n_bytes.value) if ok else None
 
 
 @dataclass(slots=True, frozen=True)
@@ -56,7 +81,11 @@ def list_embedded_files(pdf_bytes: bytes) -> list[EmbeddedFile]:
         for index in range(count):
             try:
                 attachment = document.get_attachment(index)
-                name = attachment.get_name() or f"anhang_{index + 1}"
+                name = _safe_attachment_name(attachment.get_name(), f"anhang_{index + 1}")
+                declared_size = _attachment_byte_length(attachment)
+                if declared_size is not None and declared_size > MAX_ATTACHMENT_BYTES:
+                    logger.warning("PDF-Anhang %s vor Extraktion ignoriert (%s Bytes).", name, declared_size)
+                    continue
                 data = bytes(attachment.get_data())
             except Exception:  # noqa: BLE001 - einzelner defekter Anhang
                 logger.warning("PDF-Anhang %s nicht lesbar.", index, exc_info=True)

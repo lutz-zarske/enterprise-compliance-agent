@@ -3,7 +3,7 @@
 Diese Schicht kennt weder FastAPI noch SQLAlchemy - sie arbeitet gegen das
 ``DocumentRepository``-Protocol und den ``InferenceRouter`` (bzw. direkt
 einen ``StructuredLLMClient``).  Dadurch ist sie
-isoliert testbar, und die Endpunkte in ``main.py`` bleiben duenn.
+isoliert testbar, und die Endpunkte in ``main.py`` bleiben dünn.
 
 Der Ablauf von ``extract_and_audit`` ist bewusst zweistufig: ein LLM-Aufruf
 für die fachliche Extraktion, ein zweiter für das Compliance-Audit.  Zwei
@@ -170,7 +170,7 @@ class OriginalMissingError(ServiceError):
 
     code = "original_missing"
     status_code = 410
-    hint = "Ablageverzeichnis (UPLOAD_DIR) und Datensicherung prüfen; das Dokument erneut hochladen."
+    hint = "Ablageverzeichnis und Datensicherung prüfen; das Dokument erneut hochladen."
 
 
 class NoTextAvailableError(ServiceError):
@@ -334,25 +334,42 @@ def _derive_gdpr_risk(findings_categories: set[PIICategory], model_risk: RiskLev
 
 
 def escalate_ai_act(assessment: AIActAssessment) -> AIActAssessment:
-    """Erzwingt "high", wenn eine Anhang-III-Kategorie belegt ist.
+    """Erzwingt die höchste System-Risikostufe bzw. "high" bei belegter Anhang-III-Kategorie.
 
-    Ein Modell benennt gelegentlich korrekt die Hochrisiko-Kategorie, stuft die
-    Gesamtrisikostufe aber zu niedrig ein.  Diese Regel schließt die Lücke.
+    Ein Modell benennt gelegentlich korrekt eine Hochrisiko-Kategorie oder ein
+    System als ``high``/``unacceptable``, stuft die Gesamtrisikostufe aber zu
+    niedrig ein.  Diese Regel schließt die Lücke.
     """
+    order = (
+        AIActRiskLevel.NOT_APPLICABLE,
+        AIActRiskLevel.MINIMAL,
+        AIActRiskLevel.LIMITED,
+        AIActRiskLevel.HIGH,
+        AIActRiskLevel.UNACCEPTABLE,
+    )
     has_annex_iii = any(system.annex_iii_categories for system in assessment.systems)
-    if not has_annex_iii:
-        return assessment
-    if assessment.overall_risk_level in {AIActRiskLevel.HIGH, AIActRiskLevel.UNACCEPTABLE}:
+    highest_system = max(
+        (system.risk_level for system in assessment.systems),
+        key=order.index,
+        default=AIActRiskLevel.NOT_APPLICABLE,
+    )
+    target = max(assessment.overall_risk_level, highest_system, key=order.index)
+    if has_annex_iii and order.index(target) < order.index(AIActRiskLevel.HIGH):
+        target = AIActRiskLevel.HIGH
+    if target is assessment.overall_risk_level:
         return assessment
 
     reasoning = assessment.reasoning
     note = (
         "Automatische Korrektur: Es wurde mindestens eine Anhang-III-Kategorie "
         "belegt, daher gilt die Einstufung als Hochrisiko-KI-System (Art. 6 Abs. 2)."
+        if has_annex_iii and target is AIActRiskLevel.HIGH
+        else f"Automatische Korrektur: Ein erkanntes KI-System trägt die Stufe '{target.value}', "
+        "daher wird die Gesamtrisikostufe entsprechend angehoben."
     )
     return assessment.model_copy(
         update={
-            "overall_risk_level": AIActRiskLevel.HIGH,
+            "overall_risk_level": target,
             "describes_ai_system": True,
             "reasoning": f"{reasoning}\n{note}".strip(),
         }
@@ -718,7 +735,7 @@ class DocumentService:
             stage("pii_scan")
             rule_findings = scan_text(text)
             if vault is not None:
-                # Mapping vorab aufbauen: gleiche Platzhalter für beide LLM-Aufrufe.
+                # Mapping vorab aufbauen: gleiche Platzhalter für beide Cloud-LLM-Aufrufe.
                 vault.pseudonymize(prompt_text)
 
             stage("ustg_check")
@@ -749,10 +766,14 @@ class DocumentService:
             raise
 
         provider = getattr(client, "provider", "local")
-        vault_report = vault.report if vault is not None else None
+        switches = await self._log_failover(record, client)
+        cloud_touched = provider != "local" or any(
+            s.get("from_provider") not in {None, "local"} or s.get("to_provider") not in {None, "local"}
+            for s in switches
+        )
+        vault_report = vault.report if (vault is not None and cloud_touched) else None
         if vault is not None:
             vault.clear()
-        switches = await self._log_failover(record, client)
         return await self._finalize_analysis(
             record,
             extraction=extraction,
@@ -1186,9 +1207,23 @@ class DocumentService:
             f"Menschliche Übersteuerung am {now:%d.%m.%Y} durch {request.auditor_name} "
             f"({previous_level.value} -> {request.risk_level.value}; {request.legal_basis}): {request.reason}"
         )
+        risk_order = (
+            AIActRiskLevel.NOT_APPLICABLE,
+            AIActRiskLevel.MINIMAL,
+            AIActRiskLevel.LIMITED,
+            AIActRiskLevel.HIGH,
+            AIActRiskLevel.UNACCEPTABLE,
+        )
+        capped_systems = [
+            system.model_copy(update={"risk_level": request.risk_level})
+            if risk_order.index(system.risk_level) > risk_order.index(request.risk_level)
+            else system
+            for system in compliance.ai_act.systems
+        ]
         ai_act = compliance.ai_act.model_copy(
             update={
                 "overall_risk_level": request.risk_level,
+                "systems": capped_systems,
                 "reasoning": f"{compliance.ai_act.reasoning}\n{note}".strip()[:2000],
             }
         )
@@ -1367,7 +1402,8 @@ class DocumentService:
                 {"role": "user", "content": f"{grounding}\n\nFRAGE DES PRÜFERS:\n{question.strip()}"},
             ]
             vault = _vault_of(client)
-            if vault is not None:
+            cloud_primary = getattr(client, "provider", "local") != "local"
+            if vault is not None and cloud_primary:
                 steps.step(progress_id, "Personenbezogene Daten pseudonymisieren (Privacy Vault)")
             steps.step(progress_id, f"{client.model} prüft Belegstellen und Rechtsnormen")
             lang_hint = (
@@ -1397,11 +1433,13 @@ class DocumentService:
                     "failover": list(getattr(client, "switches", None) or []) or None,
                     "notice": HEURISTIC_LABEL,
                 }
+            switches = list(getattr(client, "switches", None) or [])
+            used_cloud = getattr(client, "provider", "local") != "local"
             if vault is not None:
-                steps.step(progress_id, "Antwort re-identifizieren")
+                if used_cloud:
+                    steps.step(progress_id, "Antwort re-identifizieren")
                 vault.clear()
             steps.step(progress_id, "Antwort formulieren")
-            switches = list(getattr(client, "switches", None) or [])
             return {
                 "answer": answer, "model": client.model, "provider": getattr(client, "provider", "local"),
                 "duration_ms": duration_ms, "reference": False, "heuristic": False,
@@ -1413,20 +1451,33 @@ class DocumentService:
 
     # --- Kennzahlen ---------------------------------------------------------
     async def kpis(self) -> dict[str, object]:
-        records = await self._repository.list_all()
-        analyzed = [r for r in records if r.status == DocumentStatus.EXTRACTED.value]
-        scores = [int(r.scorecard["score"]) for r in analyzed if r.scorecard and "score" in r.scorecard]
+        if hasattr(self._repository, "kpi_rows"):
+            rows = await self._repository.kpi_rows()
+        else:
+            records = await self._repository.list_all()
+            rows = [
+                {
+                    "status": r.status,
+                    "scorecard": r.scorecard,
+                    "compliance": r.compliance,
+                    "sign_off": r.sign_off,
+                    "provider": r.provider,
+                }
+                for r in records
+            ]
+        analyzed = [r for r in rows if r["status"] == DocumentStatus.EXTRACTED.value]
+        scores = [int(r["scorecard"]["score"]) for r in analyzed if r["scorecard"] and "score" in r["scorecard"]]
         pii = 0
         high_risk = 0
         for r in analyzed:
-            compliance = r.compliance or {}
+            compliance = r["compliance"] or {}
             pii += len((compliance.get("gdpr") or {}).get("findings") or [])
             level = (compliance.get("ai_act") or {}).get("overall_risk_level")
             if level in {"high", "unacceptable"}:
                 high_risk += 1
         avg = round(sum(scores) / len(scores)) if scores else None
         return {
-            "documents_total": len(records),
+            "documents_total": len(rows),
             "documents_analyzed": len(analyzed),
             "average_score": avg,
             "average_band": (
@@ -1435,9 +1486,9 @@ class DocumentService:
             "pii_elements_masked": pii,
             "high_risk_count": high_risk,
             "high_risk_quota": round(high_risk / len(analyzed) * 100, 1) if analyzed else 0.0,
-            "sealed_count": sum(1 for r in records if r.sign_off),
-            "reference_count": sum(1 for r in records if r.provider == "reference"),
-            "heuristic_count": sum(1 for r in records if r.provider == HEURISTIC_PROVIDER),
+            "sealed_count": sum(1 for r in rows if r["sign_off"]),
+            "reference_count": sum(1 for r in rows if r["provider"] == "reference"),
+            "heuristic_count": sum(1 for r in rows if r["provider"] == HEURISTIC_PROVIDER),
             "ruleset_version": RULESET_VERSION,
         }
 
@@ -1498,6 +1549,7 @@ class StepTracker:
     """Live-Arbeitsschritte je Copilot-Anfrage (die letzten 20, älter als 15 Minuten fallen weg)."""
 
     MAX_AGE_SECONDS = 900
+    MAX_ITEMS = 256
 
     def __init__(self) -> None:
         self._items: dict[str, dict[str, Any]] = {}
@@ -1509,6 +1561,14 @@ class StepTracker:
             self._items.pop(key, None)
             self._tasks.pop(key, None)
             self._cancelled.discard(key)
+        if len(self._items) > self.MAX_ITEMS:
+            oldest = sorted(self._items.items(), key=lambda pair: pair[1]["at"])
+            for key, _ in oldest[: len(self._items) - self.MAX_ITEMS]:
+                if key not in self._tasks:
+                    self._items.pop(key, None)
+                    self._cancelled.discard(key)
+        if len(self._cancelled) > self.MAX_ITEMS:
+            self._cancelled = set(list(self._cancelled)[-self.MAX_ITEMS :])
 
     def register_task(self, progress_id: str | None, task: asyncio.Task[Any] | None) -> None:
         """Verknüpft die laufende Coroutine mit ``progress_id`` für den gezielten Abbruch."""
@@ -1521,11 +1581,13 @@ class StepTracker:
         self._tasks[progress_id] = task
 
     def cancel(self, progress_id: str) -> bool:
-        """Markiert die Anfrage als abgebrochen und beendet einen laufenden Task."""
+        """Markiert eine bekannte Anfrage als abgebrochen und beendet einen laufenden Task."""
         now = time.time()
         self._prune(now)
         task = self._tasks.pop(progress_id, None)
         had_item = progress_id in self._items
+        if not had_item and task is None:
+            return False
         self._cancelled.add(progress_id)
         item = self._items.setdefault(
             progress_id, {"steps": [], "at": now, "started": now, "done": True, "cancelled": True}

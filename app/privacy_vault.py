@@ -27,6 +27,7 @@ Für den Volldatenschutz bleibt der lokale Modus der Standard.
 
 from __future__ import annotations
 
+import bisect
 import json
 import re
 from collections import Counter
@@ -58,16 +59,55 @@ _CAP = r"[A-ZÄÖÜ][\wÄÖÜäöüß&.\-]*"
 #: (Kategorie, Muster, Gruppe) - Reihenfolge = Priorität bei Überlappung.
 _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
     ("EMAIL", re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b"), 0),
-    ("VAT_ID", re.compile(r"\b(?:DE ?\d{9}|ATU\d{8})\b"), 0),
+    (
+        "VAT_ID",
+        re.compile(
+            r"\b(?:DE ?\d{9}|ATU\d{8}"
+            r"|(?:BE|BG|CY|CZ|DK|EE|EL|ES|FI|FR|HR|HU|IE|IT|LT|LU|LV|MT|NL|PL|PT|RO|SE|SI|SK|XI)"
+            r"[A-Z0-9]{0,2}\d{6,10}[A-Z0-9]{0,3})\b"
+        ),
+        0,
+    ),
     ("IBAN", re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){3,8}\b"), 0),
+    (
+        "ID_NUMBER",
+        re.compile(
+            r"(?:ausweis(?:nummer)?|personalausweis|passnummer|reisepass|(?<!ust-)(?<!ust)id[- ]?nr\.?)"
+            r"[:\s]*([A-Z0-9]{6,12})",
+            re.IGNORECASE,
+        ),
+        1,
+    ),
+    (
+        "ID_NUMBER",
+        re.compile(
+            r"(?:sozialversicherungsnummer|rentenversicherungsnummer|sv-?nr\.?)"
+            r"[:\s]*(\d{2}\s?\d{6}\s?[A-Z]\s?\d{3})",
+            re.IGNORECASE,
+        ),
+        1,
+    ),
+    (
+        "TAX_NUMBER",
+        re.compile(r"(?:steuer-?identifikationsnummer|steuer-?id|idnr\.?)[:\s]*(\d{11})", re.IGNORECASE),
+        1,
+    ),
+    (
+        "DATE_OF_BIRTH",
+        re.compile(
+            r"(?:geboren am|geburtsdatum|geb\.)[:\s]*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{4}-\d{2}-\d{2})",
+            re.IGNORECASE,
+        ),
+        1,
+    ),
     ("TAX_NUMBER", re.compile(r"\b\d{2,3}/\d{3,4}/\d{4,5}\b"), 0),
     ("PHONE", re.compile(r"(?:\+49|0049|\(0\)|\b0)[\s/.-]?\d{2,5}[\s/.-]?\d{3,}(?:[\s-]\d{1,5})?\b"), 0),
     (
         "AMOUNT",
         re.compile(
-            r"(?:(?:EUR|€)\s?\d{1,3}(?:[.\s]?\d{3})*(?:,\d{1,2})?"
-            r"|\b\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?\s?(?:EUR|€|Euro)\b"
-            r"|\b\d{4,}(?:,\d{1,2})?\s?(?:EUR|€|Euro)\b)"
+            r"(?:(?:EUR|€|USD|GBP|CHF|\$|£)\s?\d{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d{1,2})?"
+            r"|\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s?(?:EUR|€|Euro|USD|GBP|CHF)\b"
+            r"|\b\d{4,}(?:[.,]\d{1,2})?\s?(?:EUR|€|Euro|USD|GBP|CHF)\b)"
         ),
         0,
     ),
@@ -75,11 +115,11 @@ _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
         "ADDRESS",
         re.compile(
             r"\b[A-ZÄÖÜ][a-zäöüß\-]+(?:straße|strasse|str\.|weg|allee|platz|gasse|ring|damm|ufer|chaussee)"
-            r"\s+\d+\s?[a-z]?\b"
+            r"[ \t]+\d+(?:[ ]?[a-z])?\b"
         ),
         0,
     ),
-    ("ADDRESS", re.compile(r"\b\d{5}\s+[A-ZÄÖÜ][a-zäöüß]+(?:\s(?:am|an der|a\.)\s?[A-ZÄÖÜ][a-zäöüß]+)?"), 0),
+    ("ADDRESS", re.compile(r"\b\d{5}[ \t]+[A-ZÄÖÜ][a-zäöüß]+(?:[ \t](?:am|an der|a\.)[ \t]?[A-ZÄÖÜ][a-zäöüß]+)?"), 0),
     (
         "ORG",
         re.compile(
@@ -92,14 +132,14 @@ _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
     (
         "PERSON",
         re.compile(
-            r"\b(?:Herr|Frau|Hr\.|Fr\.)\s+(?:(?:Dr\.|Prof\.)\s+)*([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß\-]+)?)"
+            r"\b(?:Herr|Frau|Hr\.|Fr\.|Mr\.|Mrs\.|Ms\.|Sr\.|Sra\.)[ \t]+(?:(?:Dr\.|Prof\.)[ \t]+)*([A-ZÄÖÜ][a-zäöüß]+(?:[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+)?)"
         ),
         1,
     ),
     (
         "PERSON",
         re.compile(
-            r"\b(?:Dr\.|Prof\.)\s+(?:(?:Dr\.|Prof\.)\s+)*([A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß\-]+)"
+            r"\b(?:Dr\.|Prof\.)[ \t]+(?:(?:Dr\.|Prof\.)[ \t]+)*([A-ZÄÖÜ][a-zäöüß]+[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+)"
         ),
         1,
     ),
@@ -108,7 +148,7 @@ _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
         re.compile(
             r"(?:Ansprechpartner(?:in)?|Kontaktperson|Bewerber(?:in)?|Mitarbeiter(?:in)?|"
             r"Gesch(?:ä|ae)ftsf(?:ü|ue)hrer(?:in)?|Inhaber(?:in)?|Unterzeichner(?:in)?|z\.\s?Hd\.?|Name)"
-            r"[:\s]+([A-ZÄÖÜ][a-zäöüß]+\s+[A-ZÄÖÜ][a-zäöüß\-]+)"
+            r"[: \t]+([A-ZÄÖÜ][a-zäöüß]+[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+)"
         ),
         1,
     ),
@@ -152,26 +192,32 @@ class PrivacyVault:
         return token
 
     def find_spans(self, text: str) -> list[_Span]:
-        candidates: list[_Span] = []
+        chosen: list[_Span] = []
+        starts: list[int] = []
         for category, pattern, group in _RULES:
             for match in pattern.finditer(text):
                 start, end = match.span(group)
-                value = match.group(group).strip()
-                if not value or _PLACEHOLDER.fullmatch(value):
+                raw = match.group(group)
+                lead = len(raw) - len(raw.lstrip())
+                trail = len(raw) - len(raw.rstrip())
+                start += lead
+                end -= trail
+                value = raw.strip()
+                if start >= end or not value or _PLACEHOLDER.fullmatch(value):
                     continue
                 if category == "IBAN" and len(value.replace(" ", "")) < 15:
                     continue
                 if category == "ORG":
                     value, start = _trim_org(value, start)
                     end = start + len(value)
-                candidates.append(_Span(start, end, category, value))
-        # Überlappungen auflösen: Regelpriorität (Listenreihenfolge), dann Länge.
-        chosen: list[_Span] = []
-        for span in candidates:
-            if any(span.start < other.end and other.start < span.end for other in chosen):
-                continue
-            chosen.append(span)
-        return sorted(chosen, key=lambda item: item.start)
+                idx = bisect.bisect_left(starts, start)
+                if idx > 0 and chosen[idx - 1].end > start:
+                    continue
+                if idx < len(chosen) and chosen[idx].start < end:
+                    continue
+                starts.insert(idx, start)
+                chosen.insert(idx, _Span(start, end, category, value))
+        return chosen
 
     def pseudonymize(self, text: str) -> str:
         """Ersetzt alle erkannten Identifikatoren durch stabile Platzhalter."""

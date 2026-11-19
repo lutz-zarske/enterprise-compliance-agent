@@ -53,9 +53,12 @@ function JobRow({ job, onCancel }: { job: JobSnapshot; onCancel: (jobId: string)
               disabled={stopping}
               onClick={async () => {
                 setStopping(true);
-                await onCancel(job.job_id);
-                setStopping(false);
-                setAsking(false);
+                try {
+                  await onCancel(job.job_id);
+                } finally {
+                  setStopping(false);
+                  setAsking(false);
+                }
               }}
             >
               {stopping ? <Spinner size={11} /> : tr("Ja, stoppen", "Yes, stop", "Sí, detener")}

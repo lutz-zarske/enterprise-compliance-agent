@@ -227,6 +227,7 @@ export function SampleMenu({ busy, disabled, onLoad }: {
         className="btn"
         onClick={() => setOpen((value) => !value)}
         disabled={disabled || busy}
+        aria-label={t("Musterdaten laden", "Load sample cases", "Cargar casos de ejemplo")}
         aria-haspopup="menu"
         aria-expanded={open}
         data-tour="samples"

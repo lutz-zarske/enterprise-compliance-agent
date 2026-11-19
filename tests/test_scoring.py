@@ -250,7 +250,7 @@ def test_paragraf_14c_endverbraucher_hinweis() -> None:
     )
     calc = next(c for t in card.tiles for c in t.checks if c.id == "tax_calc")
     assert "C-378/21" in (calc.note or "") and "27.02.2024" in (calc.note or "")
-    assert calc.risk_note is None  # kein Mangel -> keine Risikörklärung
+    assert calc.risk_note is None  # kein Mangel -> keine Risikoerklärung
 
 
 def test_verneinte_konformitaet_verhindert_keine_hochrisiko_sperre() -> None:

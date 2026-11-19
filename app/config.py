@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Projektwurzel (…/enterprise-compliance-agent), unabhängig vom CWD.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-APP_VERSION = "2.7.5"
+APP_VERSION = "2.8.0"
 APP_TITLE = "Enterprise Compliance Agent"
 
 _LOOPBACK_HOST = re.compile(r"^(https?://)localhost(?=[:/]|$)", re.IGNORECASE)
@@ -28,7 +28,7 @@ def normalize_loopback(url: str) -> str:
     """``http://localhost:11434`` -> ``http://127.0.0.1:11434``.
 
     Windows löst ``localhost`` bevorzugt nach ``::1`` (IPv6) auf; Ollama lauscht
-    auf IPv4.  Der Umweg kostet rund 2 s je Anfrage und reisst damit das
+    auf IPv4.  Der Umweg kostet rund 2 s je Anfrage und reißt damit das
     Health-Timeout von 1,5 s - der Dienst wirkt offline, obwohl er läuft.
     """
     return _LOOPBACK_HOST.sub(r"\g<1>127.0.0.1", url.strip())
@@ -51,8 +51,8 @@ class Settings(BaseSettings):
     #: Wenn leer, ist die API-Key-Prüfung deaktiviert (lokaler Betrieb).
     api_key: str | None = Field(default=None)
 
-    #: Kommagetrennte Liste erlaubter Origins ("*" erlaubt alle).
-    cors_origins: str = Field(default="*")
+    #: Kommagetrennte Liste erlaubter Origins ("*" erlaubt alle - lokal auf Frontend begrenzt).
+    cors_origins: str = Field(default="http://127.0.0.1:3001,http://localhost:3001")
 
     # --- Persistenz --------------------------------------------------------
     database_url: str = Field(default="sqlite:///data/agent.db")

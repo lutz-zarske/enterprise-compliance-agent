@@ -18,7 +18,9 @@ Event-Loop frei und der spätere Umstieg auf einen echten Async-Treiber
 
 from __future__ import annotations
 
+import asyncio
 import re
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -89,7 +91,7 @@ audit_trails_table: Table = Table(
     sa.Column("compliance_score", sa.Integer, nullable=True),
     sa.Column("risk_tier", sa.String(32), nullable=False),
     sa.Column("details", sa.JSON, nullable=True),
-    sa.Column("previous_hash", sa.String(64), nullable=False),
+    sa.Column("previous_hash", sa.String(64), nullable=False, unique=True),
     sa.Column("entry_hash", sa.String(64), nullable=False, unique=True),
     sqlite_autoincrement=True,
 )
@@ -279,6 +281,13 @@ class SqlDocumentRepository:
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
+        self._write_lock = threading.Lock()
+        self._write_seq = 0
+        self._doc_seq: dict[str, int] = {}
+
+    def _next_seq(self) -> int:
+        self._write_seq += 1
+        return self._write_seq
 
     # --- interne, synchrone Operationen ------------------------------------
     def _insert(self, document: NewDocument) -> DocumentRecord:
@@ -333,7 +342,12 @@ class SqlDocumentRepository:
     def _select_many(
         self, limit: int, offset: int, status: str | None
     ) -> tuple[list[DocumentRecord], int]:
-        statement = sa.select(documents_table)
+        # raw_text wird in Listenansichten und KPIs nicht benötigt -> Speicher schonen.
+        columns = [
+            sa.literal(None).label("raw_text") if col.name == "raw_text" else col
+            for col in documents_table.columns
+        ]
+        statement = sa.select(*columns)
         count_statement = sa.select(sa.func.count()).select_from(documents_table)
         if status is not None:
             statement = statement.where(documents_table.c.status == status)
@@ -349,14 +363,31 @@ class SqlDocumentRepository:
             total = connection.execute(count_statement).scalar_one()
         return [DocumentRecord.from_row(row) for row in rows], int(total)
 
-    def _update(self, document_id: str, values: dict[str, Any]) -> None:
-        values = {**values, "updated_at": utcnow()}
-        with self._engine.begin() as connection:
-            connection.execute(
-                sa.update(documents_table)
-                .where(documents_table.c.id == document_id)
-                .values(**values)
-            )
+    def _select_kpi_rows(self) -> list[dict[str, Any]]:
+        statement = sa.select(
+            documents_table.c.status,
+            documents_table.c.scorecard,
+            documents_table.c.compliance,
+            documents_table.c.sign_off,
+            documents_table.c.provider,
+        )
+        with self._engine.connect() as connection:
+            rows = connection.execute(statement).fetchall()
+        return [dict(row._mapping) for row in rows]  # noqa: SLF001
+
+    def _update(self, document_id: str, values: dict[str, Any], seq: int | None = None) -> None:
+        with self._write_lock:
+            if seq is not None:
+                if seq < self._doc_seq.get(document_id, 0):
+                    return
+                self._doc_seq[document_id] = seq
+            values = {**values, "updated_at": utcnow()}
+            with self._engine.begin() as connection:
+                connection.execute(
+                    sa.update(documents_table)
+                    .where(documents_table.c.id == document_id)
+                    .values(**values)
+                )
 
     def _ping(self) -> dict[str, Any]:
         with self._engine.connect() as connection:
@@ -384,8 +415,9 @@ class SqlDocumentRepository:
         )
 
     async def mark_processing(self, document_id: str) -> None:
+        seq = self._next_seq()
         await anyio.to_thread.run_sync(
-            partial(self._update, document_id, {"status": "processing", "error": None})
+            partial(self._update, document_id, {"status": "processing", "error": None}, seq)
         )
 
     async def save_results(
@@ -437,22 +469,28 @@ class SqlDocumentRepository:
         records, _ = await anyio.to_thread.run_sync(partial(self._select_many, 100_000, 0, None))
         return records
 
+    async def kpi_rows(self) -> list[dict[str, Any]]:
+        return await anyio.to_thread.run_sync(self._select_kpi_rows)
+
     async def _update_and_get(self, document_id: str, values: dict[str, Any]) -> DocumentRecord:
-        await anyio.to_thread.run_sync(partial(self._update, document_id, values))
+        seq = self._next_seq()
+        await anyio.to_thread.run_sync(partial(self._update, document_id, values, seq))
         record = await self.get(document_id)
         if record is None:  # pragma: no cover - nur bei parallelem Löschen erreichbar
             raise LookupError(f"Dokument {document_id} nach dem Speichern nicht auffindbar.")
         return record
 
     async def mark_failed(self, document_id: str, error: str) -> None:
+        seq = self._next_seq()
         await anyio.to_thread.run_sync(
-            partial(self._update, document_id, {"status": "failed", "error": error[:2000]})
+            partial(self._update, document_id, {"status": "failed", "error": error[:2000]}, seq)
         )
 
     async def mark_recheck_failed(self, document_id: str, status: str, error: str) -> None:
         """Neuprüfung gescheitert: Status und gültiges Ergebnis bleiben, der Fehler steht als Hinweis."""
+        seq = self._next_seq()
         await anyio.to_thread.run_sync(
-            partial(self._update, document_id, {"status": status, "error": error[:2000]})
+            partial(self._update, document_id, {"status": status, "error": error[:2000]}, seq)
         )
 
     async def update_source(
@@ -465,7 +503,18 @@ class SqlDocumentRepository:
 
     async def restore_status(self, document_id: str, status: str) -> None:
         """Nach einem Abbruch: vorheriger Status, vorhandenes Ergebnis bleibt unangetastet."""
-        await anyio.to_thread.run_sync(partial(self._update, document_id, {"status": status, "error": None}))
+        seq = self._next_seq()
+        task = asyncio.ensure_future(
+            anyio.to_thread.run_sync(
+                partial(self._update, document_id, {"status": status, "error": None}, seq),
+                abandon_on_cancel=False,
+            )
+        )
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            raise
 
     async def ping(self) -> dict[str, Any]:
         return await anyio.to_thread.run_sync(self._ping)
@@ -497,6 +546,7 @@ def create_engine_from_settings(settings: Settings) -> Engine:
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA foreign_keys=ON")
                 cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA busy_timeout=15000")
             finally:
                 cursor.close()
 

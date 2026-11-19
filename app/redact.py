@@ -27,6 +27,7 @@ CLI: ``python -m app.redact < eingabe.txt`` gibt den geschwärzten Text aus.
 
 from __future__ import annotations
 
+import bisect
 import os
 import re
 import sys
@@ -94,11 +95,19 @@ def redact(
     redact_amounts: bool = False,
 ) -> RedactionResult:
     """Schwärzt ``text`` endgültig; liefert Text und Anzahl je Kategorie."""
-    spans: list[tuple[int, int, str, str]] = []  # start, end, kategorie, ersatz
+    spans: list[tuple[int, int, str, str]] = []  # nach start sortiert: (start, end, kategorie, ersatz)
+    starts: list[int] = []
 
     def add(start: int, end: int, category: str, replacement: str) -> None:
-        if start < end and not any(start < e and s < end for s, e, _, _ in spans):
-            spans.append((start, end, category, replacement))
+        if start >= end:
+            return
+        idx = bisect.bisect_left(starts, start)
+        if idx > 0 and spans[idx - 1][1] > start:
+            return
+        if idx < len(spans) and spans[idx][0] < end:
+            return
+        starts.insert(idx, start)
+        spans.insert(idx, (start, end, category, replacement))
 
     for pattern in _SECRET_PATTERNS:
         for match in pattern.finditer(text):
@@ -108,8 +117,20 @@ def redact(
             add(*match.span(), "CONFIDENTIAL_FILE", CONFIDENTIAL)
     for match in _PARAMETER.finditer(text):
         add(*match.span("value"), "PROTECTED_PARAMETER", CONFIDENTIAL)
-    for term in [*configured_terms(), *(extra_terms or [])]:
-        for match in re.finditer(rf"(?<!\w){re.escape(term)}(?!\w)", text, re.IGNORECASE):
+    seen_terms: set[str] = set()
+    terms: list[str] = []
+    for raw_term in [*configured_terms(), *(extra_terms or [])]:
+        cleaned = raw_term.strip()
+        key = cleaned.casefold()
+        if cleaned and key not in seen_terms:
+            seen_terms.add(key)
+            terms.append(cleaned)
+    if terms:
+        combined = re.compile(
+            r"(?<!\w)(?:" + "|".join(re.escape(term) for term in sorted(terms, key=len, reverse=True)) + r")(?!\w)",
+            re.IGNORECASE,
+        )
+        for match in combined.finditer(text):
             add(*match.span(), "CONFIDENTIAL_TERM", CONFIDENTIAL)
     if redact_pii or redact_amounts:
         for span in PrivacyVault().find_spans(text):
@@ -119,7 +140,7 @@ def redact(
 
     out: list[str] = []
     cursor = 0
-    for start, end, _category, replacement in sorted(spans):
+    for start, end, _category, replacement in spans:
         out.append(text[cursor:start])
         out.append(replacement)
         cursor = end

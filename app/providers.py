@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 import httpx
 
@@ -142,10 +143,9 @@ class CloudLLMClient(StructuredLLMClient):
         if response.status_code in OVERLOAD_STATUS or response.status_code >= 500:
             raise ProviderUnavailableError(overload_message(self.label, response.status_code))
         if response.status_code >= 400:
-            # Fehlertext des Providers kann Prompt-Auszüge enthalten -> gekürzt.
-            raise LLMResponseError(
-                f"{self.label} antwortet mit HTTP {response.status_code}: {response.text[:300]}"
-            )
+            # Provider-Fehlertexte können Prompt-Auszüge enthalten -> nur im Serverlog, nicht nach außen.
+            logger.warning("%s HTTP %s: %s", self.label, response.status_code, response.text[:300])
+            raise LLMResponseError(f"{self.label} antwortet mit HTTP {response.status_code}.")
         try:
             return response.json()
         except ValueError as exc:
@@ -188,9 +188,10 @@ class GeminiClient(CloudLLMClient):
             body["systemInstruction"] = {"parts": [{"text": system}]}
 
         self._budget_check()
+        encoded_model = quote(self._model, safe="._-:")
         data = await self._send(
             "POST",
-            f"{self._base_url}/models/{self._model}:generateContent",
+            f"{self._base_url}/models/{encoded_model}:generateContent",
             json=body,
             headers={"x-goog-api-key": self._api_key},
         )
@@ -205,9 +206,10 @@ class GeminiClient(CloudLLMClient):
             ) from exc
 
     async def test_connection(self) -> str:
+        encoded_model = quote(self._model, safe="._-:")
         await self._send(
             "POST",
-            f"{self._base_url}/models/{self._model}:generateContent",
+            f"{self._base_url}/models/{encoded_model}:generateContent",
             headers={"x-goog-api-key": self._api_key},
             json={
                 "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
@@ -255,7 +257,8 @@ class AnthropicClient(CloudLLMClient):
         return text
 
     async def test_connection(self) -> str:
-        await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers(), timeout=12.0)
+        encoded_model = quote(self._model, safe="._-:")
+        await self._send("GET", f"{self._base_url}/models/{encoded_model}", headers=self._headers(), timeout=12.0)
         return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:
@@ -294,7 +297,8 @@ class OpenAIClient(CloudLLMClient):
         return content
 
     async def test_connection(self) -> str:
-        await self._send("GET", f"{self._base_url}/models/{self._model}", headers=self._headers(), timeout=12.0)
+        encoded_model = quote(self._model, safe="._-:")
+        await self._send("GET", f"{self._base_url}/models/{encoded_model}", headers=self._headers(), timeout=12.0)
         return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:

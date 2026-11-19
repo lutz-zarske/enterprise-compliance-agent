@@ -155,7 +155,7 @@ interface Props {
 }
 
 export function DocumentList({ documents, selectedId, analysingIds, onAnalyzeAll, onSelect, onTogglePin, onToggleArchive, shortcutsEnabled }: Props) {
-  const { locale, tr } = useI18n();
+  const { locale, tr, td } = useI18n();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
@@ -387,7 +387,7 @@ export function DocumentList({ documents, selectedId, analysingIds, onAnalyzeAll
                       <span className="mt-1 flex flex-wrap gap-1">
                         {isHighRisk(doc) && <span className="chip border-bad-line bg-bad-soft text-bad">{tr("EU AI Act Anhang III", "EU AI Act Annex III", "Reglamento IA Anexo III")}</span>}
                         {doc.einvoice_profile && (
-                          <span className="chip border-accent-line bg-accent-soft text-accent">{tr("E-Rechnung", "E-Invoice", "Factura electrónica")} · {doc.einvoice_profile}</span>
+                          <span className="chip border-accent-line bg-accent-soft text-accent">{tr("E-Rechnung", "E-Invoice", "Factura electrónica")} · {td(doc.einvoice_profile)}</span>
                         )}
                       </span>
                     )}

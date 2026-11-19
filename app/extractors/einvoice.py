@@ -20,7 +20,7 @@ Zertifikat ausdrücklich hin.
 
 Sicherheit
 ----------
-XML aus Uploads ist nicht vertrauenswuerdig.  Geparst wird mit ``defusedxml``
+XML aus Uploads ist nicht vertrauenswürdig.  Geparst wird mit ``defusedxml``
 und ``forbid_dtd=True``: keine DTDs, keine Entitäten, keine externen
 Referenzen (Schutz vor XXE und "Billion Laughs").
 """
@@ -67,9 +67,10 @@ _ZUGFERD1_NS = "urn:ferd:CrossIndustryDocument:invoice:1p0"
 #: Profile, die nach BMF-Schreiben vom 15.10.2024 keine E-Rechnung sind.
 NON_EINVOICE_PROFILES = frozenset({"minimum", "basic_wl"})
 
-_CREDIT_NOTE_CODES = {"381", "396", "532"}
+_CREDIT_NOTE_CODES = {"381", "389", "396", "532"}
 _TWO_PLACES = Decimal("0.01")
 _TOLERANCE = Decimal("0.01")
+_MAX_ABS_DECIMAL = Decimal("1e15")
 
 
 class EInvoiceError(Exception):
@@ -110,9 +111,12 @@ def _decimal(value: str | None) -> Decimal | None:
     if value is None:
         return None
     try:
-        return Decimal(value.strip())
+        parsed = Decimal(value.strip())
     except InvalidOperation:
         return None
+    if not parsed.is_finite() or abs(parsed) > _MAX_ABS_DECIMAL:
+        return None
+    return parsed
 
 
 def _date(value: str | None) -> date | None:
@@ -317,7 +321,7 @@ def _parse_cii(root: Element) -> dict[str, Any]:
             rate=_decimal(_text(tax, "ram:RateApplicablePercent", ns)),
             taxable_amount=_decimal(_text(tax, "ram:BasisAmount", ns)),
             tax_amount=_decimal(_text(tax, "ram:CalculatedAmount", ns)),
-            exemption_reason=_text(tax, "ram:ExemptionReason", ns),
+            exemption_reason=_text(tax, "ram:ExemptionReason", ns) or _text(tax, "ram:ExemptionReasonCode", ns),
         )
         for tax in (settlement.findall("ram:ApplicableTradeTax", ns) if settlement is not None else [])
     ]
@@ -429,7 +433,10 @@ def _parse_ubl(root: Element, credit_note: bool) -> dict[str, Any]:
                     rate=_decimal(_text(sub, "cac:TaxCategory/cbc:Percent", ns)),
                     taxable_amount=_decimal(_text(sub, "cbc:TaxableAmount", ns)),
                     tax_amount=_decimal(_text(sub, "cbc:TaxAmount", ns)),
-                    exemption_reason=_text(sub, "cac:TaxCategory/cbc:TaxExemptionReason", ns),
+                    exemption_reason=(
+                        _text(sub, "cac:TaxCategory/cbc:TaxExemptionReason", ns)
+                        or _text(sub, "cac:TaxCategory/cbc:TaxExemptionReasonCode", ns)
+                    ),
                 )
                 for sub in total.findall("cac:TaxSubtotal", ns)
             ]
@@ -670,7 +677,9 @@ def looks_like_xml(data: bytes) -> bool:
 # Abgleich XML <-> visueller PDF-Teil (XML-Primat, BMF 15.10.2024 Rz. 36)
 # ---------------------------------------------------------------------------
 
-_AMOUNT_TOKEN = re.compile(r"\d{1,3}(?:\.\d{3})+,\d{2}|\d{1,3}(?:,\d{3})+\.\d{2}|\d+,\d{2}|\d+\.\d{2}")
+_AMOUNT_TOKEN = re.compile(
+    r"(?<!\w)-?(?:\d{1,3}(?:\.\d{3})+,\d{2}|\d{1,3}(?:,\d{3})+\.\d{2}|\d+,\d{2}|\d+\.\d{2})"
+)
 _IBAN_TOKEN = re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\b")
 _VAT_TOKEN = re.compile(r"\b(?:DE ?\d{9}|ATU ?\d{8}|[A-Z]{2}\d{8,12})\b")
 _PERCENT_TOKEN = re.compile(r"(\d{1,2}(?:[,.]\d{1,2})?)\s?%")
@@ -810,7 +819,13 @@ def _party_lines(title: str, bt: str, party: EInvoiceParty) -> list[str]:
 def render_reading_text(invoice: EInvoiceData) -> str:
     """Menschenlesbare Fassung des XML-Datensatzes (Textansicht, PII-Scan, Copilot)."""
     currency = invoice.currency
-    kind = "GUTSCHRIFT" if invoice.type_code in _CREDIT_NOTE_CODES else "RECHNUNG"
+    kind = (
+        "GUTSCHRIFT"
+        if invoice.type_code == "389"
+        else "RECHNUNGSKORREKTUR (GUTSCHRIFT)"
+        if invoice.type_code in _CREDIT_NOTE_CODES
+        else "RECHNUNG"
+    )
     lines = [
         f"E-{kind} · {invoice.profile} · Syntax {invoice.syntax} – Lesefassung des XML-Datensatzes",
         f"Rechnungsnummer (BT-1): {invoice.invoice_number or '–'}",
@@ -880,7 +895,13 @@ def to_extraction(invoice: EInvoiceData) -> ExtractionResult:
         if line.name
     )
     exemption = next((entry.exemption_reason for entry in invoice.vat_breakdown if entry.exemption_reason), None)
-    kind = "Gutschrift" if invoice.type_code in _CREDIT_NOTE_CODES else "E-Rechnung"
+    kind = (
+        "Gutschrift (§ 14 Abs. 2 S. 2 UStG)"
+        if invoice.type_code == "389"
+        else "Rechnungskorrektur (Gutschrift)"
+        if invoice.type_code in _CREDIT_NOTE_CODES
+        else "E-Rechnung"
+    )
     summary = (
         f"{kind} ({invoice.profile}, {invoice.syntax}) der {invoice.seller.name or 'unbekannten Verkäuferin'} "
         f"an {invoice.buyer.name or 'unbekannten Käufer'} über {format_money(invoice.grand_total, invoice.currency)}. "

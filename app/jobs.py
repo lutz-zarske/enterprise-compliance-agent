@@ -226,6 +226,7 @@ class JobManager:
             job.message = job.error["message"]
             if not hasattr(exc, "code"):
                 logger.exception("Analyse-Job %s fehlgeschlagen", job.job_id)
+            exc.__traceback__ = None
             job.exception = exc
         finally:
             job.finished_at = time.time()

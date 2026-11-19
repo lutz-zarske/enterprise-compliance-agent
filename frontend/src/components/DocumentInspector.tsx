@@ -288,9 +288,9 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
             </Tooltip>
           )}
         </div>
-        {check.legal_reference && <p className="text-xs text-subtle">{check.legal_reference}</p>}
+        {check.legal_reference && <p className="text-xs text-subtle">{td(check.legal_reference)}</p>}
         {detailText && <p className="mt-1 text-xs leading-relaxed text-muted">{detailText}</p>}
-        {/* Bei Abzügen steht die Risikörklärung im Tooltip am Abzug; Hinweise ohne Abzug inline. */}
+        {/* Bei Abzügen steht die Risikoerklärung im Tooltip am Abzug; Hinweise ohne Abzug inline. */}
         {riskText && check.deduction === 0 && check.status !== "pass" && (
           <p className="mt-1 text-xs leading-relaxed text-warn">{riskText}</p>
         )}
@@ -335,12 +335,16 @@ function parseVatId(raw: string | null | undefined): { country: string; number: 
 }
 
 function ViesCheck({ document }: { document: DocumentDetail }) {
-  const { tr } = useI18n();
+  const { tr, td } = useI18n();
   const raw = document.einvoice?.seller.vat_id || document.extraction?.sender_vat_id || null;
   const parsed = parseVatId(raw);
   const [state, setState] = useState<{ status: "idle" | "busy" } | { status: "done"; result: VatVerification } | { status: "error"; message: string }>({ status: "idle" });
+  const reqRef = useRef(0);
 
-  useEffect(() => setState({ status: "idle" }), [document.id, raw]);
+  useEffect(() => {
+    reqRef.current += 1;
+    setState({ status: "idle" });
+  }, [document.id, raw]);
 
   if (parsed === null) {
     return document.extraction?.sender_tax_number ? (
@@ -353,11 +357,15 @@ function ViesCheck({ document }: { document: DocumentDetail }) {
 
   async function verify() {
     if (parsed === null || parsed === "masked") return;
+    const req = ++reqRef.current;
     setState({ status: "busy" });
     try {
-      setState({ status: "done", result: await api.verifyVat(parsed.country, parsed.number) });
+      const result = await api.verifyVat(parsed.country, parsed.number);
+      if (reqRef.current === req) setState({ status: "done", result });
     } catch (err) {
-      setState({ status: "error", message: err instanceof ApiError ? err.message : String(err) });
+      if (reqRef.current === req) {
+        setState({ status: "error", message: err instanceof ApiError ? td(err.message) : String(err) });
+      }
     }
   }
 
@@ -485,7 +493,7 @@ function AiActPanel({ document, onOverride }: { document: DocumentDetail; onOver
 
       <div>
         <p className="label-caps mb-1">{tr("Begründung der KI", "AI Reasoning", "Justificación de la IA")}</p>
-        <p className="max-w-[70ch] whitespace-pre-line text-sm leading-relaxed text-muted">{ai.reasoning || "–"}</p>
+        <p className="max-w-[70ch] whitespace-pre-line text-sm leading-relaxed text-muted">{ai.reasoning ? td(ai.reasoning) : "–"}</p>
       </div>
 
       {regulatory && (
@@ -522,7 +530,7 @@ function AiActPanel({ document, onOverride }: { document: DocumentDetail; onOver
                   <span className="text-sm font-medium text-fg">{system.name || tr("Unbenanntes System", "Unnamed system", "Sistema sin nombre")}</span>
                   <Chip tone={toneForRisk(system.risk_level)}>{riskLabel(system.risk_level)}</Chip>
                 </div>
-                {system.purpose && <p className="mt-1 text-xs text-muted">{system.purpose}</p>}
+                {system.purpose && <p className="mt-1 text-xs text-muted">{td(system.purpose)}</p>}
                 {system.annex_iii_labels.map((label) => (
                   <Chip key={label} tone="bad" className="mr-1 mt-2">{td(label)}</Chip>
                 ))}
@@ -682,7 +690,7 @@ function SumBlock({ rows, total, currency, marks }: {
 }
 
 function FactsPanel({ document }: { document: DocumentDetail }) {
-  const { tr } = useI18n();
+  const { tr, td } = useI18n();
   const ex = document.extraction;
   if (!ex) return <EmptyState icon={<FileText size={18} />} title={tr("Noch keine Extraktion", "No extraction yet", "Sin extracción aún")} />;
   const math = document.scorecard?.tiles.find((tile) => tile.key === "math");
@@ -723,7 +731,7 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
       {ex.summary && (
         <div>
           <p className="label-caps mb-1">{tr("Zusammenfassung", "Summary", "Resumen")}</p>
-          <p className="text-sm leading-relaxed text-muted">{ex.summary}</p>
+          <p className="text-sm leading-relaxed text-muted">{td(ex.summary)}</p>
         </div>
       )}
       {math && (
@@ -735,7 +743,7 @@ function FactsPanel({ document }: { document: DocumentDetail }) {
       {ex.issues.length > 0 && (
         <div>
           <p className="label-caps mb-1">{tr("Auffälligkeiten", "Issues", "Observaciones")}</p>
-          <ul className="list-disc space-y-1 pl-5 text-xs text-muted">{ex.issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul>
+          <ul className="list-disc space-y-1 pl-5 text-xs text-muted">{ex.issues.map((issue, i) => <li key={i}>{td(issue)}</li>)}</ul>
         </div>
       )}
     </div>
@@ -790,7 +798,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
     return (
       <div className="rounded-lg border border-warn-line bg-warn-soft p-3 text-xs text-warn">
         <p className="font-semibold">{tr(`Eingebettetes XML (${einvoice.attachment_name ?? "unbenannt"}) nicht auswertbar`, `Embedded XML (${einvoice.attachment_name ?? "unnamed"}) unreadable`, `XML incrustado (${einvoice.attachment_name ?? "sin nombre"}) ilegible`)}</p>
-        <p className="mt-1 leading-relaxed">{einvoice.error}</p>
+        <p className="mt-1 leading-relaxed">{td(einvoice.error)}</p>
         <p className="mt-1 leading-relaxed">{tr("Geprüft wird deshalb der Bildteil des PDFs.", "Falling back to visual PDF inspection.", "Se analiza la representación visual del PDF.")}</p>
       </div>
     );
@@ -811,7 +819,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
     <div className="space-y-4">
       <h3 className="sr-only">{tr("XML-Datensatz (EN 16931)", "XML Dataset (EN 16931)", "Conjunto XML (EN 16931)")}</h3>
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <Chip tone={einvoice.is_einvoice ? "accent" : "warn"}>{einvoiceLabel(einvoice)}</Chip>
+        <Chip tone={einvoice.is_einvoice ? "accent" : "warn"}>{einvoice.syntax ? `${td(einvoice.profile)} · ${einvoice.syntax}` : td(einvoice.profile)}</Chip>
         <span className="text-subtle">
           {embedded ? tr(`eingebettet als ${einvoice.attachment_name}`, `embedded as ${einvoice.attachment_name}`, `incrustado como ${einvoice.attachment_name}`) : tr("reines XML", "standalone XML", "XML puro")}
           {embedded && tr(" · maßgeblich vor dem Bildteil (BMF 15.10.2024, Rz. 36)", " · prevails over visual PDF (BMF 15 Oct 2024, para. 36)", " · prevalece sobre el PDF (BMF 15/10/2024)")}
@@ -954,7 +962,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
 
 /** Revisionssicherheits-Status: Hash-Kette des gesamten Ledgers (GET /api/audit/verify). */
 function LedgerSeal({ ledger, onOpen }: { ledger: LedgerVerification | null; onOpen?: () => void }) {
-  const { tr } = useI18n();
+  const { tr, td } = useI18n();
   const state = !ledger ? "unknown" : !ledger.valid ? "broken" : ledger.entries === 0 ? "empty" : "ok";
   const tone = { ok: "ok", broken: "bad", empty: "neutral", unknown: "neutral" } as const;
   const label = {
@@ -973,7 +981,7 @@ function LedgerSeal({ ledger, onOpen }: { ledger: LedgerVerification | null; onO
             <span className="block font-semibold text-bad">
               {tr("Bruch", "Break", "Ruptura")}{ledger.broken_at_seq != null ? ` ${tr(`bei Eintrag #${ledger.broken_at_seq}`, `at entry #${ledger.broken_at_seq}`, `en entrada #${ledger.broken_at_seq}`)}` : ""}
             </span>
-            <span className="block text-subtle">{ledger.reason ?? tr("Ein Eintrag passt nicht zur Kette.", "An entry does not match the hash chain.", "Una entrada no coincide con la cadena.")}</span>
+            <span className="block text-subtle">{ledger.reason ? td(ledger.reason) : tr("Ein Eintrag passt nicht zur Kette.", "An entry does not match the hash chain.", "Una entrada no coincide con la cadena.")}</span>
           </>
         ) : (
           <>
@@ -1089,7 +1097,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
     { tone: "bad", label: tr("Verstoß", "Defect", "Incumplimiento"), title: tr("Mangel, z. B. fehlende oder abweichende Pflichtangabe nach § 14 UStG.", "Defect, e.g. missing or invalid mandatory invoice field under Sec. 14 UStG.", "Defecto o dato obligatorio ausente.") },
     { tone: "pii", label: tr("PII-Maskierung (DSGVO)", "PII Masking (GDPR)", "Ocultación PII (RGPD)"), title: tr("Personenbezogene Daten; Art.-9-Fundstellen kräftig umrandet.", "Personal data; GDPR Art. 9 sensitive categories strongly bordered.", "Datos personales; Art. 9 resaltados.") },
   ];
-  const levelLabels = { strict: tr("Strikt", "Strict", "Estricto"), standard: "Standard", audit_only: "Audit-Only" } as const;
+  const levelLabels = { strict: tr("Strikt", "Strict", "Estricto"), standard: tr("Standard", "Standard", "Estándar"), audit_only: "Audit-Only" } as const;
 
   const index = useMemo(() => buildEvidence(document), [document]);
   const checks = useMemo(() => {

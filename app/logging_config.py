@@ -123,6 +123,15 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
+class SafeTextFormatter(logging.Formatter):
+    """Klartext-Formatter, der auch ``exc_info`` ohne rohe Tracebacks oder PII ausgibt."""
+
+    def formatException(self, ei: Any) -> str:  # noqa: N802 - logging.Formatter-API
+        exc_type, exc_value = ei[0], ei[1]
+        name = exc_type.__name__ if exc_type else "Exception"
+        return f"{name}: {scrub(str(exc_value))[:500]}"
+
+
 def configure_logging(level: str = "INFO", *, json_logs: bool = True) -> None:
     """Richtet den Root-Logger einmalig ein (idempotent, auch für uvicorn)."""
     root = logging.getLogger()
@@ -138,7 +147,7 @@ def configure_logging(level: str = "INFO", *, json_logs: bool = True) -> None:
     handler.setFormatter(
         JsonFormatter()
         if json_logs
-        else logging.Formatter("%(asctime)s %(levelname)-8s [%(request_id)s] %(name)s: %(message)s")
+        else SafeTextFormatter("%(asctime)s %(levelname)-8s [%(request_id)s] %(name)s: %(message)s")
     )
     root.addHandler(handler)
 

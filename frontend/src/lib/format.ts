@@ -19,13 +19,30 @@ export function formatMoney(value: Money | undefined, currency: string | null = 
 
 export function formatDate(value: string | null | undefined, withTime = false): string {
   if (!value) return "–";
-  const date = new Date(value);
+  const trimmed = value.trim();
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  const date = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(trimmed);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString(
     LOCALE_TAG[getActiveLocale()],
     withTime
       ? { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
       : { day: "2-digit", month: "2-digit", year: "numeric" },
+  );
+}
+
+/** Formatiert einen ISO-Zeitstempel strikt in UTC (für das GoBD-Prüfprotokoll). */
+export function formatDateUtc(value: string | null | undefined, withTime = true): string {
+  if (!value) return "–";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(
+    LOCALE_TAG[getActiveLocale()],
+    withTime
+      ? { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }
+      : { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" },
   );
 }
 
@@ -45,9 +62,10 @@ export function formatTime(value: string | null | undefined): string {
 }
 
 export function formatBytes(bytes: number): string {
+  const tag = LOCALE_TAG[getActiveLocale()];
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toLocaleString(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB`;
+  return `${(bytes / 1024 / 1024).toLocaleString(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 
 /** Restzeit: "noch 8 s" / "8s left" / "quedan 8 s". */

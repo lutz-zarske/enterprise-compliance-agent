@@ -1,4 +1,4 @@
-"""Revisionssicheres Audit-Zertifikat in drei Formaten (JSON, Markdown, HTML/A4).
+"""Revisionssicheres Audit-Zertifikat in vier Formaten (JSON, Markdown, HTML/A4, PDF).
 
 Der Bericht ist eine *Sicht* auf bereits gespeicherte, im Ledger verankerte
 Daten - er berechnet nichts neu.  Die Audit-ID ist die ``entry_id`` des
@@ -75,6 +75,24 @@ REFERENCE_NOTE_I18N: dict[str, str] = {
     "es": (
         "Auditoría de referencia (casos de ejemplo): la respuesta IA está precalculada. "
         "Puntuación, anonimización, escalado y cadena de hash proceden del motor determinista."
+    ),
+}
+
+HEURISTIC_NOTE = (
+    "Regelbasiertes Referenz-Audit – KI nicht verfügbar: Extraktion und Einstufung stammen aus der "
+    "deterministischen Heuristik (konservative Bewertung, ohne LLM-Inferenz). Mit erreichbarem Modell "
+    "über „Neu prüfen“ wiederholen."
+)
+
+HEURISTIC_NOTE_I18N: dict[str, str] = {
+    "de": HEURISTIC_NOTE,
+    "en": (
+        "Rule-based fallback audit – AI unavailable: extraction and classification come from deterministic "
+        "heuristics (conservative evaluation, no LLM inference). Re-run once a model is reachable."
+    ),
+    "es": (
+        "Auditoría basada en reglas – IA no disponible: la extracción y clasificación proceden de la "
+        "heurística determinista (evaluación conservadora, sin inferencia LLM). Repetir cuando un modelo esté disponible."
     ),
 }
 
@@ -483,7 +501,7 @@ def build_report(
     *,
     lang: str = "de",
 ) -> dict[str, Any]:
-    """Strukturierter Bericht (Grundlage aller drei Ausgabeformate)."""
+    """Strukturierter Bericht (Grundlage aller vier Ausgabeformate)."""
     t = _rt(lang)
     risk_labels = _RISK_LABELS_I18N.get(lang, _RISK_LABELS)
     event_labels = _EVENT_LABELS_I18N.get(lang, _EVENT_LABELS)
@@ -492,7 +510,11 @@ def build_report(
     scorecard = parse_scorecard(record)
     sign_off = parse_sign_off(record)
     einvoice = parse_einvoice(record)
-    analysis = next((e for e in entries if e.event_type == AuditEventType.ANALYSIS), None)
+    analysis = max(
+        (e for e in entries if e.event_type == AuditEventType.ANALYSIS),
+        key=lambda e: e.seq or 0,
+        default=None,
+    )
 
     tiles = {tile.key: tile for tile in scorecard.tiles} if scorecard else {}
     ai_level = compliance.ai_act.overall_risk_level.value if compliance else None
@@ -538,6 +560,7 @@ def build_report(
             "audited_at": compliance.audited_at.isoformat() if compliance else None,
             "reference_audit": record.provider == "reference",
             "structured": record.provider == STRUCTURED_PROVIDER,
+            "heuristic": bool(record.provider == "heuristic" or (compliance and compliance.heuristic)),
         },
         "einvoice": (
             {
@@ -642,6 +665,7 @@ def render_markdown(report: dict[str, Any], *, lang: str | None = None) -> str:
     visual_labels = _VISUAL_LABELS_I18N.get(lang, _VISUAL_LABELS)
     ref_note = REFERENCE_NOTE_I18N.get(lang, REFERENCE_NOTE)
     struct_note = STRUCTURED_NOTE_I18N.get(lang, STRUCTURED_NOTE)
+    heur_note = HEURISTIC_NOTE_I18N.get(lang, HEURISTIC_NOTE)
     score = report["score"] or {}
     doc = report["document"]
     lines = [
@@ -660,6 +684,8 @@ def render_markdown(report: dict[str, Any], *, lang: str | None = None) -> str:
         lines += [f"> {ref_note}", ""]
     if report["inference"].get("structured"):
         lines += [f"> {struct_note}", ""]
+    if report["inference"].get("heuristic"):
+        lines += [f"> {heur_note}", ""]
     if score.get("cap_applied"):
         lines += [f"> {score['cap_applied']}", ""]
 
@@ -734,8 +760,9 @@ def render_markdown(report: dict[str, Any], *, lang: str | None = None) -> str:
     sign = report["sign_off"]
     lines += ["", f"## {t['sign_h']}", ""]
     if sign:
+        sign_label = t["seal_approved"] if sign["status"] == "SEALED_APPROVED" else t["seal_rejected"]
         lines += [
-            f"**{sign['status']}** {t['by']} **{_md(sign['auditor_name'])}** {t['at']} {_fmt_ts(sign['sealed_at'])}  ",
+            f"**{sign_label}** {t['by']} **{_md(sign['auditor_name'])}** {t['at']} {_fmt_ts(sign['sealed_at'])}  ",
             f"{t['note']}: {_md(sign['note'])}  ",
             f"{t['seal_hash']}: `{sign['ledger_entry_hash']}`",
         ]
@@ -808,6 +835,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
     visual_labels = data["visual_labels"]
     ref_note = data["reference_note"]
     struct_note = data["structured_note"]
+    heur_note = data["heuristic_note"]
     tiles = data["tiles"]
     score = report["score"] or {}
     band = score.get("band", "red")
@@ -965,6 +993,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
 .red {{ color: #be123c; border-color: #fb7185; background: #fff1f2; }}
 .verdict {{ padding: 10px 12px; border-radius: 10px; font-weight: 600; font-size: 10.5pt; }}
 .verdict.ok {{ background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }}
+.verdict.warn {{ background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }}
 .verdict.bad {{ background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }}
 .glance {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }}
 .tile {{ padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }}
@@ -1002,11 +1031,12 @@ tr.ms td {{ background: #f5f7ff; }}
 <p class="lead">Audit-ID <span class="mono">{_e(report['audit_id'])}</span> · {_e(t['audit_time'])} {_e(_fmt_ts(audited))}</p>
 {f'<div class="refnote">{_e(ref_note)}</div>' if report['inference'].get('reference_audit') else ''}
 {f'<div class="refnote">{_e(struct_note)}</div>' if report['inference'].get('structured') else ''}
+{f'<div class="refnote">{_e(heur_note)}</div>' if report['inference'].get('heuristic') else ''}
 <div class="result keep">
   <div class="score {_e(band)}"><b>{_e(score.get('score', '–'))}</b><span class="of">{_e(lt['of_100'])}</span><span class="band">{_e(score.get('band_label'))}</span></div>
   <div>
     <div class="label">{_e(t['rec'])}</div>
-    <div class="verdict {'bad' if report['release_blocked'] else 'ok'}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
+    <div class="verdict {'bad' if report['release_blocked'] else ('warn' if band == 'amber' else 'ok')}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
     <div class="glance">{glance}</div>
   </div>
 </div>
@@ -1065,6 +1095,7 @@ def report_layout_data(report: dict[str, Any], lang: str | None = None) -> dict[
         "visual_labels": _VISUAL_LABELS_I18N.get(lang, _VISUAL_LABELS),
         "reference_note": REFERENCE_NOTE_I18N.get(lang, REFERENCE_NOTE),
         "structured_note": STRUCTURED_NOTE_I18N.get(lang, STRUCTURED_NOTE),
+        "heuristic_note": HEURISTIC_NOTE_I18N.get(lang, HEURISTIC_NOTE),
         "fmt_date": _fmt_date,
         "fmt_ts": _fmt_ts,
         "tiles": [

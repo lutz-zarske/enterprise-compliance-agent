@@ -147,6 +147,8 @@ class ChainVerification:
     verified_at: str = field(default_factory=lambda: utcnow().isoformat())
     #: Anzahl der Ed25519-signierten Prüfer-Einträge, die geprüft wurden.
     signed_entries: int = 0
+    #: Anzahl unsignierter Prüfer-Einträge (Altbestand oder entfernte Signatur).
+    unsigned_human_entries: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -226,6 +228,7 @@ class AuditLedger:
         expected_seq: int | None = None
         count = 0
         signed = 0
+        unsigned_human = 0
         with self._engine.connect() as connection:
             for row in connection.execute(statement):
                 entry = _row_to_entry(row)
@@ -235,28 +238,42 @@ class AuditLedger:
                         False, count, previous, entry.seq,
                         f"Lücke in der Sequenz: erwartet {expected_seq}, gefunden {entry.seq} "
                         "(Eintrag gelöscht).",
+                        signed_entries=signed,
+                        unsigned_human_entries=unsigned_human,
                     )
                 if entry.previous_hash != previous:
                     return ChainVerification(
                         False, count, previous, entry.seq,
                         "previous_hash passt nicht zum Vorgänger (Eintrag entfernt oder eingefügt).",
+                        signed_entries=signed,
+                        unsigned_human_entries=unsigned_human,
                     )
                 recomputed = compute_entry_hash(entry.hashed_content())
                 if recomputed != entry.entry_hash:
                     return ChainVerification(
                         False, count, previous, entry.seq,
                         "Inhalt verändert: neu berechneter Hash weicht vom gespeicherten ab.",
+                        signed_entries=signed,
+                        unsigned_human_entries=unsigned_human,
                     )
                 if entry.signature is not None:
                     ok, message = self.verify_entry_signature(entry)
                     if not ok:
                         return ChainVerification(
-                            False, count, previous, entry.seq, f"Prüfer-Signatur: {message}", signed_entries=signed
+                            False,
+                            count,
+                            previous,
+                            entry.seq,
+                            f"Prüfer-Signatur: {message}",
+                            signed_entries=signed,
+                            unsigned_human_entries=unsigned_human,
                         )
                     signed += 1
+                elif entry.event_type in AuditEventType.HUMAN:
+                    unsigned_human += 1
                 previous = entry.entry_hash
                 expected_seq = (entry.seq or 0) + 1
-        return ChainVerification(True, count, previous, signed_entries=signed)
+        return ChainVerification(True, count, previous, signed_entries=signed, unsigned_human_entries=unsigned_human)
 
     def verify_entry_signature(self, entry: LedgerEntry) -> tuple[bool, str]:
         """Prüft die Ed25519-Signatur eines Eintrags gegen den System-Schlüssel."""

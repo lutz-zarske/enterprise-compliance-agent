@@ -30,8 +30,11 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
+import unicodedata
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from app.audit_ledger import ChainVerification, LedgerEntry, compute_entry_hash
@@ -47,6 +50,31 @@ CERTIFICATE_PDF_FILE = "audit_certificate.pdf"
 PROCEDURAL_DOC_FILE = "verfahrensdokumentation.html"
 PROCEDURAL_DOC_PDF_FILE = "verfahrensdokumentation.pdf"
 MANIFEST_FILE = "manifest.json"
+
+_RESERVED_ARCHIVE_NAMES = frozenset(
+    {
+        LEDGER_FILE,
+        CERTIFICATE_FILE,
+        CERTIFICATE_PDF_FILE,
+        PROCEDURAL_DOC_FILE,
+        PROCEDURAL_DOC_PDF_FILE,
+        MANIFEST_FILE,
+    }
+)
+_UNSAFE_MEMBER_CHARS = re.compile(r"[^\w.\- ]+", re.UNICODE)
+
+
+def _safe_zip_member(raw_name: str) -> str:
+    """Sichert eingebettete Anhangsnamen gegen Zip Slip und Kollisionen mit Paketdateien."""
+    cleaned = unicodedata.normalize("NFKC", raw_name or "").strip()
+    cleaned = Path(cleaned.replace("\\", "/")).name
+    cleaned = _UNSAFE_MEMBER_CHARS.sub("_", cleaned).lstrip(".")
+    if not cleaned or cleaned in {".", ".."}:
+        cleaned = "einvoice.xml"
+    cleaned = cleaned[:160]
+    if cleaned.casefold() in _RESERVED_ARCHIVE_NAMES:
+        return f"xml/{cleaned}"
+    return cleaned
 
 
 def _sha256(data: bytes) -> str:
@@ -97,7 +125,8 @@ def build_gobd_package(
     ]
     if embedded_xml is not None:
         name, data = embedded_xml
-        files.append((name, data, "Eingebetteter E-Rechnungs-Datensatz (maßgeblich bei hybriden Rechnungen)"))
+        safe_xml = _safe_zip_member(name)
+        files.append((safe_xml, data, "Eingebetteter E-Rechnungs-Datensatz (maßgeblich bei hybriden Rechnungen)"))
     ledger = build_ledger_document(record, entries, verification)
     files.append((LEDGER_FILE, _json_bytes(ledger), "Prüfprotokoll des Dokuments mit SHA-256-Hash-Kette"))
     if certificate_pdf is not None:
@@ -145,7 +174,11 @@ def build_gobd_package(
             "band": scorecard.get("band"),
             "release_recommendation": scorecard.get("release_recommendation"),
             "ruleset_version": scorecard.get("ruleset_version"),
-            "einvoice_profile": (record.einvoice or {}).get("profile"),
+            "einvoice_profile": (
+                (record.einvoice or {}).get("profile")
+                if record.einvoice and not record.einvoice.get("error")
+                else None
+            ),
             "analysis_entry_hash": analysis.entry_hash if analysis else None,
             "sign_off": (
                 {
@@ -171,11 +204,12 @@ def build_gobd_package(
         "verification": [
             "1. SHA-256 jeder Datei mit files[].sha256 vergleichen (z. B. sha256sum / Get-FileHash).",
             "2. Signatur prüfen: Ed25519 über das kanonische JSON dieses Manifests ohne das Feld 'signature' "
-            "(sortierte Schlüssel, Trennzeichen ',' und ':', UTF-8).",
-            "3. Fingerabdruck des Schlüssels mit dem unabhängig hinterlegten System-Schlüssel vergleichen "
+            "(sortierte Schlüssel, Trennzeichen ',' und ':', UTF-8 ohne \\uXXXX-Escapes / ensure_ascii=False).",
+            "3. Fingerabdruck des Schlüssels (erste 128 Bit / 32 Hex-Zeichen von SHA-256 über den rohen "
+            "Ed25519-Public-Key in Vierergruppen) mit dem unabhängig hinterlegten System-Schlüssel vergleichen "
             "(GET /api/audit/signing-key) - ein im Paket enthaltener Schlüssel allein beweist nichts.",
             "4. ledger.head_hash mit einem extern verankerten Kopf-Hash abgleichen (GET /api/audit/head).",
-            "Werkzeug: python scripts/verify_pruefpaket.py <paket.zip> [--fingerprint <fp>]",
+            "Werkzeug (eigenständig ohne Backend-Installation): python scripts/verify_pruefpaket.py <paket.zip> [--fingerprint <fp>]",
         ],
         "legal_note": (
             "Prüfdatenpaket zur Nachvollziehbarkeit eines Einzelbelegs (GoBD Rz. 58 ff.). Kein Datenträger nach "
@@ -197,24 +231,54 @@ def build_gobd_package(
     return buffer.getvalue(), manifest
 
 
+def _is_unsafe_zip_path(path: str) -> bool:
+    if not path or "\\" in path or path.startswith("/"):
+        return True
+    parts = path.split("/")
+    return any(part in {"", ".", ".."} for part in parts)
+
+
 def verify_package(data: bytes, *, expected_fingerprint: str | None = None) -> dict[str, Any]:
-    """Prüft ein Paket vollständig: Datei-Hashes und Signatur des Manifests."""
+    """Prüft ein Paket vollständig: Pfadsicherheit, keine Duplikate, Datei-Hashes und Manifest-Signatur."""
     from app.signing import verify_signed_payload
 
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        raw_names = archive.namelist()
+        duplicates = sorted({name for name in raw_names if raw_names.count(name) > 1})
+        unsafe_paths = sorted({name for name in raw_names if _is_unsafe_zip_path(name)})
         manifest = json.loads(archive.read(MANIFEST_FILE))
-        names = set(archive.namelist())
+        names = set(raw_names)
         file_results = []
+        original_sha256_ok = True
+        doc_info = manifest.get("document") or {}
+        expected_doc_sha = doc_info.get("sha256")
+        expected_original_path = f"original/{doc_info.get('filename', '')}" if doc_info.get("filename") else None
         for item in manifest.get("files", []):
-            present = item["path"] in names
-            actual = _sha256(archive.read(item["path"])) if present else None
-            file_results.append({"path": item["path"], "ok": present and actual == item["sha256"]})
+            path = item["path"]
+            present = path in names and path not in duplicates and path not in unsafe_paths
+            actual = _sha256(archive.read(path)) if present else None
+            ok = present and actual == item["sha256"]
+            if expected_original_path and path == expected_original_path and expected_doc_sha:
+                if actual != expected_doc_sha:
+                    ok = False
+                    original_sha256_ok = False
+            file_results.append({"path": path, "ok": ok})
     signature_ok, signature_message = verify_signed_payload(manifest, expected_fingerprint=expected_fingerprint)
     unexpected = sorted(names - {item["path"] for item in manifest.get("files", [])} - {MANIFEST_FILE})
+    valid = (
+        signature_ok
+        and original_sha256_ok
+        and not duplicates
+        and not unsafe_paths
+        and all(result["ok"] for result in file_results)
+        and not unexpected
+    )
     return {
-        "valid": signature_ok and all(result["ok"] for result in file_results) and not unexpected,
+        "valid": valid,
         "signature": signature_message,
         "files": file_results,
         "unexpected_files": unexpected,
+        "duplicate_files": duplicates,
+        "unsafe_paths": unsafe_paths,
         "fingerprint": (manifest.get("signature") or {}).get("fingerprint"),
     }
