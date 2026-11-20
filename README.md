@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 499 pytest](https://img.shields.io/badge/pytest-499_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 540 pytest](https://img.shields.io/badge/pytest-540_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
 > Checks mandatory invoice details and arithmetic; it does not replace full
 > EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
-> FastAPI · Next.js 15 · 499 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 540 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -332,7 +332,8 @@ Musterdaten: gültige Rechnung 100, Steuerfalle 45, KI-Recruiting-Vertrag 59
 
 * **Lokal als Standard.** Im Modus `local` verlässt kein Dokumentinhalt den Rechner.
 * **Cloud nur mit Vault.** Jeder Cloud-Client ist vom `VaultedClient` umhüllt;
-  ersetzt werden Personen (mit Anrede oder Rolle), Firmen, IBAN, EU-USt-IdNr.,
+  ersetzt werden Personen (mit Anrede wie „Herr“, „Herrn“, „Frau“, „Familie“, auch mit Titel, oder mit Rolle wie
+  „Ansprechpartner“, „z. Hd.“, „zu Händen“), Firmen, IBAN, EU-USt-IdNr.,
   Steuernummer, 11-stellige Steuer-ID, Ausweis-/Passnummer, SV-Nr.,
   Geburtsdatum, E-Mail, Telefon, Adressen und Beträge. Das Mapping lebt nur im
   Speicher und nur für einen Auftrag.
@@ -443,12 +444,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 499 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 540 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-499 Tests (Stand v2.8.4) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+540 Tests (Stand v2.8.5) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.

@@ -133,7 +133,8 @@ _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
     (
         "PERSON",
         re.compile(
-            r"\b(?:Herr|Frau|Hr\.|Fr\.|Mr\.|Mrs\.|Ms\.|Sr\.|Sra\.)[ \t]+(?:(?:Dr\.|Prof\.)[ \t]+)*([A-ZÄÖÜ][a-zäöüß]+(?:[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+)?)"
+            r"\b(?:Herrn?|Frau|Familie|Hr\.|Fr\.|Mr\.|Mrs\.|Ms\.|Sr\.|Sra\.)[ \t]+(?:(?:Dr\.|Prof\.)[ \t]+)*"
+            r"([A-ZÄÖÜ][a-zäöüß]+(?:[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+)?)"
         ),
         1,
     ),
@@ -148,8 +149,11 @@ _RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
         "PERSON",
         re.compile(
             r"(?:Ansprechpartner(?:in)?|Kontaktperson|Bewerber(?:in)?|Mitarbeiter(?:in)?|"
-            r"Gesch(?:ä|ae)ftsf(?:ü|ue)hrer(?:in)?|Inhaber(?:in)?|Unterzeichner(?:in)?|z\.\s?Hd\.?|Name)"
-            r"[: \t]+([A-ZÄÖÜ][a-zäöüß]+[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+)"
+            r"Gesch(?:ä|ae)ftsf(?:ü|ue)hrer(?:in)?|Inhaber(?:in)?|Unterzeichner(?:in)?|z\.\s?Hd\.?|"
+            r"zu[ \t]+H(?:ä|ae)nden|Name)"
+            # Anrede und Titel nach der Rolle überspringen („z. Hd. Herrn Dr. Max Mustermann“).
+            r"[: \t]+(?:(?:Herrn?|Frau|Hr\.|Fr\.)[ \t]+)?(?:(?:Dr\.|Prof\.)[ \t]+)*"
+            r"([A-ZÄÖÜ][a-zäöüß]+[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+)"
         ),
         1,
     ),

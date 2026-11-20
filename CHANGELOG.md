@@ -3,6 +3,14 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.8.5 – 20.11.2026
+
+Privacy Gateway: Namen in Adresszeilen werden vollständig ersetzt – 540 Offline-Tests:
+
+- **„Herrn“ und „Familie“:** „Rechnung an Herrn Max Mustermann“ (auch mit Titel, z. B. „Herrn Prof. …“) und „Familie Mustermann“ blieben bisher im Klartext. Beide Formen werden jetzt wie „Herr“ und „Frau“ pseudonymisiert – vor jedem Cloud-Aufruf, in der PII-Markierung des Belegtexts und im DLP-Gateway.
+- **„z. Hd.“ und „zu Händen“:** Nach „z. Hd. Herrn Max Mustermann“ blieb der Nachname stehen, weil die Anrede als Vorname galt. Anrede und Titel nach der Rolle werden jetzt übersprungen; „zu Händen“ (auch „zu Haenden“) wird erkannt.
+- **Regressionstest:** `tests/test_vault_anreden.py` prüft 19 Schreibweisen – die neuen und alle, die schon vorher funktionierten (Herr, Frau, Hr., Fr., „Herrn Dr. …“, „Frau Prof. Dr. …“, „Sehr geehrter Herr …“, „Ansprechpartner: …“) – im Vault und im DLP-Gateway, dazu drei Texte ohne Person („Familienbetrieb“, „Produktfamilie“, „Herrnhuter“). DLP-Regelwerk `dlp-2026.2`.
+
 ## v2.8.4 – 19.11.2026
 
 Gegenproben ohne Sprachmodell und Praxistest mit 368 öffentlichen Testbelegen – 499 Offline-Tests:

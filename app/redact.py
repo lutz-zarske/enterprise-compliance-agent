@@ -36,7 +36,7 @@ from dataclasses import dataclass
 
 from app.privacy_vault import PrivacyVault
 
-RULESET_VERSION = "dlp-2026.1"
+RULESET_VERSION = "dlp-2026.2"
 CONFIDENTIAL = "[REDACTED_CONFIDENTIAL]"
 SECRET = "[REDACTED_SECRET]"
 

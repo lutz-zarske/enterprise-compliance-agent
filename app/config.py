@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Projektwurzel (…/enterprise-compliance-agent), unabhängig vom CWD.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-APP_VERSION = "2.8.4"
+APP_VERSION = "2.8.5"
 APP_TITLE = "Enterprise Compliance Agent"
 
 _LOOPBACK_HOST = re.compile(r"^(https?://)localhost(?=[:/]|$)", re.IGNORECASE)
