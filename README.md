@@ -153,11 +153,12 @@ Details zu Pipeline, Kaskade, Jobs und Ledger: [`docs/ARCHITECTURE.md`](docs/ARC
 Drei fokussierte Ansichten in der Kopfzeile; alle bleiben eingehängt, ein
 Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
 
-**Rundgang in 70 Sekunden** (Musterbeleg, ohne KI-Modell): Upload einer hybriden
-ZUGFeRD-Rechnung → Score mit Erklärung → Kerndaten und XML-Datensatz →
-Protokoll → Export mit Prüfbefehl → Freigabe und Siegel.
+**Rundgang in 30 Sekunden** (Musterdaten, verbrauchen kein KI-Kontingent):
+Musterdaten laden → Rechnung mit Steuerfalle (Score 45, Mängel, Revisionssperre
+mit Erklärung) → hybride ZUGFeRD-Rechnung (Score 100, XML-Datensatz) →
+Protokoll mit intakter Hash-Kette → Export-Dialog mit Prüfbefehl.
 
-![Rundgang: Upload einer ZUGFeRD-Rechnung, Score 100 mit Tooltip, Kerndaten und XML-Datensatz, Prüfprotokoll mit Kopf-Hash, Export-Dialog mit Prüfbefehl, Freigabe und Siegel](docs/screenshots/demo.gif)
+![Rundgang: Musterdaten laden, Rechnung mit Steuerfalle mit Score 45 und Tooltip zur Revisionssperre, ZUGFeRD-Rechnung mit Score 100 und XML-Datensatz, Prüfprotokoll mit intakter Hash-Kette, Export-Dialog mit Prüfbefehl](docs/screenshots/demo.gif)
 
 | Copilot | Protokoll |
 |---|---|
