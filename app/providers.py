@@ -141,7 +141,10 @@ class CloudLLMClient(StructuredLLMClient):
         if response.status_code == 404:
             raise LLMResponseError(f"{self.label}: Modell '{self._model}' nicht gefunden (HTTP 404).")
         if response.status_code in OVERLOAD_STATUS or response.status_code >= 500:
-            raise ProviderUnavailableError(overload_message(self.label, response.status_code))
+            message = overload_message(self.label, response.status_code)
+            if response.status_code == 429 and self.quota_reset_hint:
+                message = f"{message} {self.quota_reset_hint}"
+            raise ProviderUnavailableError(message)
         if response.status_code >= 400:
             # Provider-Fehlertexte können Prompt-Auszüge enthalten -> nur im Serverlog, nicht nach außen.
             logger.warning("%s HTTP %s: %s", self.label, response.status_code, response.text[:300])
@@ -150,6 +153,9 @@ class CloudLLMClient(StructuredLLMClient):
             return response.json()
         except ValueError as exc:
             raise LLMResponseError(f"{self.label} lieferte kein JSON.") from exc
+
+    #: Ergänzung zu HTTP 429, wann ein erschöpftes Tageskontingent wieder frei ist (je Anbieter).
+    quota_reset_hint: str | None = None
 
     async def test_connection(self) -> str:
         """Leichter Erreichbarkeits-/Auth-Test ohne Dokumentinhalt."""
@@ -171,6 +177,7 @@ class GeminiClient(CloudLLMClient):
 
     provider = "gemini"
     label = "Google Gemini"
+    quota_reset_hint = "Tageskontingente setzt Google um Mitternacht pazifischer Zeit zurück (9:00 Uhr MEZ bzw. MESZ)."
 
     async def _post_chat(self, messages: list[dict[str, str]], *, json_mode: bool = True) -> str:
         system, rest = _split_system(messages)
@@ -206,17 +213,11 @@ class GeminiClient(CloudLLMClient):
             ) from exc
 
     async def test_connection(self) -> str:
+        # Wie bei Anthropic/OpenAI nur die Modell-Metadaten abrufen: prüft Schlüssel und Modellnamen,
+        # erzeugt nichts und verbraucht kein Kontingent (gemessen 0,04–0,08 s; ein Generierungs-Ping
+        # lief dagegen bei Gratis-Schlüsseln häufig in 429/503 und kostete jedes Mal eine Anfrage).
         encoded_model = quote(self._model, safe="._-:")
-        await self._send(
-            "POST",
-            f"{self._base_url}/models/{encoded_model}:generateContent",
-            headers={"x-goog-api-key": self._api_key},
-            json={
-                "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
-                "generationConfig": {"maxOutputTokens": 1, "temperature": 0.0},
-            },
-            timeout=12.0,
-        )
+        await self._send("GET", f"{self._base_url}/models/{encoded_model}", headers={"x-goog-api-key": self._api_key}, timeout=12.0)
         return f"{self.label} erreichbar, Modell {self._model} verfügbar."
 
     async def fetch_catalog(self) -> dict[str, Any]:

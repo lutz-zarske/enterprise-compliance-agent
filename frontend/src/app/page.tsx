@@ -19,6 +19,7 @@ import { Scorecard } from "../components/Scorecard";
 import { prefetchModelCatalog, SettingsModal } from "../components/SettingsModal";
 import { SealModal } from "../components/SignOffPanel";
 import { meldeBereit } from "../components/SplashAbbau";
+import { documentStatusHint, referenceAuditHint, rulesOnlyHint } from "../lib/hints";
 import { EmptyState, HashBadge, isModEnter, isTypingTarget, Skeleton, Spinner, Toaster, Tooltip, useToasts } from "../components/ui";
 import { api, ApiError, fetchHealth } from "../lib/api";
 import { cx, formatBytes, formatDate, formatModel, providerDisplayName, providerLabel } from "../lib/format";
@@ -632,39 +633,40 @@ export default function DashboardPage() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <h2 className="truncate text-sm font-semibold text-fg">{detail.filename}</h2>
-                            <span
-                              className={cx(
-                                "chip",
-                                detail.status === "failed"
-                                  ? "border-bad-line bg-bad-soft text-bad"
-                                  : detail.sign_off && !activeJob
-                                    ? "border-ok-line bg-ok-soft text-ok"
-                                    : "border-line bg-surface-2 text-muted",
+                            <Tooltip
+                              content={documentStatusHint(
+                                activeJob ? "processing" : detail.sign_off && detail.status === "extracted" ? "sealed" : detail.status,
                               )}
                             >
-                              {activeJob
-                                ? statusLabels.processing
-                                : detail.sign_off && detail.status === "extracted"
-                                  ? tr("Versiegelt", "Sealed", "Sellado")
-                                  : statusLabels[detail.status] ?? detail.status}
-                            </span>
-                            {isReference && (
-                              <Tooltip
-                                content={tr(
-                                  "Musterdaten: Die KI-Antwort ist vorberechnet und gekennzeichnet. Score, Maskierung, Eskalationsregeln und Hash-Kette stammen aus dem regulären Regelwerk.",
-                                  "Sample case: AI output is precomputed and badged. Score, PII masking, escalation rules and hash chain come from the regular ruleset.",
-                                  "Caso de ejemplo: respuesta de IA precalculada. Puntuación, enmascaramiento y cadena de hash proceden del reglamento.",
+                              <span
+                                tabIndex={0}
+                                className={cx(
+                                  "chip cursor-help",
+                                  detail.status === "failed"
+                                    ? "border-bad-line bg-bad-soft text-bad"
+                                    : detail.sign_off && !activeJob
+                                      ? "border-ok-line bg-ok-soft text-ok"
+                                      : "border-line bg-surface-2 text-muted",
                                 )}
                               >
+                                {activeJob
+                                  ? statusLabels.processing
+                                  : detail.sign_off && detail.status === "extracted"
+                                    ? tr("Versiegelt", "Sealed", "Sellado")
+                                    : statusLabels[detail.status] ?? detail.status}
+                              </span>
+                            </Tooltip>
+                            {isReference && (
+                              <Tooltip content={referenceAuditHint()}>
                                 <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">{tr("Referenz-Audit · ohne KI", "Reference audit · offline", "Auditoría de referencia · sin IA")}</span>
                               </Tooltip>
                             )}
                             {detail.provider === "structured" && (
                               <Tooltip
                                 content={tr(
-                                  "Die Rechnungsdaten stammen deterministisch aus dem EN-16931-Datensatz. Bei hybriden Rechnungen ist der XML-Teil maßgeblich (BMF-Schreiben vom 15.10.2024, Rz. 36).",
-                                  "Invoice data is parsed deterministically from EN 16931 XML. In hybrid invoices the XML dataset prevails (BMF 15 Oct 2024, para. 36).",
-                                  "Datos extraídos de forma determinista del XML EN 16931. En facturas híbridas prevalece el XML.",
+                                  "Die Rechnungsdaten stammen direkt aus dem XML-Datensatz, ganz ohne KI. Bei Hybrid-Rechnungen (ZUGFeRD) gilt das XML vor dem PDF-Bild.",
+                                  "The invoice data comes straight from the XML dataset, without any AI. In hybrid invoices (ZUGFeRD) the XML prevails over the PDF image.",
+                                  "Los datos de la factura proceden directamente del conjunto XML, sin IA. En facturas híbridas (ZUGFeRD) prevalece el XML sobre la imagen PDF.",
                                 )}
                               >
                                 <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">{tr("XML-Prüfung · ohne KI", "XML audit · offline", "Auditoría XML · sin IA")}</span>
@@ -672,11 +674,12 @@ export default function DashboardPage() {
                             )}
                             {isHeuristic && (
                               <Tooltip
-                                content={tr(
-                                  `Regelbasiertes Referenz-Audit – KI nicht verfügbar. ${td(detail.compliance?.fallback_reason)} Felder per Mustererkennung, Einstufung konservativ; im Ledger gekennzeichnet. Mit erreichbarem Modell über „Neu prüfen“ wiederholen.`,
-                                  `Rule-based audit – AI unavailable. ${td(detail.compliance?.fallback_reason)} Fields extracted deterministically, conservative classification; logged in ledger. Re-run once a model is reachable.`,
-                                  `Auditoría por reglas – IA no disponible. ${td(detail.compliance?.fallback_reason)} Campos extraídos por reglas, clasificación conservadora.`,
-                                )}
+                                content={
+                                  <>
+                                    <span className="block">{rulesOnlyHint()}</span>
+                                    {detail.compliance?.fallback_reason && <span className="mt-1 block text-subtle">{td(detail.compliance.fallback_reason)}</span>}
+                                  </>
+                                }
                               >
                                 <span tabIndex={0} className="chip cursor-help border-warn-line bg-warn-soft text-warn">{tr("Regelwerk-Audit · KI nicht verfügbar", "Rules audit · AI unavailable", "Auditoría por reglas · IA no disponible")}</span>
                               </Tooltip>
@@ -781,8 +784,6 @@ export default function DashboardPage() {
               onRefreshLedger={async () => {
                 setLedger(await api.verifyLedger().catch(() => null));
               }}
-              onOpenExport={() => setExportOpen(true)}
-              notify={notify}
             />
           </div>
         </main>

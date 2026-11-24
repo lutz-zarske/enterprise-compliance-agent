@@ -54,7 +54,7 @@ class FakeGemini:
         model = request.url.path.rsplit("/", 1)[-1].split(":")[0]
         key = request.headers.get("x-goog-api-key", "")
         body = json.loads(request.content) if request.content else {}
-        self.calls.append({"model": model, "key": key, "body": body})
+        self.calls.append({"model": model, "key": key, "body": body, "method": request.method})
         if key in self.status_by_key:
             return httpx.Response(self.status_by_key[key], json={"error": {"message": "nope"}})
         queue = self.status_by_model.get(model)
@@ -556,17 +556,34 @@ def test_copilot_cancel_beendet_laufende_anfrage_und_meldet_status(
     assert status["current"] == "Abgebrochen"
 
 
-def test_gemini_verbindungstest_erkennt_503_ueberlast(
+def test_gemini_verbindungstest_ohne_generierung(
     make_full_client: Callable[..., TestClient], fake_gemini: FakeGemini
 ) -> None:
-    """Ein 200 auf GET /models reicht nicht: bei 503 auf :generateContent meldet der Test Fehler."""
+    """Der Test liest nur die Modell-Metadaten (GET models/{model}) - kein generateContent, kein Kontingent."""
+    client = _gemini_client(make_full_client, fake_gemini)
+    result = client.post("/api/settings/test-connection", json={"provider": "gemini"}).json()
+    assert result["ok"] is True
+    assert [(call["method"], call["model"]) for call in fake_gemini.calls] == [("GET", "gemini-3.8-flash")]
+    assert fake_gemini.calls[0]["body"] == {}
+
+
+def test_gemini_verbindungstest_meldet_503_und_429_mit_tagesreset(
+    make_full_client: Callable[..., TestClient], fake_gemini: FakeGemini
+) -> None:
     fake_gemini.status_by_model["gemini-3.8-flash"] = [503]
     client = _gemini_client(make_full_client, fake_gemini)
     result = client.post("/api/settings/test-connection", json={"provider": "gemini"}).json()
     assert result["ok"] is False
     assert result["code"] == "provider_unavailable"
     assert "503" in result["message"]
-    assert fake_gemini.calls[0]["body"]["generationConfig"]["maxOutputTokens"] == 1
+    assert "Mitternacht" not in result["message"]
+
+    fake_gemini.status_by_model["gemini-3.8-flash"] = [429]
+    client.post("/api/settings", json={"api_keys": {"gemini": "AIza-dritter-key-456789"}})
+    result = client.post("/api/settings/test-connection", json={"provider": "gemini"}).json()
+    assert result["ok"] is False
+    assert "HTTP 429" in result["message"]
+    assert "Mitternacht pazifischer Zeit zurück (9:00 Uhr MEZ bzw. MESZ)" in result["message"]
 
 
 def test_verbindungstest_mehrfachklick_pingt_nur_einmal(

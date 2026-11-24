@@ -3,6 +3,18 @@
 Wesentliche Änderungen je Version (Versionierung nach [SemVer](https://semver.org/lang/de/)).
 Details zu Aufbau und Entscheidungen: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+## v2.8.6 – 24.11.2026
+
+Feinschliff ohne neue Funktionen – 545 Offline-Tests:
+
+- **Protokoll ohne leeres Scrollen:** Kopierknöpfe enthalten unsichtbare Texte für Screenreader; in langen Tabellen verlängerten sie die Seite um mehrere hundert Pixel ins Leere (1920 × 945: 1.660 statt 983 px). Scrollbereiche und Kopierknöpfe sind jetzt positioniert; ein Regressionstest sichert das ab.
+- **Protokoll aufgeräumt:** Die Box „Exporte“ entfällt, rechts steht nur noch das Regelwerk. Der Befehl zur unabhängigen Prüfung des GoBD-Prüfdatenpakets steht jetzt im Export-Dialog im ⓘ – mit dem echten Schlüssel-Fingerabdruck und Kopierknopf.
+- **Tooltips in Alltagssprache:** Ampel-Etiketten wie „Revisionssperre“, Belegstatus („Geprüft“, „Versiegelt“), Prüfpunkt-Status („Mangel“), Punktabzüge, „Aufbewahren bis“, Maskierung, E-Rechnung, Risikostufen des EU AI Act, „GoBD & Ledger intakt“, Kopf-Hash, Schlüssel-Fingerabdruck, Modellanzeige und Kennzahlen erklären sich in höchstens zwei Sätzen – über eine einheitliche Komponente, auch per Tastatur erreichbar, in Deutsch, Englisch und Spanisch. Einstellungen › Compliance zeigt die Erklärung jeder Maskierungsstufe beim Überfahren.
+- **Prüfzertifikat:** Beschreibt der Beleg kein KI-System, entfällt der nummerierte Abschnitt „EU AI Act“; auf Seite 1 steht stattdessen „EU AI Act: nicht einschlägig – der Beleg beschreibt kein KI-System im Sinne von Art. 3 Nr. 1 KI-VO.“ Die Nummerierung bleibt fortlaufend (PDF, HTML, Markdown).
+- **Gemini-Verbindungstest ohne Kontingent:** Der Test liest wie bei Claude und OpenAI nur die Modelldaten, statt eine Antwort zu erzeugen – gemessen 0,04–0,08 s, kein Verbrauch des Tageskontingents. Bei HTTP 429 nennt die Meldung, wann Google die Tageskontingente zurücksetzt (Mitternacht pazifischer Zeit, 9:00 Uhr MEZ bzw. MESZ). Die Ausweich-Kaskade ist unverändert.
+- **Windows-Starter:** prüft vor dem Anlegen der Python-Umgebung auf Python 3.11+ und erkennt den Windows-Store-Platzhalter `python.exe` mit klarer Meldung; installiert auch die Testpakete (`requirements-dev.txt`), sodass `pytest -q` sofort läuft. Probelauf in einem frischen Klon unter einem Pfad mit Leerzeichen: Start, Musterdaten, Prüfpaket-Export mit Offline-Prüfung, alle Tests und Stopp ohne Warnung.
+- **Übersetzungen und Doku:** fehlende englische und spanische Texte ergänzt („MwSt. korrekt berechnet“, Begründung des Regelwerk-Audits im EU-AI-Act-Reiter). README mit Rundgang als GIF (70 s), aktuellem Protokoll-Screenshot und vollständiger Projektstruktur; `data/*.pdf` und `data/*.xml` sind von Git ausgenommen.
+
 ## v2.8.5 – 20.11.2026
 
 Privacy Gateway: Namen in Adresszeilen werden vollständig ersetzt – 540 Offline-Tests:

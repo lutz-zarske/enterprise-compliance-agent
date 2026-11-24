@@ -572,6 +572,7 @@ def render_report_pdf(report: dict[str, Any], *, lang: str | None = None) -> byt
     doc_info = report["document"]
     sign = report["sign_off"]
     ai = report["ai_act"]
+    ai_applicable = bool(ai.get("applicable", ai.get("risk_level") != "not_applicable"))
     audited = report["inference"].get("audited_at") or report["ledger"].get("timestamp_utc")
 
     story: list[Any] = [
@@ -605,6 +606,10 @@ def render_report_pdf(report: dict[str, Any], *, lang: str | None = None) -> byt
             st=st,
         ),
         Spacer(1, 4.5 * mm),
+    ]
+    if not ai_applicable:
+        story += [Paragraph(_xml(t["ai_not_applicable"]), st["small"]), Spacer(1, 3 * mm)]
+    story += [
         _SealBox(sign=sign, t=t, fmt_ts=fmt_ts, st=st),
         Spacer(1, 5.5 * mm),
     ]
@@ -745,25 +750,27 @@ def render_report_pdf(report: dict[str, Any], *, lang: str | None = None) -> byt
             story.append(Spacer(1, 2 * mm))
         sec_no += 1
 
-    ai_parts: list[Any] = [
-        _section_heading(sec_no, t["ai_h"], st),
-        Spacer(1, 1.5 * mm),
-        Paragraph(
-            f"<b>{_xml(ai['risk_label'])}</b>{(' · ' + _xml(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}",
-            st["body"],
-        ),
-    ]
-    if ai.get("reasoning"):
-        ai_parts += [Spacer(1, 1 * mm), Paragraph(_xml(ai["reasoning"]), st["small"])]
-    if ai["article_references"]:
-        ai_parts += [Spacer(1, 1 * mm), Paragraph(f"{_xml(t['articles_html'])}: {_xml(', '.join(ai['article_references']))}", st["small"])]
-    for chk in ai["checks"]:
-        if chk.get("note"):
-            ai_parts.append(Paragraph(_xml(chk["note"]), st["small"]))
-        if chk.get("risk_note"):
-            ai_parts.append(Paragraph(_xml(chk["risk_note"]), st["risk"]))
-    story += [KeepTogether(ai_parts), Spacer(1, 5 * mm)]
-    sec_no += 1
+    # Ohne beschriebenes KI-System kein nummerierter Abschnitt (Zeile im Überblick auf Seite 1).
+    if ai_applicable:
+        ai_parts: list[Any] = [
+            _section_heading(sec_no, t["ai_h"], st),
+            Spacer(1, 1.5 * mm),
+            Paragraph(
+                f"<b>{_xml(ai['risk_label'])}</b>{(' · ' + _xml(', '.join(ai['annex_iii']))) if ai['annex_iii'] else ''}",
+                st["body"],
+            ),
+        ]
+        if ai.get("reasoning"):
+            ai_parts += [Spacer(1, 1 * mm), Paragraph(_xml(ai["reasoning"]), st["small"])]
+        if ai["article_references"]:
+            ai_parts += [Spacer(1, 1 * mm), Paragraph(f"{_xml(t['articles_html'])}: {_xml(', '.join(ai['article_references']))}", st["small"])]
+        for chk in ai["checks"]:
+            if chk.get("note"):
+                ai_parts.append(Paragraph(_xml(chk["note"]), st["small"]))
+            if chk.get("risk_note"):
+                ai_parts.append(Paragraph(_xml(chk["risk_note"]), st["risk"]))
+        story += [KeepTogether(ai_parts), Spacer(1, 5 * mm)]
+        sec_no += 1
 
     story += [_section_heading(sec_no, t["math_h"], st), check_table(report["math_checks"], t["col_check"]), Spacer(1, 5 * mm)]
     sec_no += 1

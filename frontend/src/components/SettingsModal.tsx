@@ -1043,7 +1043,7 @@ function ComplianceSection({ settings, onSaved, notify }: { settings: RuntimeSet
           value={settings.pii_strictness}
           onChange={(value) => void save({ pii_strictness: value })}
           disabled={saving}
-          options={strictnessOptions.map(({ value, label }) => ({ value, label }))}
+          options={strictnessOptions.map(({ value, label, text }) => ({ value, label, tooltip: text }))}
         />
         <p className="mt-2 text-xs text-muted">{strictnessOptions.find((s) => s.value === settings.pii_strictness)?.text}</p>
         <p className="mt-1 text-xs text-subtle">

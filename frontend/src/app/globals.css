@@ -418,6 +418,9 @@ body {
    * (scrollbar-gutter), damit er nie Badges, Haken oder Text überdeckt.
    */
   .scroll-area {
+    /* Positioniert: absolut gesetzte Kinder (z. B. sr-only-Texte in Kopierknöpfen) bleiben im
+       Scrollbereich, statt sich am <body> zu orientieren und die Seite nach unten zu verlängern. */
+    position: relative;
     overflow-y: auto;
     scrollbar-gutter: stable;
   }

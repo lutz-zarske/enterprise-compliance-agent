@@ -2,10 +2,11 @@
 
 import React from "react";
 import type { Scorecard as ScorecardType, ScoreTile } from "../types/api";
-import { cx, formatDate, presentedBand, TONE_CLASSES, TONE_TEXT, toneForBand, toneForStatus, verdictTone } from "../lib/format";
+import { cx, formatDate, presentedBand, TONE_TEXT, toneForBand, toneForStatus, verdictTone } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { Clock, Lock, Scale } from "./icons";
-import { StatusIcon, Tooltip } from "./ui";
+import { bandHint, documentStatusHint, referenceAuditHint, smallInvoiceHint } from "../lib/hints";
+import { Chip, StatusIcon, Tooltip } from "./ui";
 
 const RING_COLORS = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--bad)", neutral: "var(--fg-subtle)" } as const;
 
@@ -70,23 +71,18 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
           </h2>
           {scorecard.cap_applied && <p className="mt-1 text-sm text-warn">{td(scorecard.cap_applied)}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className={cx("chip", TONE_CLASSES[tone])}>{td(verdict.label)}</span>
+            <Chip tone={tone} hint={bandHint(verdict.label)}>{td(verdict.label)}</Chip>
             {sealed && (
-              <span className="chip border-ok-line bg-ok-soft text-ok">
+              <Chip tone="ok" hint={documentStatusHint("sealed")}>
                 <Lock size={11} aria-hidden="true" /> {tr("Versiegelt", "Sealed", "Sellado")}
-              </span>
+              </Chip>
             )}
             {reference && (
-              <span
-                className="chip border-line bg-surface-2 text-muted"
-                title={tr(
-                  "Die KI-Antwort ist vorberechnet; Score, Maskierung und Hash-Kette stammen aus dem Regelwerk.",
-                  "AI response is precomputed; score, redaction and hash chain come from the deterministic rule engine.",
-                  "La respuesta de IA está precalculada; puntuación, anonimización y cadena de hash proceden del motor de reglas.",
-                )}
-              >
-                {tr("Referenz-Audit · ohne KI", "Reference audit · offline rules", "Auditoría de referencia · sin IA")}
-              </span>
+              <Tooltip content={referenceAuditHint()}>
+                <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 text-muted">
+                  {tr("Referenz-Audit · ohne KI", "Reference audit · offline rules", "Auditoría de referencia · sin IA")}
+                </span>
+              </Tooltip>
             )}
             {scorecard.human_override && (
               <Tooltip
@@ -99,39 +95,11 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
             )}
             {scorecard.retention && (
               <Tooltip
-                content={
-                  <>
-                    <span className="block font-semibold">{tr("Aufbewahrung nach BEG IV", "Retention under BEG IV", "Conservación según BEG IV")}</span>
-                    <span className="block">
-                      {tr(
-                        `Rechnungen und Buchungsbelege ${scorecard.retention.years} Jahre (${scorecard.retention.basis}).`,
-                        `Invoices and accounting records: ${scorecard.retention.years} years (${scorecard.retention.basis}).`,
-                        `Facturas y justificantes contables: ${scorecard.retention.years} años (${scorecard.retention.basis}).`,
-                      )}
-                    </span>
-                    <span className="block">
-                      {tr(
-                        `Kreditinstitute, Versicherungen, Wertpapierinstitute: 10 Jahre (bis ${formatDate(scorecard.retention.financial_sector_until)}).`,
-                        `Banks, insurers, investment firms: 10 years (until ${formatDate(scorecard.retention.financial_sector_until)}).`,
-                        `Bancos, aseguradoras y empresas de inversión: 10 años (hasta el ${formatDate(scorecard.retention.financial_sector_until)}).`,
-                      )}
-                    </span>
-                    <span className="block">
-                      {tr(
-                        "Handelsbücher, Jahresabschlüsse und Verfahrensdokumentation: 10 Jahre (§ 147 Abs. 1 Nr. 1 AO).",
-                        "Ledgers, annual accounts and procedural documentation: 10 years (§ 147(1) No. 1 AO).",
-                        "Libros contables, cuentas anuales y documentación de procedimientos: 10 años (§ 147(1) n.º 1 AO).",
-                      )}
-                    </span>
-                    <span className="mt-1 block text-subtle">
-                      {tr(
-                        "Frist ab Schluss des Belegjahres (§ 147 Abs. 4 AO), Ablaufhemmung nach § 147 Abs. 3 Satz 5 AO.",
-                        "Starts at end of invoice fiscal year (§ 147(4) AO); suspension rules under § 147(3) sentence 5 AO apply.",
-                        "Plazo desde el cierre del ejercicio (§ 147(4) AO); se aplica suspensión según § 147(3) frase 5 AO.",
-                      )}
-                    </span>
-                  </>
-                }
+                content={tr(
+                  `So lange muss der Beleg aufbewahrt werden: ${scorecard.retention.years} Jahre ab Ende des Belegjahres (${scorecard.retention.basis}). Banken und Versicherungen bewahren 10 Jahre auf, also bis ${formatDate(scorecard.retention.financial_sector_until)}.`,
+                  `Keep the document until this date: ${scorecard.retention.years} years from the end of its year (${scorecard.retention.basis}). Banks and insurers keep it for 10 years, i.e. until ${formatDate(scorecard.retention.financial_sector_until)}.`,
+                  `Conserve el documento hasta esta fecha: ${scorecard.retention.years} años desde el cierre de su ejercicio (${scorecard.retention.basis}). Bancos y aseguradoras lo conservan 10 años, es decir, hasta el ${formatDate(scorecard.retention.financial_sector_until)}.`,
+                )}
               >
                 <span tabIndex={0} className="chip cursor-help border-line bg-surface-2 tabular-nums text-muted">
                   <Clock size={11} aria-hidden="true" /> {tr("Aufbewahren bis", "Retain until", "Conservar hasta")} {formatDate(scorecard.retention.until)}
@@ -140,7 +108,16 @@ export function Scorecard({ scorecard, sealed, reference, onOpenTile }: Props) {
             )}
             <span className="text-xs tabular-nums text-subtle">
               {tr("Regelwerk", "Ruleset", "Reglamento")} {scorecard.ruleset_version}
-              {scorecard.small_amount_invoice && tr(" · Kleinbetragsrechnung (§ 33 UStDV)", " · Small-amount invoice (§ 33 UStDV)", " · Factura simplificada (§ 33 UStDV)")}
+              {scorecard.small_amount_invoice && (
+                <>
+                  {" · "}
+                  <Tooltip content={smallInvoiceHint()} inline>
+                    <span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-2">
+                      {tr("Kleinbetragsrechnung (§ 33 UStDV)", "Small-amount invoice (§ 33 UStDV)", "Factura simplificada (§ 33 UStDV)")}
+                    </span>
+                  </Tooltip>
+                </>
+              )}
               {scorecard.structured_einvoice_detected && tr(" · E-Rechnung (XML) erkannt", " · E-Invoice (XML) detected", " · Factura electrónica (XML) detectada")}
             </span>
           </div>

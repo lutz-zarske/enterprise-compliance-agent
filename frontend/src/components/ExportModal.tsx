@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api, ApiError, downloadBlob } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import type { DocumentDetail } from "../types/api";
 import { BookOpen, Copy, Download, Package, Stamp } from "./icons";
 import { SignOffPanel } from "./SignOffPanel";
-import { Modal, Spinner } from "./ui";
+import { InfoPopover, Modal, Spinner } from "./ui";
 
 interface Props {
   document: DocumentDetail | null;
@@ -16,9 +16,11 @@ interface Props {
   notify: (tone: "ok" | "bad" | "info", title: string, message?: string) => void;
 }
 
-function Option({ icon, title, text, action, busy, onClick, disabled, secondary }: {
+function Option({ icon, title, info, text, action, busy, onClick, disabled, secondary }: {
   icon: React.ReactNode;
   title: string;
+  /** Optionales ⓘ neben dem Titel. */
+  info?: React.ReactNode;
   text: string;
   action: string;
   busy: boolean;
@@ -31,7 +33,7 @@ function Option({ icon, title, text, action, busy, onClick, disabled, secondary 
     <div className="flex items-center gap-3 rounded-lg border border-line p-3">
       <div className="rounded-lg border border-line bg-surface-2 p-2 text-accent">{icon}</div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-fg">{title}</p>
+        <p className="flex items-center gap-1 text-sm font-medium text-fg">{title}{info}</p>
         <p className="text-xs text-subtle">{text}</p>
       </div>
       <div className="flex shrink-0 gap-2">
@@ -53,6 +55,13 @@ function Option({ icon, title, text, action, busy, onClick, disabled, secondary 
 export function ExportModal({ document, open, onClose, onSealed, notify }: Props) {
   const { tr } = useI18n();
   const [busy, setBusy] = useState<string | null>(null);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+
+  // Fingerabdruck des Systemschlüssels für den Prüfbefehl im ⓘ des Prüfdatenpakets.
+  useEffect(() => {
+    if (!open || fingerprint) return;
+    api.signingKey().then((key) => setFingerprint(key.fingerprint)).catch(() => undefined);
+  }, [open, fingerprint]);
 
   if (!document) return null;
   const analyzed = Boolean(document.scorecard);
@@ -104,6 +113,18 @@ export function ExportModal({ document, open, onClose, onSealed, notify }: Props
         <Option
           icon={<Package size={16} />}
           title={tr("GoBD-Prüfdatenpaket exportieren (ZIP)", "Export GoBD Audit Data Package (ZIP)", "Exportar paquete de auditoría GoBD (ZIP)")}
+          info={
+            <InfoPopover
+              label={tr("Prüfdatenpaket unabhängig prüfen", "Verify the audit package independently", "Verificar el paquete de forma independiente")}
+              command={`python scripts/verify_pruefpaket.py ${tr("<paket.zip>", "<package.zip>", "<paquete.zip>")} --fingerprint ${fingerprint ?? tr("<Fingerabdruck>", "<fingerprint>", "<huella>")}`}
+            >
+              {tr(
+                "Ein Prüfer kann das Paket ohne diese App mit dem mitgelieferten Skript unabhängig prüfen.",
+                "An auditor can verify the package independently of this app using the bundled script.",
+                "Un auditor puede verificar el paquete sin esta aplicación con el script incluido.",
+              )}
+            </InfoPopover>
+          }
           text={tr(
             `Originalbeleg${document.einvoice && !document.einvoice.error ? ", XML-Datensatz" : ""}, Ledger-Auszug, A4-Zertifikat (PDF/HTML) und Manifest mit SHA-256 und Ed25519-Systemsignatur.`,
             `Original document${document.einvoice && !document.einvoice.error ? ", XML dataset" : ""}, ledger excerpt, A4 certificate (PDF/HTML) and manifest with SHA-256 and Ed25519 system signature.`,

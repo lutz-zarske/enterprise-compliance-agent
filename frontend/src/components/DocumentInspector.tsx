@@ -54,6 +54,7 @@ import {
   Link,
   Stamp,
 } from "./icons";
+import { checkStatusHint, einvoiceHint, maskingHint } from "../lib/hints";
 import { Chip, CopyValue, EmptyState, HashBadge, Kbd, Spinner, StatusIcon, Tabs, Tooltip, useModifierLabel } from "./ui";
 
 export type InspectorTab = "ustg" | "aiact" | "pii" | "facts" | "xml";
@@ -277,9 +278,16 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="text-sm font-medium text-fg">{label}</span>
           {check.deduction > 0 && (
-            <Tooltip content={riskText}>
+            <Tooltip
+              content={
+                <>
+                  <span className="block font-semibold">{tr(`${check.deduction} Punkte Abzug`, `${check.deduction} points deducted`, `${check.deduction} puntos de deducción`)}</span>
+                  {riskText && <span className="block">{riskText}</span>}
+                </>
+              }
+            >
               <span
-                tabIndex={riskText ? 0 : undefined}
+                tabIndex={0}
                 className="cursor-help rounded text-xs tabular-nums text-bad underline decoration-dotted underline-offset-2"
                 aria-label={tr(`Abzug ${check.deduction} Punkte${riskText ? `: ${riskText}` : ""}`, `Deduction ${check.deduction} pts${riskText ? `: ${riskText}` : ""}`, `Deducción ${check.deduction} pts${riskText ? `: ${riskText}` : ""}`)}
               >
@@ -298,11 +306,11 @@ function CheckRow({ check, children }: { check: ScoreCheck; children?: React.Rea
         {children}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        <Chip tone={toneForStatus(check.status)}>{checkStatusLabel(check.status)}</Chip>
+        <Chip tone={toneForStatus(check.status)} hint={checkStatusHint(check.status)}>{checkStatusLabel(check.status)}</Chip>
         {check.evidence_source && (
-          <span className="text-xs text-subtle" title={`${tr("Herkunft des Nachweises:", "Evidence source:", "Origen de la evidencia:")} ${sources.long[check.evidence_source]}`}>
-            {sources.short[check.evidence_source]}
-          </span>
+          <Tooltip align="right" content={`${tr("Herkunft des Nachweises:", "Evidence source:", "Origen de la evidencia:")} ${sources.long[check.evidence_source]}`}>
+            <span tabIndex={0} className="cursor-help text-xs text-subtle">{sources.short[check.evidence_source]}</span>
+          </Tooltip>
         )}
         {found && tone && (
           <button
@@ -459,11 +467,39 @@ function AiActPanel({ document, onOverride }: { document: DocumentDetail; onOver
   const { tr, td } = useI18n();
   const ai = document.compliance?.ai_act;
   if (!ai) return <EmptyState icon={<Info size={18} />} title={tr("Noch keine Risikobewertung", "No risk assessment yet", "Sin evaluación de riesgo")} />;
-  const pyramid: { level: AIActRiskLevel; label: string; sub: string; width: string }[] = [
-    { level: "unacceptable", label: tr("Unannehmbar", "Unacceptable", "Inaceptable"), sub: "Art. 5", width: "w-[40%]" },
-    { level: "high", label: tr("Hohes Risiko", "High Risk", "Alto riesgo"), sub: tr("Anhang III", "Annex III", "Anexo III"), width: "w-[60%]" },
-    { level: "limited", label: tr("Begrenztes Risiko", "Limited Risk", "Riesgo limitado"), sub: "Art. 50", width: "w-[80%]" },
-    { level: "minimal", label: tr("Minimales Risiko", "Minimal Risk", "Riesgo mínimo"), sub: "Art. 4 / 95", width: "w-full" },
+  const pyramid: { level: AIActRiskLevel; label: string; sub: string; width: string; hint: string }[] = [
+    {
+      level: "unacceptable", label: tr("Unannehmbar", "Unacceptable", "Inaceptable"), sub: "Art. 5", width: "w-[40%]",
+      hint: tr(
+        "Verbotene KI-Praktiken wie Social Scoring oder gezielte Manipulation. Solche Systeme dürfen in der EU nicht eingesetzt werden.",
+        "Prohibited AI practices such as social scoring or targeted manipulation. Such systems must not be used in the EU.",
+        "Prácticas de IA prohibidas, como la puntuación social o la manipulación. No pueden utilizarse en la UE.",
+      ),
+    },
+    {
+      level: "high", label: tr("Hohes Risiko", "High Risk", "Alto riesgo"), sub: tr("Anhang III", "Annex III", "Anexo III"), width: "w-[60%]",
+      hint: tr(
+        "KI in sensiblen Bereichen wie Bewerberauswahl, Kreditvergabe oder Bildung. Ab 02.12.2027 nur mit Konformitätsbewertung, Protokollierung und menschlicher Aufsicht.",
+        "AI in sensitive areas such as hiring, lending or education. From 2 Dec 2027 only with a conformity assessment, logging and human oversight.",
+        "IA en ámbitos sensibles como selección de personal, crédito o educación. Desde el 02.12.2027 solo con evaluación de conformidad, registro y supervisión humana.",
+      ),
+    },
+    {
+      level: "limited", label: tr("Begrenztes Risiko", "Limited Risk", "Riesgo limitado"), sub: "Art. 50", width: "w-[80%]",
+      hint: tr(
+        "KI, die mit Menschen spricht oder Inhalte erzeugt, etwa Chatbots. Nutzer müssen erkennen können, dass sie es mit KI zu tun haben.",
+        "AI that talks to people or generates content, such as chatbots. Users must be able to tell they are dealing with AI.",
+        "IA que conversa con personas o genera contenidos, como los chatbots. Los usuarios deben saber que tratan con una IA.",
+      ),
+    },
+    {
+      level: "minimal", label: tr("Minimales Risiko", "Minimal Risk", "Riesgo mínimo"), sub: "Art. 4 / 95", width: "w-full",
+      hint: tr(
+        "Alltägliche KI wie Spamfilter. Keine besonderen Pflichten außer geschulten Mitarbeitenden (Art. 4).",
+        "Everyday AI such as spam filters. No special duties apart from trained staff (Art. 4).",
+        "IA cotidiana, como los filtros de spam. Sin obligaciones especiales salvo personal formado (art. 4).",
+      ),
+    },
   ];
   const regulatory = document.scorecard?.tiles.find((tile) => tile.key === "regulatory");
   return (
@@ -473,17 +509,18 @@ function AiActPanel({ document, onOverride }: { document: DocumentDetail; onOver
         {pyramid.map((layer) => {
           const active = ai.overall_risk_level === layer.level;
           return (
-            <div
-              key={layer.level}
-              className={cx(
-                "flex items-center justify-between rounded-md border px-3 py-1.5 text-xs",
-                layer.width,
-                active ? TONE_CLASSES[toneForRisk(layer.level)] : "border-line bg-surface-2 text-subtle",
-              )}
-            >
-              <span className={cx("whitespace-nowrap", active && "font-semibold")}>{layer.label}</span>
-              <span className="ml-2 hidden whitespace-nowrap text-xs opacity-80 sm:inline">{layer.sub}</span>
-            </div>
+            <Tooltip key={layer.level} content={layer.hint} align="center" className={layer.width}>
+              <div
+                tabIndex={0}
+                className={cx(
+                  "flex w-full cursor-help items-center justify-between rounded-md border px-3 py-1.5 text-xs",
+                  active ? TONE_CLASSES[toneForRisk(layer.level)] : "border-line bg-surface-2 text-subtle",
+                )}
+              >
+                <span className={cx("whitespace-nowrap", active && "font-semibold")}>{layer.label}</span>
+                <span className="ml-2 hidden whitespace-nowrap text-xs opacity-80 sm:inline">{layer.sub}</span>
+              </div>
+            </Tooltip>
           );
         })}
         {ai.overall_risk_level === "not_applicable" && (
@@ -824,7 +861,7 @@ function XmlPanel({ document }: { document: DocumentDetail }) {
     <div className="space-y-4">
       <h3 className="sr-only">{tr("XML-Datensatz (EN 16931)", "XML Dataset (EN 16931)", "Conjunto XML (EN 16931)")}</h3>
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <Chip tone={einvoice.is_einvoice ? "accent" : "warn"}>{einvoice.syntax ? `${td(einvoice.profile)} · ${einvoice.syntax}` : td(einvoice.profile)}</Chip>
+        <Chip tone={einvoice.is_einvoice ? "accent" : "warn"} hint={einvoiceHint()}>{einvoice.syntax ? `${td(einvoice.profile)} · ${einvoice.syntax}` : td(einvoice.profile)}</Chip>
         <span className="text-subtle">
           {embedded ? tr(`eingebettet als ${einvoice.attachment_name}`, `embedded as ${einvoice.attachment_name}`, `incrustado como ${einvoice.attachment_name}`) : tr("reines XML", "standalone XML", "XML puro")}
           {embedded && tr(" · maßgeblich vor dem Bildteil (BMF 15.10.2024, Rz. 36)", " · prevails over visual PDF (BMF 15 Oct 2024, para. 36)", " · prevalece sobre el PDF (BMF 15/10/2024)")}
@@ -991,14 +1028,12 @@ function LedgerSeal({ ledger, onOpen }: { ledger: LedgerVerification | null; onO
         ) : (
           <>
             <span className="block">
-              <span className="tabular-nums">{ledger.entries}</span>{" "}
-              {tr("Einträge vollständig nachgerechnet, davon", "entries fully recomputed,", "entradas recalculadas,")}{" "}
-              <span className="tabular-nums">{ledger.signed_entries}</span>{" "}
-              {tr("Ed25519-signiert (Art. 12 AI Act, GoBD Rz. 107 ff.).", "Ed25519-signed (Art. 12 AI Act, GoBD Rz. 107 ff.).", "firmadas Ed25519 (Art. 12 IA, GoBD Rz. 107 ss.).")}
+              {tr(
+                `Alle ${ledger.entries} Protokolleinträge sind nachgerechnet – nichts wurde nachträglich verändert. Klick öffnet das Protokoll.`,
+                `All ${ledger.entries} audit trail entries have been recomputed – nothing was changed afterwards. Click to open the audit trail.`,
+                `Las ${ledger.entries} entradas del registro se han recalculado: nada se modificó después. Haga clic para abrir el registro.`,
+              )}
             </span>
-            {ledger.entries > 0 && (
-              <span className="mt-1 block tabular-nums text-subtle">{tr("Kopf-Hash", "Head hash", "Hash raíz")} {ledger.head_hash.slice(0, 16)}…</span>
-            )}
           </>
         )
       }
@@ -1100,7 +1135,7 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
     { tone: "ok", label: tr("Konform", "Compliant", "Conforme"), title: tr("Fundstelle belegt ein erfülltes Kriterium (Regelwerk oder XML).", "Passage confirms a satisfied requirement (ruleset or XML).", "Pasaje que acredita un criterio cumplido.") },
     { tone: "warn", label: tr("Prüfhinweis / KI-Vorschlag", "Notice / AI suggestion", "Aviso / Sugerencia IA"), title: tr("Hinweis ohne Verstoß oder Nachweis allein durch das KI-Modell – manuell sichten.", "Non-blocking notice or AI-only match – verify manually.", "Aviso o sugerencia de IA – revisar manualmente.") },
     { tone: "bad", label: tr("Verstoß", "Defect", "Incumplimiento"), title: tr("Mangel, z. B. fehlende oder abweichende Pflichtangabe nach § 14 UStG.", "Defect, e.g. missing or invalid mandatory invoice field under Sec. 14 UStG.", "Defecto o dato obligatorio ausente.") },
-    { tone: "pii", label: tr("PII-Maskierung (DSGVO)", "PII Masking (GDPR)", "Ocultación PII (RGPD)"), title: tr("Personenbezogene Daten; Art.-9-Fundstellen kräftig umrandet.", "Personal data; GDPR Art. 9 sensitive categories strongly bordered.", "Datos personales; Art. 9 resaltados.") },
+    { tone: "pii", label: tr("PII-Maskierung (DSGVO)", "PII Masking (GDPR)", "Ocultación PII (RGPD)"), title: tr("Personenbezogene Daten. Besonders geschützte Angaben wie Gesundheitsdaten sind kräftig umrandet.", "Personal data. Specially protected details such as health data have a strong border.", "Datos personales. Los datos especialmente protegidos, como los de salud, llevan un borde marcado.") },
   ];
   const levelLabels = { strict: tr("Strikt", "Strict", "Estricto"), standard: tr("Standard", "Standard", "Estándar"), audit_only: "Audit-Only" } as const;
 
@@ -1188,22 +1223,24 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-fg">{tr("Dokumenten-Inspektor", "Document Inspector", "Inspector documental")}</h2>
             {document.einvoice && !document.einvoice.error && (
-              <button
-                type="button"
-                onClick={() => onTabChange("xml")}
-                className={cx("chip transition-colors duration-150 hover:border-accent", TONE_CLASSES[document.einvoice.is_einvoice ? "accent" : "warn"])}
-                title={tr("XML-Datensatz anzeigen", "Show XML dataset", "Ver conjunto XML")}
-              >
-                <FileCode size={12} aria-hidden="true" />
-                {einvoiceLabel(document.einvoice)}
-              </button>
+              <Tooltip content={einvoiceHint()}>
+                <button
+                  type="button"
+                  onClick={() => onTabChange("xml")}
+                  className={cx("chip transition-colors duration-150 hover:border-accent", TONE_CLASSES[document.einvoice.is_einvoice ? "accent" : "warn"])}
+                  aria-label={`${einvoiceLabel(document.einvoice)} – ${tr("XML-Datensatz anzeigen", "Show XML dataset", "Ver conjunto XML")}`}
+                >
+                  <FileCode size={12} aria-hidden="true" />
+                  {einvoiceLabel(document.einvoice)}
+                </button>
+              </Tooltip>
             )}
           </div>
           {document.text_view && (
-            <span className="chip border-line bg-surface-2 text-subtle">
+            <Chip hint={maskingHint(document.text_view.level, document.text_view.spans.length)} align="right">
               {tr("Maskierung:", "Masking:", "Ocultación:")} {levelLabels[document.text_view.level]} ·{" "}
               <span className="tabular-nums">{document.text_view.spans.length}</span> {tr("Markierungen", "annotations", "anotaciones")}
-            </span>
+            </Chip>
           )}
         </div>
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:gap-6">
@@ -1226,9 +1263,13 @@ export function DocumentInspector({ document, tab, onTabChange, onOverride, ledg
             <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
               <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-subtle" aria-label={tr("Legende der Markierungen", "Highlight legend", "Leyenda de resaltado")}>
                 {legend.map(({ tone: legendTone, label, title }) => (
-                  <li key={label} className="flex items-center gap-1.5" title={title}>
-                    <span className={cx("inline-block h-2.5 w-2.5 rounded-[3px] opacity-80", SWATCH[legendTone])} aria-hidden="true" />
-                    {label}
+                  <li key={label}>
+                    <Tooltip content={title}>
+                      <span tabIndex={0} className="flex cursor-help items-center gap-1.5">
+                        <span className={cx("inline-block h-2.5 w-2.5 rounded-[3px] opacity-80", SWATCH[legendTone])} aria-hidden="true" />
+                        {label}
+                      </span>
+                    </Tooltip>
                   </li>
                 ))}
               </ul>

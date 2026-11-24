@@ -4,7 +4,7 @@
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi&logoColor=white)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
-![Tests: 540 pytest](https://img.shields.io/badge/pytest-540_Tests-0A9EDC?logo=pytest&logoColor=white)
+![Tests: 545 pytest](https://img.shields.io/badge/pytest-545_Tests-0A9EDC?logo=pytest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ eigenem Cloud-Key oder lokalem Modell kommt die KI-Prüfung hinzu.
 > pseudonymizing privacy gateway) ends in a clearly labelled rule-based audit.
 > Checks mandatory invoice details and arithmetic; it does not replace full
 > EN 16931 / XRechnung Schematron validation (use e.g. the KoSIT validator).
-> FastAPI · Next.js 15 · 540 offline tests · runs without GPU or API key.
+> FastAPI · Next.js 15 · 545 offline tests · runs without GPU or API key.
 > UI & reports in DE / EN / ES · technical documentation in German.
 
 ![Ansicht Prüfung: KPI-Leiste, Belegliste, Scorecard 45/100 einer Rechnung mit Steuerfalle, Inspektor mit Fundstellen im Belegtext](docs/screenshots/hero-workspace.png)
@@ -75,7 +75,9 @@ hinterlegen oder mit `docker compose --profile full up --build` zusätzlich eine
 Ollama-Container starten.
 
 **Windows (Ein-Klick):** `Start_Compliance_Agent.bat` doppelklicken. Der Starter
-legt bei Bedarf die Python-Umgebung an, hält Python- und npm-Abhängigkeiten sowie
+legt bei Bedarf die Python-Umgebung an (prüft Python 3.11+ und erkennt den
+Windows-Store-Platzhalter), installiert Laufzeit- und Testpakete aus
+`requirements-dev.txt`, hält Python- und npm-Abhängigkeiten sowie
 einen gecachten Next.js-Production-Build (`.run/frontend-build.sha256`) über
 Datei-Hashes aktuell, startet Backend (`:8001`) und Frontend (`:3001`) parallel
 und öffnet den Browser ohne Wartezeit, sobald beide antworten. Beenden mit
@@ -151,9 +153,15 @@ Details zu Pipeline, Kaskade, Jobs und Ledger: [`docs/ARCHITECTURE.md`](docs/ARC
 Drei fokussierte Ansichten in der Kopfzeile; alle bleiben eingehängt, ein
 Wechsel bricht weder eine Prüfung noch ein Gespräch ab.
 
+**Rundgang in 70 Sekunden** (Musterbeleg, ohne KI-Modell): Upload einer hybriden
+ZUGFeRD-Rechnung → Score mit Erklärung → Kerndaten und XML-Datensatz →
+Protokoll → Export mit Prüfbefehl → Freigabe und Siegel.
+
+![Rundgang: Upload einer ZUGFeRD-Rechnung, Score 100 mit Tooltip, Kerndaten und XML-Datensatz, Prüfprotokoll mit Kopf-Hash, Export-Dialog mit Prüfbefehl, Freigabe und Siegel](docs/screenshots/demo.gif)
+
 | Copilot | Protokoll |
 |---|---|
-| ![Copilot mit Antwort, Zeilenverweisen und hervorgehobener Belegzeile](docs/screenshots/copilot.png) | ![Prüfprotokoll mit Hash-Kette, Ed25519-Status, Exporten und Regelwerk](docs/screenshots/protokoll.png) |
+| ![Copilot mit Antwort, Zeilenverweisen und hervorgehobener Belegzeile](docs/screenshots/copilot.png) | ![Prüfprotokoll mit Hash-Kette, Ed25519-Status, Kopf-Hash, Schlüssel-Fingerabdruck und Regelwerk](docs/screenshots/protokoll.png) |
 | **Laufende Prüfung mit Job-Monitor** | **Einstellungen: Ausweich-Kaskade** |
 | ![Job-Monitor in der Kopfzeile, Phasen, Restzeit und Hinweis auf automatischen Neuversuch](docs/screenshots/job-monitor.png) | ![Zweispaltige Einstellungen mit effektiver Kaskade, Ausweich-Schlüsseln und Cloud-Tageslimit](docs/screenshots/einstellungen-kaskade.png) |
 
@@ -444,12 +452,12 @@ Vollständig mit Erläuterungen in [`.env.example`](.env.example).
 ## Tests
 
 ```bash
-python -m pytest -q                         # 540 Tests, kein LLM, kein API-Key, kein Netz
+python -m pytest -q                         # 545 Tests, kein LLM, kein API-Key, kein Netz
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 docker compose config --quiet
 ```
 
-540 Tests (Stand v2.8.5) laufen in rund einer Minute. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
+545 Tests (Stand v2.8.6) laufen in rund zwei Minuten. Ollama, die Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt; Payload-Aufbau, JSON-Reparatur, Vault,
 Kaskade, Fehlerabbildung und Validierung laufen real. Eine lokale `.env` (etwa
 mit Cloud-Keys) wird in Tests ignoriert.
@@ -534,9 +542,11 @@ frontend/src/
   app/                 page.tsx (Ansichten, Jobs), layout.tsx, error.tsx, globals.css
   components/          Header, JobMonitor, Notifications, CopilotView, ProtocolView,
                        DocumentInspector, SettingsModal, Select, ui …
-  lib/                 api.ts, i18n.tsx, format.ts, useJobs.ts, popover.ts, markdown.tsx, evidence.ts
-docs/                  ARCHITECTURE.md, RECHTSQUELLEN.md, RECHTLICHE_ANALYSE_2026.md, screenshots/
-scripts/               verify_pruefpaket.py (eigenständig, nur Stdlib + cryptography), smoke_test_ollama.py
+  lib/                 api.ts, i18n.tsx, format.ts, hints.ts (Tooltip-Texte), useJobs.ts, popover.ts,
+                       markdown.tsx, evidence.ts, correction.ts
+docs/                  ARCHITECTURE.md, PRUEFMATRIX.md, RECHTSQUELLEN.md, RECHTLICHE_ANALYSE_2026.md, screenshots/
+scripts/               verify_pruefpaket.py (eigenständig, nur Stdlib + cryptography),
+                       praxiskorpus.py (Praxistest mit öffentlichen Testbelegen), smoke_test_ollama.py
 tests/                 pytest-Suite (HTTP-Mocks, keine Netzzugriffe)
 ```
 

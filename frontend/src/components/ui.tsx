@@ -5,14 +5,29 @@ import { createPortal } from "react-dom";
 import type { CheckStatus } from "../types/api";
 import { cx, formatEta, TONE_CLASSES, type Tone } from "../lib/format";
 import { tr, useI18n } from "../lib/i18n";
+import { useAnchoredStyle, useDismiss, usePopoverExclusive } from "../lib/popover";
 import { AlertTriangle, Check, CheckCircle, Copy, Info, MinusCircle, X, XCircle } from "./icons";
 
-export function Chip({ tone = "neutral", children, className, title }: {
+export function Chip({ tone = "neutral", children, className, title, hint, focusable = true, align }: {
   tone?: Tone;
   children: React.ReactNode;
   className?: string;
   title?: string;
+  /** Erklärung als ``Tooltip`` (Überfahren und Tastaturfokus). */
+  hint?: React.ReactNode;
+  /** In anklickbaren Zeilen ``false``: dort erreicht die Tastatur die Zeile, nicht den Chip. */
+  focusable?: boolean;
+  align?: "left" | "right" | "center";
 }) {
+  if (hint) {
+    return (
+      <Tooltip content={hint} align={align}>
+        <span tabIndex={focusable ? 0 : undefined} className={cx("chip cursor-help", TONE_CLASSES[tone], className)}>
+          {children}
+        </span>
+      </Tooltip>
+    );
+  }
   return (
     <span className={cx("chip", TONE_CLASSES[tone], className)} title={title}>
       {children}
@@ -137,6 +152,8 @@ export interface PillTabItem<T extends string> {
   disabled?: boolean;
   /** Kleiner Statuspunkt am Tab (z. B. laufende Analyse). */
   dot?: "live" | "warn" | null;
+  /** Erklärung beim Überfahren und bei Tastaturfokus (``Tooltip``). */
+  tooltip?: React.ReactNode;
 }
 
 /**
@@ -238,7 +255,7 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
       )}
       {items.map((item) => {
         const active = item.key === value;
-        return (
+        const button = (
           <button
             key={item.key}
             id={idPrefix ? `${idPrefix}-tab-${item.key}` : undefined}
@@ -266,6 +283,13 @@ export function PillTabs<T extends string>({ items, value, onChange, className, 
             {item.dot === "warn" && <span className="h-1.5 w-1.5 rounded-full bg-warn" role="img" aria-label={tl("Hinweis", "Notice", "Aviso")} />}
           </button>
         );
+        return item.tooltip ? (
+          <Tooltip key={item.key} content={item.tooltip} side="bottom" align="center">
+            {button}
+          </Tooltip>
+        ) : (
+          button
+        );
       })}
     </div>
   );
@@ -282,7 +306,7 @@ export function Tabs<T extends string>({ tabs, active, onChange, className, idPr
 }
 
 export function Segmented<T extends string>({ options, value, onChange, size = "md", ariaLabel, disabled = false }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; tooltip?: React.ReactNode }[];
   value: T;
   onChange: (value: T) => void;
   size?: "sm" | "md";
@@ -296,7 +320,7 @@ export function Segmented<T extends string>({ options, value, onChange, size = "
       ariaLabel={ariaLabel}
       value={value}
       onChange={onChange}
-      items={options.map((option) => ({ key: option.value, label: option.label, disabled }))}
+      items={options.map((option) => ({ key: option.value, label: option.label, disabled, tooltip: option.tooltip }))}
     />
   );
 }
@@ -715,6 +739,55 @@ export function Tooltip({ content, children, align = "left", side = "top", class
   );
 }
 
+/**
+ * ⓘ mit klickbarem Popover: anders als ``Tooltip`` bleibt es offen, bis Escape oder ein
+ * Klick daneben – so lässt sich ein enthaltener Befehl markieren oder kopieren.
+ */
+export function InfoPopover({ label, children, command }: {
+  /** Zugänglicher Name des ⓘ-Knopfs und des Popovers. */
+  label: string;
+  children: React.ReactNode;
+  /** Optionaler Befehl, als Monospace mit Kopierknopf. */
+  command?: string;
+}) {
+  const { tr: tl } = useI18n();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  usePopoverExclusive(open, close);
+  useDismiss(open, close, [ref, menuRef]);
+  const style = useAnchoredStyle(open, ref, { width: 360, maxHeight: 280 });
+  return (
+    <span ref={ref} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-md text-subtle transition-colors duration-150 hover:bg-surface-hover hover:text-fg"
+      >
+        <Info size={13} aria-hidden="true" />
+      </button>
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div ref={menuRef} role="dialog" aria-label={label} style={style} className="glass-menu z-[90] p-3 text-xs leading-relaxed text-muted">
+            <div>{children}</div>
+            {command && (
+              <div className="mt-2 flex items-center gap-1 rounded-md border border-line bg-surface-2 py-1 pl-2 pr-1">
+                <code className="min-w-0 flex-1 break-all font-mono text-xs text-fg">{command}</code>
+                <CopyButton value={command} label={tl("Befehl", "Command", "Comando")} />
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
+    </span>
+  );
+}
+
 /** „⌘“ auf Apple-Geräten, sonst „Strg“ / „Ctrl“ (nach dem ersten Render, SSR-sicher). */
 export function useModifierLabel(): string {
   const { tr: tl } = useI18n();
@@ -776,7 +849,7 @@ export function CopyButton({ value, label, className }: { value: string; label: 
       type="button"
       onClick={() => void copy()}
       className={cx(
-        "inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs transition-colors duration-150 ease-out",
+        "relative inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs transition-colors duration-150 ease-out",
         state === "copied" ? "text-ok" : state === "failed" ? "text-bad" : "text-subtle hover:bg-surface-2 hover:text-fg",
         className,
       )}

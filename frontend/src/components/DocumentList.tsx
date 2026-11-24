@@ -6,7 +6,8 @@ import { cx, docTypeLabel, formatBytes, formatDate, formatMoney, toNumber, TONE_
 import { LOCALE_TAG, useI18n } from "../lib/i18n";
 import { AlertTriangle, Archive, ArchiveRestore, FileText, Hourglass, ListChecks, Lock, Pin, Search, XCircle } from "./icons";
 import { Select } from "./Select";
-import { EmptyState, isTypingTarget, Kbd, Spinner } from "./ui";
+import { einvoiceHint, documentStatusHint, highRiskHint, rulesOnlyHint } from "../lib/hints";
+import { Chip, EmptyState, isTypingTarget, Kbd, Spinner } from "./ui";
 
 type Filter = "all" | "open" | "sealed" | "archived" | "highrisk";
 type Sort = "newest" | "oldest" | "score_desc" | "score_asc";
@@ -28,16 +29,9 @@ function StatusBadge({ doc }: { doc: DocumentSummary }) {
   const { tr } = useI18n();
   if (doc.sealed) {
     return (
-      <span
-        className="chip border-ok-line bg-ok-soft text-ok"
-        title={tr(
-          "Prüfentscheid als Ed25519-signierter Ledger-Eintrag versiegelt",
-          "Audit decision sealed as an Ed25519-signed ledger entry",
-          "Decisión sellada como entrada firmada con Ed25519",
-        )}
-      >
+      <Chip tone="ok" focusable={false} hint={documentStatusHint("sealed")}>
         <Lock size={12} aria-hidden="true" /> {tr("Versiegelt", "Sealed", "Sellado")}
-      </span>
+      </Chip>
     );
   }
   if (doc.status === "extracted" && doc.compliance_score == null) {
@@ -45,51 +39,38 @@ function StatusBadge({ doc }: { doc: DocumentSummary }) {
   }
   if (doc.status === "failed") {
     return (
-      <span className="chip border-bad-line bg-bad-soft text-bad">
+      <Chip tone="bad" focusable={false} hint={documentStatusHint("failed")}>
         <XCircle size={12} aria-hidden="true" /> {tr("Analyse fehlgeschlagen", "Audit failed", "Análisis fallido")}
-      </span>
+      </Chip>
     );
   }
   if (doc.status === "extracted" && doc.doc_type === "invoice" && doc.score_band === "red") {
     return (
-      <span
-        className="chip border-bad-line bg-bad-soft text-bad"
-        title={tr(
-          "Pflichtangaben nach § 14 Abs. 4 UStG fehlen – der Vorsteuerabzug nach § 15 UStG ist gefährdet",
-          "Mandatory fields under Sec. 14(4) UStG missing – input VAT deduction under Sec. 15 UStG is at risk",
-          "Faltan datos obligatorios según § 14(4) UStG; deducción del IVA soportado en riesgo",
+      <Chip
+        tone="bad"
+        focusable={false}
+        hint={tr(
+          "Pflichtangaben fehlen: Ohne korrigierte Rechnung darf der Empfänger die Vorsteuer nicht abziehen (§ 15 UStG).",
+          "Mandatory details are missing: without a corrected invoice the recipient may not deduct input VAT (§ 15 UStG).",
+          "Faltan datos obligatorios: sin una factura corregida el destinatario no puede deducir el IVA soportado (§ 15 UStG).",
         )}
       >
         <AlertTriangle size={12} aria-hidden="true" /> {tr("Vorsteuer gefährdet", "VAT Deduction Risk", "Riesgo de IVA")}
-      </span>
+      </Chip>
     );
   }
   if (doc.status === "extracted" && isHighRisk(doc)) {
     return (
-      <span
-        className="chip border-warn-line bg-warn-soft text-warn"
-        title={tr(
-          "Hochrisiko nach Anhang III VO (EU) 2024/1689 – Konformitätsnachweis offen",
-          "High-risk under Annex III Regulation (EU) 2024/1689 – conformity evidence pending",
-          "Alto riesgo según Anexo III Reglamento (UE) 2024/1689 – conformidad pendiente",
-        )}
-      >
+      <Chip tone="warn" focusable={false} hint={highRiskHint()}>
         <AlertTriangle size={12} aria-hidden="true" /> {tr("Konformität offen", "Conformity pending", "Conformidad pendiente")}
-      </span>
+      </Chip>
     );
   }
   if (doc.status === "extracted" && doc.provider === "heuristic") {
     return (
-      <span
-        className="chip border-warn-line bg-warn-soft text-warn"
-        title={tr(
-          "Regelbasiertes Referenz-Audit – keine KI-Stufe war verfügbar. Bei Bedarf neu prüfen.",
-          "Rule-based reference audit – no AI stage was available. Re-run when ready.",
-          "Auditoría por reglas – ninguna etapa de IA estaba disponible. Reanalizar si es necesario.",
-        )}
-      >
+      <Chip tone="warn" focusable={false} hint={rulesOnlyHint()}>
         <AlertTriangle size={12} aria-hidden="true" /> {tr("Regelwerk-Audit", "Rules-only audit", "Auditoría por reglas")}
-      </span>
+      </Chip>
     );
   }
   return (
@@ -385,9 +366,11 @@ export function DocumentList({ documents, selectedId, analysingIds, onAnalyzeAll
                     <MetaLine doc={doc} />
                     {(isHighRisk(doc) || doc.einvoice_profile) && (
                       <span className="mt-1 flex flex-wrap gap-1">
-                        {isHighRisk(doc) && <span className="chip border-bad-line bg-bad-soft text-bad">{tr("EU AI Act Anhang III", "EU AI Act Annex III", "Reglamento IA Anexo III")}</span>}
+                        {isHighRisk(doc) && (
+                          <Chip tone="bad" focusable={false} hint={highRiskHint()}>{tr("EU AI Act Anhang III", "EU AI Act Annex III", "Reglamento IA Anexo III")}</Chip>
+                        )}
                         {doc.einvoice_profile && (
-                          <span className="chip border-accent-line bg-accent-soft text-accent">{tr("E-Rechnung", "E-Invoice", "Factura electrónica")} · {td(doc.einvoice_profile)}</span>
+                          <Chip tone="accent" focusable={false} hint={einvoiceHint()}>{tr("E-Rechnung", "E-Invoice", "Factura electrónica")} · {td(doc.einvoice_profile)}</Chip>
                         )}
                       </span>
                     )}

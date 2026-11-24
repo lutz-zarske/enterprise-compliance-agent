@@ -150,16 +150,17 @@ frontend/src/
   components/Header       Logo-Popover, Bereiche (PillTabs), Job-Monitor, Hinweise, Offline
   components/JobMonitor   Kopfzeilen-Pille, Phasen, Restzeit, zweistufiger Abbruch, 12-s-Nachlauf
   components/CopilotView  Gespräch mit Live-Arbeitsschritten, Belegtext mit [Z. n]-Sprung
-  components/ProtocolView Hash-Kette, Exporte, Regelwerk
+  components/ProtocolView Hash-Kette, Prüfprotokoll, Regelwerk (Exporte im Export-Dialog)
   components/SettingsModal Zwei Spalten: KI-Einrichtung (Modelle, Ausweich-Kaskade), Compliance, Darstellung, Verbindung, Über
-  components/ui           Portal-Tooltip, PillTabs, ProgressBar, AutoTextarea, HashBadge …
+  components/ui           Portal-Tooltip, InfoPopover, PillTabs (Tooltip je Option), ProgressBar, AutoTextarea, HashBadge …
+  lib/hints.ts            Kurze Erklärtexte für Tooltips (eine Quelle je Begriff, DE/EN/ES)
   lib/popover.ts          Popover-Lage im Fenster und Popover-Bus (höchstens eines offen)
   lib/useJobs.ts          Warteschlange abfragen, Abschluss genau einmal melden
 ```
 
 * **Drei Ansichten statt einer überfrachteten Seite:** Prüfung
   (Belegliste, Scorecard, Inspektor), Copilot und Protokoll (Hash-Kette,
-  Exporte, Regelwerk). Alle bleiben eingehängt – ein Ansichtswechsel bricht weder eine
+  Prüfprotokoll, Regelwerk). Alle bleiben eingehängt – ein Ansichtswechsel bricht weder eine
   Prüfung noch ein Gespräch ab.
 * **Design-System „ruhig und statisch“:** Tokens in `globals.css` für Dark
   (`#07080c` / `#0f1118` / `#161924`) und Light; Karten reagieren nicht auf den
@@ -273,7 +274,7 @@ Wer Code ändert, hält sie ein; die Tests sichern die fachlichen Regeln ab.
 
 ## Tests
 
-`pytest` (540 Tests, Stand v2.8.5) deckt die Kette vom HTTP-Request bis zur
+`pytest` (545 Tests, Stand v2.8.6) deckt die Kette vom HTTP-Request bis zur
 Datenbank ab, ohne LLM und ohne Netz: Ollama, Cloud-Anbieter und VIES werden auf HTTP-Ebene über
 `httpx.MockTransport` nachgestellt, sodass Payload-Aufbau, Vault,
 Fehlerabbildung, Kaskade und Schemavalidierung real laufen. Die

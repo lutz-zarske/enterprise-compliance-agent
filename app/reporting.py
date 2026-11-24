@@ -244,6 +244,7 @@ _REPORT_TEXT: dict[str, dict[str, str]] = {
         "visual_h": "Abgleich XML ↔ PDF-Bildteil",
         "visual_col_res": "Ergebnis",
         "ai_h": "EU AI Act (VO (EU) 2024/1689)",
+        "ai_not_applicable": "EU AI Act: nicht einschlägig – der Beleg beschreibt kein KI-System im Sinne von Art. 3 Nr. 1 KI-VO.",
         "ai_level": "Einstufung",
         "annex3": "Anhang III",
         "reason": "Begründung",
@@ -335,6 +336,7 @@ _REPORT_TEXT: dict[str, dict[str, str]] = {
         "visual_h": "Cross-check XML ↔ Visual PDF",
         "visual_col_res": "Result",
         "ai_h": "EU AI Act (Reg. (EU) 2024/1689)",
+        "ai_not_applicable": "EU AI Act: not applicable – the document does not describe an AI system within the meaning of Art. 3(1) AI Act.",
         "ai_level": "Classification",
         "annex3": "Annex III",
         "reason": "Reasoning",
@@ -425,6 +427,7 @@ _REPORT_TEXT: dict[str, dict[str, str]] = {
         "visual_h": "Cotejo XML ↔ PDF visual",
         "visual_col_res": "Resultado",
         "ai_h": "Reglamento de IA (Reg. (UE) 2024/1689)",
+        "ai_not_applicable": "Reglamento de IA: no aplicable – el documento no describe ningún sistema de IA en el sentido del art. 3.1 del Reglamento de IA.",
         "ai_level": "Clasificación",
         "annex3": "Anexo III",
         "reason": "Justificación",
@@ -588,6 +591,8 @@ def build_report(
         "math_checks": checks("math"),
         "privacy_checks": checks("privacy"),
         "ai_act": {
+            # Ohne beschriebenes KI-System entfällt der nummerierte Abschnitt; stattdessen eine Zeile im Überblick.
+            "applicable": ai_level != "not_applicable",
             "risk_level": ai_level,
             "risk_label": risk_labels.get(ai_level or "", "-"),
             "annex_iii": annex,
@@ -652,6 +657,12 @@ def build_report(
 # ---------------------------------------------------------------------------
 
 
+def _ai_applicable(report: dict[str, Any]) -> bool:
+    """EU-AI-Act-Abschnitt nur, wenn der Beleg ein KI-System beschreibt (Altberichte ohne Feld: anhand der Stufe)."""
+    ai = report["ai_act"]
+    return bool(ai.get("applicable", ai.get("risk_level") != "not_applicable"))
+
+
 def _md(value: Any) -> str:
     text = "-" if value in (None, "") else str(value)
     return text.replace("|", "/").replace("\n", " ")
@@ -688,6 +699,8 @@ def render_markdown(report: dict[str, Any], *, lang: str | None = None) -> str:
         lines += [f"> {heur_note}", ""]
     if score.get("cap_applied"):
         lines += [f"> {score['cap_applied']}", ""]
+    if not _ai_applicable(report):
+        lines += [t["ai_not_applicable"], ""]
 
     lines += [f"## {t['ustg_h']}", "", f"| {t['col_item']} | {t['col_norm']} | {t['col_status']} | {t['col_note']} |", "|---|---|---|---|"]
     for check in report["ustg_matrix"]:
@@ -714,16 +727,17 @@ def render_markdown(report: dict[str, Any], *, lang: str | None = None) -> str:
                 for c in einvoice["visual_check"]
             ]
     ai = report["ai_act"]
-    lines += [
-        "",
-        f"## {t['ai_h']}",
-        "",
-        f"- **{t['ai_level']}:** {ai['risk_label']}",
-        f"- **{t['annex3']}:** {', '.join(ai['annex_iii']) or '-'}",
-        f"- **{t['reason']}:** {_md(ai['reasoning'])}",
-    ]
-    if ai["article_references"]:
-        lines.append(f"- **{t['articles']}:** {', '.join(ai['article_references'])}")
+    if _ai_applicable(report):
+        lines += [
+            "",
+            f"## {t['ai_h']}",
+            "",
+            f"- **{t['ai_level']}:** {ai['risk_label']}",
+            f"- **{t['annex3']}:** {', '.join(ai['annex_iii']) or '-'}",
+            f"- **{t['reason']}:** {_md(ai['reasoning'])}",
+        ]
+        if ai["article_references"]:
+            lines.append(f"- **{t['articles']}:** {', '.join(ai['article_references'])}")
     lines += ["", f"## {t['math_h']}", ""]
     for check in report["math_checks"]:
         lines.append(
@@ -944,7 +958,8 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
         + "".join(f"<p class='small'>{_e(c['note'])}</p>" for c in ai["checks"] if c.get("note"))
         + "".join(f"<p class='risk'>{_e(c['risk_note'])}</p>" for c in ai["checks"] if c.get("risk_note"))
     )
-    sections.append((t["ai_h"], "", f"<div class='keep'>{ai_body}</div>"))
+    if _ai_applicable(report):
+        sections.append((t["ai_h"], "", f"<div class='keep'>{ai_body}</div>"))
     sections.append((
         t["math_h"],
         "",
@@ -1000,6 +1015,7 @@ def render_html(report: dict[str, Any], *, lang: str | None = None) -> str:
 .tile span {{ display: block; font-size: 7pt; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); }}
 .tile b {{ display: block; margin-top: 3px; font-size: 9pt; font-weight: 600; line-height: 1.3; }}
 .t-pass b {{ color: #047857; }} .t-warn b {{ color: #b45309; }} .t-fail b {{ color: #be123c; }} .t-neutral b {{ color: var(--muted); }}
+.scope {{ margin: 8px 0 0; font-size: 8.5pt; color: var(--muted); }}
 .refnote {{ margin-top: 14px; padding: 8px 12px; border: 1px dashed #94a3b8; border-radius: 8px; font-size: 8.5pt; color: #334155; }}
 .risk {{ margin-top: 3px; color: #9f1239; font-size: 8.5pt; }}
 .st {{ display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 7.5pt; font-weight: 600; white-space: nowrap; }}
@@ -1038,6 +1054,7 @@ tr.ms td {{ background: #f5f7ff; }}
     <div class="label">{_e(t['rec'])}</div>
     <div class="verdict {'bad' if report['release_blocked'] else ('warn' if band == 'amber' else 'ok')}">{_e(report['release_recommendation'])}{f" · {_e(score.get('cap_applied'))}" if score.get('cap_applied') else ''}</div>
     <div class="glance">{glance}</div>
+    {'' if _ai_applicable(report) else f'<p class="scope">{_e(t["ai_not_applicable"])}</p>'}
   </div>
 </div>
 {seal_block}

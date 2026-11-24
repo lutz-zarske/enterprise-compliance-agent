@@ -20,6 +20,9 @@ data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/uploads/*
+# Lokal abgelegte Belege (Testdateien, Exporte) – Musterdaten liegen im Code (app/demo.py)
+data/*.pdf
+data/*.xml
 # Fernet-Schlüssel für verschlüsselte Provider-Keys – niemals committen!
 data/.settings.key
 # Ed25519-Schlüssel der System-Signatur (Prüfdatenpakete) – niemals committen!

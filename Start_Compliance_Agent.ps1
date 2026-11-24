@@ -60,10 +60,32 @@ function Test-PyLauncher([string]$arg) {
     finally { $ErrorActionPreference = $prev }
 }
 
-function Hash-Geaendert([string]$datei, [string]$marker) {
-    $neu = (Get-FileHash -Algorithm SHA256 -Path $datei).Hash
+function Hash-Geaendert([string[]]$dateien, [string]$marker) {
+    # Ein Hash über alle Dateien: ändert sich eine davon, wird neu installiert.
+    $neu = (($dateien | Where-Object { Test-Path $_ } | ForEach-Object { (Get-FileHash -Algorithm SHA256 -Path $_).Hash }) -join "")
     $alt = if (Test-Path $marker) { (Get-Content $marker -ErrorAction SilentlyContinue | Select-Object -First 1) } else { "" }
     return @{ Geaendert = ($neu -ne $alt); Hash = $neu }
+}
+
+function Test-Python311([string]$exe, [string[]]$vorArgs) {
+    # 0 = Python 3.11+, 1 = zu alt, sonst kein echtes Python (z. B. Windows-Store-Platzhalter, Exit 9009).
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $exe @vorArgs -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" *> $null
+        return $LASTEXITCODE
+    } catch { return 9009 }
+    finally { $ErrorActionPreference = $prev }
+}
+
+function Python-Fehler([int]$code) {
+    if ($code -eq 1) {
+        Write-Host "FEHLER: Gefundenes Python ist älter als 3.11. Python 3.11 oder neuer von https://www.python.org/downloads/ installieren." -ForegroundColor Red
+    } else {
+        Write-Host "FEHLER: Python 3.11+ nicht gefunden. Der Windows-Store-Platzhalter 'python.exe' ist kein Python -" -ForegroundColor Red
+        Write-Host "        Python 3.11 oder neuer von https://www.python.org/downloads/ installieren (Haken 'Add python.exe to PATH')." -ForegroundColor Red
+    }
+    exit 1
 }
 
 function Frontend-Build-Hash([string]$dir) {
@@ -123,11 +145,15 @@ if (-not (Test-Path $VenvPython)) {
     Write-Host "[>] Lege Python-Umgebung (.venv) an..." -ForegroundColor Cyan
     if (Get-Command py.exe -ErrorAction SilentlyContinue) {
         $pyTarget = if (Test-PyLauncher "-3.12") { "-3.12" } elseif (Test-PyLauncher "-3.11") { "-3.11" } else { "-3" }
+        $pyCode = Test-Python311 "py.exe" @($pyTarget)
+        if ($pyCode -ne 0) { Python-Fehler $pyCode }
         & py.exe $pyTarget -m venv (Join-Path $AppDir ".venv")
     } elseif (Get-Command python.exe -ErrorAction SilentlyContinue) {
+        $pyCode = Test-Python311 "python.exe" @()
+        if ($pyCode -ne 0) { Python-Fehler $pyCode }
         & python.exe -m venv (Join-Path $AppDir ".venv")
     } else {
-        Write-Host "FEHLER: Python 3.11+ nicht gefunden (https://www.python.org/downloads/)." -ForegroundColor Red; exit 1
+        Python-Fehler 9009
     }
     if (-not (Test-Path $VenvPython)) {
         Write-Host "FEHLER: Python-Umgebung (.venv) konnte nicht angelegt werden." -ForegroundColor Red; exit 1
@@ -135,8 +161,12 @@ if (-not (Test-Path $VenvPython)) {
 }
 $PythonExe = (Get-Item $VenvPython).FullName
 
+# Entwicklungspakete (pytest) gleich mit installieren, damit "pytest -q" aus derselben .venv läuft;
+# requirements-dev.txt bindet requirements.txt ein. Der Hash umfasst beide Dateien.
+$ReqFile = Join-Path $AppDir "requirements-dev.txt"
+if (-not (Test-Path $ReqFile)) { $ReqFile = Join-Path $AppDir "requirements.txt" }
 $PyMarker = Join-Path $RunDir "requirements.sha256"
-$py = Hash-Geaendert (Join-Path $AppDir "requirements.txt") $PyMarker
+$py = Hash-Geaendert @((Join-Path $AppDir "requirements.txt"), (Join-Path $AppDir "requirements-dev.txt")) $PyMarker
 $paketeFehlen = $false
 $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
 try { & $PythonExe -c "import uvicorn, fastapi" *> $null; if ($LASTEXITCODE -ne 0) { $paketeFehlen = $true } } catch { $paketeFehlen = $true }
@@ -144,7 +174,7 @@ finally { $ErrorActionPreference = $prevEap }
 
 if ($py.Geaendert -or $paketeFehlen) {
     Write-Host "[>] Aktualisiere Python-Pakete..." -ForegroundColor Cyan
-    & $PythonExe -m pip install --disable-pip-version-check --no-warn-script-location -q -r (Join-Path $AppDir "requirements.txt")
+    & $PythonExe -m pip install --disable-pip-version-check --no-warn-script-location -q -r $ReqFile
     if ($LASTEXITCODE -ne 0) { Write-Host "FEHLER: pip install fehlgeschlagen." -ForegroundColor Red; exit 1 }
     Set-Content -Path $PyMarker -Value $py.Hash -Encoding ascii
 }
@@ -156,7 +186,7 @@ $NpmExe = $npmCmd.Source
 
 $FrontendDir = Join-Path $AppDir "frontend"
 $NpmMarker = Join-Path $RunDir "package-lock.sha256"
-$node = Hash-Geaendert (Join-Path $FrontendDir "package-lock.json") $NpmMarker
+$node = Hash-Geaendert @(Join-Path $FrontendDir "package-lock.json") $NpmMarker
 if ($node.Geaendert -or -not (Test-Path (Join-Path $FrontendDir "node_modules"))) {
     Write-Host "[>] Installiere Frontend-Pakete..." -ForegroundColor Cyan
     $NpmLog = Join-Path $LogDir "npm-setup.log"

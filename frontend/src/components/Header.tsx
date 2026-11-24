@@ -149,23 +149,23 @@ function ModelStatus({ health, settings }: { health: HealthResponse | null; sett
           <span className="mt-1 block text-subtle">
             {local
               ? tr(
-                  "Lokale Inferenz – kein Dokumentinhalt verlässt den Rechner.",
-                  "Local inference – no document content leaves your machine.",
-                  "Inferencia local – ningún contenido sale de este equipo.",
+                  "Die KI läuft auf diesem Rechner – kein Belegtext verlässt das Gerät.",
+                  "The AI runs on this computer – no document text leaves the device.",
+                  "La IA se ejecuta en este equipo: ningún texto del documento sale del dispositivo.",
                 )
               : tr(
-                  "Cloud-Inferenz über das Privacy Gateway (Pseudonymisierung nach Art. 4 Nr. 5 DSGVO).",
-                  "Cloud inference via the Privacy Gateway (pseudonymization under Art. 4 (5) GDPR).",
-                  "Inferencia en la nube vía Privacy Gateway (seudonimización según Art. 4.5 RGPD).",
+                  "Die KI läuft beim Cloud-Anbieter. Namen, IBANs und Kennnummern werden vorher durch Platzhalter ersetzt.",
+                  "The AI runs at the cloud provider. Names, IBANs and ID numbers are replaced with placeholders first.",
+                  "La IA se ejecuta en el proveedor en la nube. Antes se sustituyen nombres, IBAN y números identificativos por marcadores.",
                 )}
           </span>
           {!ready && (
             <span className="mt-1 block text-warn">
               {local
                 ? tr(
-                    "Nicht bereit – bis zum Start schließt das Regelwerk Prüfungen gekennzeichnet ab.",
-                    "Not ready – rule engine completes audits (marked) until started.",
-                    "No disponible – el motor de reglas completa las auditorías (marcado).",
+                    "Nicht gestartet – bis dahin prüft das Regelwerk allein und kennzeichnet das Ergebnis.",
+                    "Not started – until then the rule set audits on its own and labels the result.",
+                    "No iniciada: hasta entonces el reglamento audita solo y marca el resultado.",
                   )
                 : tr(
                     "Kein API-Key hinterlegt – Einstellungen › KI-Einrichtung.",

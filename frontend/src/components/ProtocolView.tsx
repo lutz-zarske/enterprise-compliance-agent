@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { api, ApiError, downloadBlob } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { cx, formatDate, formatDateUtc, formatModel, providerLabel, TONE_TEXT, toneForScore } from "../lib/format";
 import { normalizeStored, useI18n } from "../lib/i18n";
 import type { DocumentDetail, DocumentSummary, LedgerEntry, LedgerVerification } from "../types/api";
-import { AlertTriangle, BookOpen, Download, Fingerprint, Hash, Layers, Link, Lock, Package, RefreshCw, Scale } from "./icons";
+import { AlertTriangle, Fingerprint, Hash, Layers, Link, Lock, RefreshCw, Scale } from "./icons";
 import { Chip, EmptyState, HashBadge, PillTabs, Skeleton, Spinner, Tooltip } from "./ui";
 
 type Filter = "all" | "document" | "system";
@@ -90,9 +90,9 @@ function IntegrityStrip({ ledger, fingerprint, onRefresh, refreshing }: {
       {ledger && ledger.entries > 0 && (
         <Tooltip
           content={tr(
-            "Hash des jüngsten Eintrags – er fasst die ganze Kette zusammen. Wer ihn notiert, kann später jede nachträgliche Änderung nachweisen.",
-            "Hash of the latest entry – it summarizes the whole chain. Note it down to prove any later change.",
-            "Hash de la última entrada: resume toda la cadena. Anótelo para demostrar cualquier cambio posterior.",
+            "Prüfsumme des jüngsten Eintrags – sie fasst die ganze Kette zusammen. Wer sie notiert, kann später jede nachträgliche Änderung nachweisen.",
+            "Checksum of the latest entry – it sums up the whole chain. Note it down to prove any later change.",
+            "Suma de control de la última entrada: resume toda la cadena. Anótela para demostrar cualquier cambio posterior.",
           )}
         >
           <span className="inline-flex items-center gap-1.5">
@@ -110,9 +110,9 @@ function IntegrityStrip({ ledger, fingerprint, onRefresh, refreshing }: {
       {fingerprint && (
         <Tooltip
           content={tr(
-            "Fingerabdruck des Ed25519-Systemschlüssels – in der Verfahrensdokumentation hinterlegen; damit prüft scripts/verify_pruefpaket.py die Herkunft eines Prüfpakets.",
-            "Fingerprint of the Ed25519 system key – document this in your GoBD manual so scripts/verify_pruefpaket.py can verify audit packages offline.",
-            "Huella de la clave Ed25519 del sistema – inclúyala en su manual GoBD para verificar paquetes con scripts/verify_pruefpaket.py.",
+            "Erkennungsmerkmal des Signaturschlüssels dieser Installation. Damit weist ein Prüfer nach, dass ein exportiertes Prüfpaket von hier stammt.",
+            "Identifier of this installation's signing key. An auditor uses it to prove that an exported audit package comes from here.",
+            "Identificador de la clave de firma de esta instalación. Con él, un auditor demuestra que un paquete exportado procede de aquí.",
           )}
         >
           <span className="inline-flex items-center gap-1.5">
@@ -150,7 +150,18 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
           <th scope="col" className="border-b border-line px-3 py-2 font-medium">{tr("Beleg", "Document", "Documento")}</th>
           <th scope="col" className="border-b border-line px-3 py-2 font-medium">{tr("Zusammenfassung", "Summary", "Resumen")}</th>
           <th scope="col" className="border-b border-line px-3 py-2 text-right font-medium">{tr("Score", "Score", "Puntuación")}</th>
-          <th scope="col" className="border-b border-line px-3 py-2 font-medium">{tr("Eintrag", "Entry", "Entrada")}</th>
+          <th scope="col" className="border-b border-line px-3 py-2 font-medium">
+            <Tooltip
+              align="right"
+              content={tr(
+                "Prüfsumme dieses Eintrags. Sie hängt vom vorherigen Eintrag ab – so fällt jede nachträgliche Änderung auf.",
+                "Checksum of this entry. It depends on the previous entry, so any later change shows up.",
+                "Suma de control de esta entrada. Depende de la anterior, así que cualquier cambio posterior se detecta.",
+              )}
+            >
+              <span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-2">{tr("Eintrag", "Entry", "Entrada")}</span>
+            </Tooltip>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -167,7 +178,18 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
                   <span className="mt-1 block"><Chip tone="ok">{tr("Ed25519 gültig", "Ed25519 valid", "Ed25519 válido")}</Chip></span>
                 )}
                 {entry.signature_status === "invalid" && (
-                  <span className="mt-1 block"><Chip tone="bad">{tr("Signatur ungültig", "Signature invalid", "Firma inválida")}</Chip></span>
+                  <span className="mt-1 block">
+                    <Chip
+                      tone="bad"
+                      hint={tr(
+                        "Die digitale Unterschrift passt nicht zum Inhalt – der Eintrag wurde vermutlich nachträglich verändert.",
+                        "The digital signature does not match the content – the entry was probably changed afterwards.",
+                        "La firma digital no coincide con el contenido: probablemente la entrada se modificó después.",
+                      )}
+                    >
+                      {tr("Signatur ungültig", "Signature invalid", "Firma inválida")}
+                    </Chip>
+                  </span>
                 )}
                 {entry.signature_status === "unsigned" && SIGNED_REVIEWER_EVENTS.has(entry.event_type) && (
                   <span className="mt-1 block">
@@ -202,10 +224,10 @@ function LedgerTable({ entries, names }: { entries: LedgerEntry[]; names: Map<st
 
 /**
  * Ansicht „Protokoll“: die vollständige SHA-256-Hash-Kette (Prüferereignisse zusätzlich
- * Ed25519-signiert) mit Systemereignissen, Exporte (GoBD-Paket, Verfahrensdokumentation)
- * und das Regelwerk.
+ * Ed25519-signiert) mit Systemereignissen und das Regelwerk.  Exporte stehen belegbezogen
+ * im Export-Dialog der Ansicht „Prüfung“.
  */
-export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpRuleset, active, onRefreshLedger, onOpenExport, notify }: {
+export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpRuleset, active, onRefreshLedger }: {
   document: DocumentDetail | null;
   documents: DocumentSummary[];
   ledger: LedgerVerification | null;
@@ -213,8 +235,6 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
   dlpRuleset: string | null;
   active: boolean;
   onRefreshLedger: () => Promise<void>;
-  onOpenExport: () => void;
-  notify: (tone: "ok" | "bad" | "warn" | "info", title: string, message?: string) => void;
 }) {
   const { tr, td } = useI18n();
   const [filter, setFilter] = useState<Filter>("all");
@@ -222,7 +242,6 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
   const [error, setError] = useState<string | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
   const names = useMemo(() => new Map(documents.map((doc) => [doc.id, doc.filename])), [documents]);
 
   const rules: { title: string; text: string }[] = [
@@ -283,18 +302,6 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
     filter === "all" ? true : filter === "system" ? entry.document_id === "system" : entry.document_id === document?.id,
   );
 
-  async function run(key: string, task: () => Promise<void>) {
-    setBusy(key);
-    try {
-      await task();
-    } catch (err) {
-      notify("bad", tr("Export fehlgeschlagen", "Export failed", "Error al exportar"), err instanceof ApiError ? td(err.message) : String(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const stem = document?.filename.replace(/\.(pdf|xml)$/i, "") ?? tr("Beleg", "Document", "Documento");
   const systemCount = (entries ?? []).filter((entry) => entry.document_id === "system").length;
   const docCount = document ? (entries ?? []).filter((entry) => entry.document_id === document.id).length : 0;
 
@@ -353,62 +360,6 @@ export function ProtocolView({ document, documents, ledger, rulesetVersion, dlpR
         </section>
 
         <aside className="space-y-4">
-          <section className="card p-4" aria-label={tr("Exporte", "Exports", "Exportaciones")}>
-            <h2 className="text-sm font-semibold text-fg">{tr("Exporte", "Exports", "Exportaciones")}</h2>
-            <p className="mt-0.5 truncate text-xs text-subtle" title={document?.filename}>
-              {document ? document.filename : tr("Unter „Prüfung“ einen Beleg auswählen.", "Select a document under “Audit”.", "Selecciona un documento en «Auditoría».")}
-            </p>
-            <div className="mt-3 space-y-2">
-              <button
-                className="btn w-full justify-start"
-                disabled={!document?.scorecard || busy !== null}
-                onClick={() =>
-                  document &&
-                  run("zip", async () => {
-                    const { blob, filename } = await api.gobdPackage(document.id);
-                    downloadBlob(
-                      blob,
-                      filename ?? tr(`Pruefdatenpaket_${stem}.zip`, `AuditDataPackage_${stem}.zip`, `PaqueteAuditoria_${stem}.zip`),
-                      "application/zip",
-                    );
-                    notify(
-                      "ok",
-                      tr("Prüfdatenpaket exportiert", "Audit data package exported", "Paquete de auditoría exportado"),
-                      tr("Prüfen mit: python scripts/verify_pruefpaket.py <paket.zip> --fingerprint <Fingerabdruck>", "Verify with: python scripts/verify_pruefpaket.py <package.zip> --fingerprint <fingerprint>", "Verificar con: python scripts/verify_pruefpaket.py <paquete.zip> --fingerprint <huella>"),
-                    );
-                  })
-                }
-              >
-                {busy === "zip" ? <Spinner size={13} /> : <Package size={14} aria-hidden="true" />} {tr("GoBD-Prüfdatenpaket (ZIP)", "GoBD Audit Package (ZIP)", "Paquete de auditoría GoBD (ZIP)")}
-              </button>
-              <button
-                className="btn w-full justify-start"
-                disabled={!document || busy !== null}
-                onClick={() =>
-                  document &&
-                  run("vd", async () => {
-                    const { blob, filename } = await api.proceduralDoc(document.id, "docx");
-                    downloadBlob(
-                      blob,
-                      filename ?? tr(`Verfahrensdokumentation_${stem}.docx`, `ProceduralDocumentation_${stem}.docx`, `DocumentacionProcedimientos_${stem}.docx`),
-                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    );
-                    notify("ok", tr("Verfahrensdokumentation erstellt", "Procedural documentation created", "Documentación de procedimientos creada"), tr("Gelb markierte Stellen in Word ergänzen, dann freigeben.", "Fill in the yellow placeholders in Word, then sign off.", "Complete en Word los campos marcados en amarillo y apruébela."));
-                  })
-                }
-              >
-                {busy === "vd" ? <Spinner size={13} /> : <BookOpen size={14} aria-hidden="true" />} {tr("Verfahrensdokumentation (Word)", "Procedural Docs (Word)", "Documentación (Word)")}
-              </button>
-              <button className="btn w-full justify-start" disabled={!document} onClick={onOpenExport}>
-                <Download size={14} aria-hidden="true" /> {tr("Zertifikat, JSON, Memo & Siegel …", "Certificate, JSON, Memo & Seal …", "Certificado, JSON, Memo y Sello …")}
-              </button>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-subtle">
-              {tr("Paket offline prüfen:", "Verify package offline:", "Verificar paquete sin conexión:")}{" "}
-              <code className="rounded bg-surface-2 px-1 font-mono text-xs text-muted">python scripts/verify_pruefpaket.py paket.zip --fingerprint …</code>
-            </p>
-          </section>
-
           <section className="card p-4" aria-label={tr("Regelwerk", "Ruleset", "Reglamento")}>
             <div className="flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-fg"><Scale size={14} className="text-subtle" aria-hidden="true" /> {tr("Regelwerk", "Ruleset", "Reglamento")}</h2>

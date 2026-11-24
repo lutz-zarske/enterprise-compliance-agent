@@ -83,9 +83,9 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
           <>
             <span className="block">
               {tr(
-                "Jede Analyse im SHA-256-Ledger · Siegel Ed25519-signiert · unveränderbare Historie (GoBD).",
-                "Every audit logged in SHA-256 ledger · Ed25519-signed seals · immutable history (GoBD).",
-                "Cada auditoría en registro SHA-256 · sellos Ed25519 · historial inmutable (GoBD).",
+                "Belege mit abgeschlossener Prüfung. Jede Prüfung wird fälschungssicher protokolliert.",
+                "Documents with a completed audit. Every audit is logged tamper-proof.",
+                "Documentos con auditoría terminada. Cada auditoría queda registrada a prueba de manipulaciones.",
               )}
             </span>
             {kpis && (
@@ -107,16 +107,9 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
           <>
             <span className="block">
               {tr(
-                "Durchschnitt aller geprüften Belege. Den Score des ausgewählten Belegs zeigt der Kreis im Inspektor.",
-                "Average across all audited documents. The selected document's score is shown in the inspector ring.",
-                "Media de todos los documentos auditados. La puntuación del documento seleccionado aparece en el inspector.",
-              )}
-            </span>
-            <span className="mt-1 block text-subtle">
-              {tr(
-                "Feste Regeln nach § 14 UStG, EN 16931, DSGVO und EU AI Act – die KI vergibt keine Punkte.",
-                "Fixed rules under § 14 UStG, EN 16931, the GDPR and the EU AI Act – the AI awards no points.",
-                "Reglas fijas según § 14 UStG, EN 16931, RGPD y Reglamento de IA: la IA no otorga puntos.",
+                "Durchschnitt aller geprüften Belege. Die Punkte vergeben feste Regeln, nicht die KI.",
+                "Average across all audited documents. Points are awarded by fixed rules, not by the AI.",
+                "Media de todos los documentos auditados. Los puntos los asignan reglas fijas, no la IA.",
               )}
             </span>
             {kpis?.ruleset_version && <span className="mt-1 block tabular-nums text-subtle">{tr("Regelwerk", "Ruleset", "Reglamento")} {kpis.ruleset_version}</span>}
@@ -130,9 +123,9 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         valueClass="text-pii"
         edge="neutral"
         info={tr(
-          "Vertraulichkeits-Gateway: Personen-, IBAN- und Kontaktdaten maskiert gespeichert gem. Art. 25 DSGVO.",
-          "Privacy Gateway: Personal, IBAN, and contact details stored masked under Art. 25 GDPR.",
-          "Privacy Gateway: Datos personales, IBAN y contacto enmascarados según Art. 25 RGPD.",
+          "Erkannte personenbezogene Angaben wie Namen, IBANs und Kontaktdaten. Sie werden nur geschwärzt gespeichert.",
+          "Detected personal details such as names, IBANs and contact data. They are stored only in redacted form.",
+          "Datos personales detectados, como nombres, IBAN y datos de contacto. Solo se guardan ocultos.",
         )}
       />
       <Kpi
@@ -144,13 +137,13 @@ export function KpiStrip({ kpis, loading }: { kpis: KpiResponse | null; loading:
         info={
           <>
             {tr(
-              "Anteil der Dokumente mit Hochrisiko-Einstufung gem. VO (EU) 2024/1689 Anhang III.",
-              "Share of documents classified as high risk under EU AI Act Annex III.",
-              "Porcentaje de documentos clasificados como alto riesgo según Anexo III del Reglamento de IA.",
+              "Anteil der Belege zu KI-Systemen mit hohem Risiko, etwa zur Bewerberauswahl. Für sie gelten ab 02.12.2027 strenge Pflichten (EU AI Act).",
+              "Share of documents about high-risk AI systems, e.g. for screening applicants. Strict duties apply to them from 2 Dec 2027 (EU AI Act).",
+              "Porcentaje de documentos sobre sistemas de IA de alto riesgo, p. ej. para seleccionar candidatos. Desde el 02.12.2027 tienen obligaciones estrictas (Reglamento de IA).",
             )}
             {kpis && (
               <span className="mt-1 block text-subtle">
-                <span className="tabular-nums">{kpis.high_risk_count}</span> × {tr("Anhang III · Pflichten ab 02.12.2027", "Annex III · obligations from Dec 2, 2027", "Anexo III · obligatorio desde 02.12.2027")}
+                <span className="tabular-nums">{kpis.high_risk_count}</span> × {tr("Anhang III", "Annex III", "Anexo III")}
               </span>
             )}
           </>
